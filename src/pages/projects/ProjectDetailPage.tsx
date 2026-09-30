@@ -112,7 +112,10 @@ export const ProjectDetailPage: React.FC = () => {
     );
   }
 
-  const isOwner = user?.id === project.ownerId || !project.ownerId || user?.id === 'demo-user-123';
+  // User has edit permissions if they are not explicitly restricted as a 'viewer'
+  const isExplicitViewer = members.some(m => m.userId === user?.id && m.role === 'viewer');
+  const canEdit = !isExplicitViewer;
+  const isOwner = user?.id === project.ownerId || !project.ownerId || user?.id === 'demo-user-123' || members.some(m => m.userId === user?.id && m.role === 'owner');
   const publicUrl = `${window.location.origin}/p/${project.slug}`;
 
   const copyPublicUrl = () => {
@@ -242,7 +245,7 @@ export const ProjectDetailPage: React.FC = () => {
       {/* Active Tab Content */}
       <div className="min-h-[500px]">
         {activeTab === 'kanban' && (
-          <KanbanBoard projectId={project.id} isReadOnly={!isOwner} />
+          <KanbanBoard projectId={project.id} isReadOnly={!canEdit} />
         )}
 
         {activeTab === 'overview' && (

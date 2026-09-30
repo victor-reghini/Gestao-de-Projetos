@@ -110,11 +110,16 @@ export const AppLayout: React.FC = () => {
         <div className="p-3 border-t border-slate-800">
           <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/80 border border-slate-800">
             <Link to="/profile" className="flex items-center gap-2.5 min-w-0 flex-1">
-              <img
-                src={user?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user?.id || 'demo'}`}
-                alt={user?.name || 'User'}
-                className="w-8 h-8 rounded-lg bg-slate-800 object-cover shrink-0 border border-slate-700"
-              />
+              <div className="w-8 h-8 max-w-[32px] max-h-[32px] rounded-lg overflow-hidden shrink-0 border border-slate-700 bg-slate-800">
+                <img
+                  src={user?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user?.id || 'demo'}`}
+                  alt={user?.name || 'User'}
+                  className="w-full h-full max-w-full max-h-full aspect-square object-cover object-center block"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).src = `https://api.dicebear.com/7.x/bottts/svg?seed=${user?.id || 'demo'}`;
+                  }}
+                />
+              </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-white truncate">{user?.name}</p>
                 <p className="text-[11px] text-slate-400 truncate">{user?.email}</p>

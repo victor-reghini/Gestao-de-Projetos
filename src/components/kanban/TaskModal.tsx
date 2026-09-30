@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Task, ProjectColumn, TaskPriority } from '@/types';
 import { TaskService } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
-import { X, Calendar, Flag, Trash2, CheckCircle2, User, AlignLeft } from 'lucide-react';
+import { X, Calendar, Trash2, CheckCircle2 } from 'lucide-react';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -32,7 +32,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Initialize form when modal opens or taskToEdit changes
   useEffect(() => {
+    if (!isOpen) return;
+
     if (taskToEdit) {
       setTitle(taskToEdit.title);
       setDescription(taskToEdit.description || '');
@@ -42,17 +45,34 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     } else {
       setTitle('');
       setDescription('');
-      setColumnId(defaultColumnId || columns[0]?.id || '');
+      setColumnId(defaultColumnId || (columns.length > 0 ? columns[0].id : ''));
       setPriority('MEDIA');
       setDueDate('');
     }
-  }, [taskToEdit, defaultColumnId, columns, isOpen]);
+    setError(null);
+  }, [isOpen, taskToEdit]);
+
+  // Ensure columnId is valid if columns load after modal opens
+  useEffect(() => {
+    if (isOpen && !columnId && columns.length > 0) {
+      setColumnId(defaultColumnId || columns[0].id);
+    }
+  }, [isOpen, columns, defaultColumnId, columnId]);
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      setError('O título da atividade é obrigatório.');
+      return;
+    }
+
+    const targetColumnId = columnId || defaultColumnId || (columns.length > 0 ? columns[0].id : '');
+    if (!targetColumnId) {
+      setError('Selecione uma coluna válida para a atividade.');
+      return;
+    }
 
     setError(null);
     setLoading(true);
@@ -60,18 +80,18 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     try {
       if (taskToEdit) {
         await TaskService.update(taskToEdit.id, {
-          title,
-          description,
-          columnId,
+          title: title.trim(),
+          description: description.trim(),
+          columnId: targetColumnId,
           priority,
           dueDate: dueDate || null
         });
       } else {
         await TaskService.create({
           projectId,
-          columnId,
-          title,
-          description,
+          columnId: targetColumnId,
+          title: title.trim(),
+          description: description.trim(),
           priority,
           position: 0,
           dueDate: dueDate || null,

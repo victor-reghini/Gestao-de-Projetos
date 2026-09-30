@@ -29,7 +29,10 @@ export const BugsTab: React.FC<BugsTabProps> = ({
   const handleConvertToTask = async (bug: BugReport) => {
     setConvertingId(bug.id);
     try {
-      const cols = await ColumnService.getByProject(projectId);
+      let cols = await ColumnService.getByProject(projectId);
+      if (cols.length === 0) {
+        cols = await ColumnService.createDefaultColumns(projectId);
+      }
       const targetCol = cols[0]; // Backlog
       if (!targetCol) return;
 

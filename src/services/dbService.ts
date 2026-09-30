@@ -1,14 +1,8 @@
 import { 
-  collection, 
   doc, 
-  getDocs, 
-  getDoc, 
   setDoc, 
   updateDoc, 
-  deleteDoc, 
-  query, 
-  where,
-  orderBy
+  deleteDoc 
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from './firebase';
@@ -293,12 +287,26 @@ export function slugify(text: string): string {
 function ensureSeedData() {
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'projects')) {
     setLocalData('projects', initialProjects);
+  }
+  if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'columns')) {
     setLocalData('columns', initialColumns);
+  }
+  if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'tasks')) {
     setLocalData('tasks', initialTasks);
+  }
+  if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'ideas')) {
     setLocalData('ideas', initialIdeas);
+  }
+  if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'documents')) {
     setLocalData('documents', initialDocs);
+  }
+  if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'suggestions')) {
     setLocalData('suggestions', initialSuggestions);
+  }
+  if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'bugs')) {
     setLocalData('bugs', initialBugs);
+  }
+  if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'members')) {
     setLocalData('members', []);
   }
 }
@@ -522,10 +530,22 @@ export const TaskService = {
 
   async create(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'position'> & { position?: number }): Promise<Task> {
     const allTasks = getLocalData<Task>('tasks', initialTasks);
-    const columnTasks = allTasks.filter(t => t.columnId === data.columnId);
+    
+    // Resolve columnId fallback if missing or empty
+    let targetColId = data.columnId;
+    if (!targetColId) {
+      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+      const projCols = allCols.filter(c => c.projectId === data.projectId);
+      if (projCols.length > 0) {
+        targetColId = projCols[0].id;
+      }
+    }
+
+    const columnTasks = allTasks.filter(t => t.columnId === targetColId);
 
     const newTask: Task = {
       ...data,
+      columnId: targetColId,
       id: `task_${Math.random().toString(36).substring(2, 9)}`,
       position: data.position !== undefined ? data.position : columnTasks.length,
       createdAt: new Date().toISOString(),
@@ -539,11 +559,38 @@ export const TaskService = {
   async update(id: string, updates: Partial<Task>): Promise<Task> {
     const allTasks = getLocalData<Task>('tasks', initialTasks);
     const index = allTasks.findIndex(t => t.id === id);
-    if (index === -1) throw new Error('Atividade não encontrada');
+    if (index === -1) {
+      const newTask: Task = {
+        id,
+        projectId: updates.projectId || 'proj-1',
+        columnId: updates.columnId || 'col-1',
+        title: updates.title || 'Nova Atividade',
+        description: updates.description || '',
+        priority: updates.priority || 'MEDIA',
+        position: updates.position || 0,
+        dueDate: updates.dueDate || null,
+        createdById: updates.createdById || 'demo-user-123',
+        createdByName: updates.createdByName || 'Victor Reghini',
+        createdAt: updates.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      setLocalData('tasks', [...allTasks, newTask]);
+      return newTask;
+    }
+
+    const currentTask = allTasks[index];
+    let position = updates.position !== undefined ? updates.position : currentTask.position;
+
+    // If moved to a new column without explicit position, append to end of that column
+    if (updates.columnId && updates.columnId !== currentTask.columnId && updates.position === undefined) {
+      const destColumnTasks = allTasks.filter(t => t.columnId === updates.columnId && t.id !== id);
+      position = destColumnTasks.length;
+    }
 
     allTasks[index] = {
-      ...allTasks[index],
+      ...currentTask,
       ...updates,
+      position,
       updatedAt: new Date().toISOString()
     };
 

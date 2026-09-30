@@ -41,7 +41,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
   const loadKanban = async () => {
     try {
       let cols = await ColumnService.getByProject(projectId);
-      if (cols.length === 0 && !isReadOnly) {
+      if (cols.length === 0) {
         cols = await ColumnService.createDefaultColumns(projectId);
       }
       setColumns(cols);
@@ -149,6 +149,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
       default: return 'badge-priority-low text-slate-300';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[300px] rounded-2xl bg-slate-900 border border-slate-800">
+        <div className="flex flex-col items-center gap-2.5 text-slate-400 text-xs">
+          <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+          <span>Carregando quadro Kanban...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -280,6 +291,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
                     onClick={() => {
                       if (!isReadOnly) {
                         setTaskToEdit(task);
+                        setSelectedColumnId(task.columnId);
                         setIsTaskModalOpen(true);
                       }
                     }}

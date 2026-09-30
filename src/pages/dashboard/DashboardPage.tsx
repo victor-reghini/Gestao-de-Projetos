@@ -1,13 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { ProjectService, IdeaService, TaskService, SuggestionService, BugReportService } from '@/services/dbService';
-import { Project, Idea, Task, Suggestion, BugReport } from '@/types';
+import { ProjectService, IdeaService, TaskService, ColumnService, SuggestionService, BugReportService } from '@/services/dbService';
+import { Project, Idea, Task, ProjectColumn, Suggestion, BugReport } from '@/types';
 import {
   FolderKanban,
   Lightbulb,
   CheckCircle2,
-  Clock,
   ArrowRight,
   Plus,
   GitBranch,
@@ -24,6 +23,7 @@ export const DashboardPage: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [columns, setColumns] = useState<ProjectColumn[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [bugs, setBugs] = useState<BugReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,13 +42,15 @@ export const DashboardPage: React.FC = () => {
       setIdeas(i);
 
       if (p.length > 0) {
-        const tasksArr = await Promise.all(p.map(proj => TaskService.getByProject(proj.id)));
+        const [tasksArr, colsArr, sugArr, bugArr] = await Promise.all([
+          Promise.all(p.map(proj => TaskService.getByProject(proj.id))),
+          Promise.all(p.map(proj => ColumnService.getByProject(proj.id))),
+          Promise.all(p.map(proj => SuggestionService.getByProject(proj.id))),
+          Promise.all(p.map(proj => BugReportService.getByProject(proj.id)))
+        ]);
         setTasks(tasksArr.flat());
-
-        const sugArr = await Promise.all(p.map(proj => SuggestionService.getByProject(proj.id)));
+        setColumns(colsArr.flat());
         setSuggestions(sugArr.flat());
-
-        const bugArr = await Promise.all(p.map(proj => BugReportService.getByProject(proj.id)));
         setBugs(bugArr.flat());
       }
     } catch (err) {
@@ -63,7 +65,12 @@ export const DashboardPage: React.FC = () => {
   }, [user]);
 
   const activeProjects = projects.filter(p => p.status === 'EM_ANDAMENTO' || p.status === 'PLANEJAMENTO');
-  const completedTasks = tasks.filter(t => t.columnId.includes('done') || t.columnId.includes('concluid'));
+  const doneColumnIds = new Set(
+    columns
+      .filter(c => c.key === 'done' || c.name.toLowerCase().includes('conclu'))
+      .map(c => c.id)
+  );
+  const completedTasks = tasks.filter(t => doneColumnIds.has(t.columnId));
   const pendingSuggestions = suggestions.filter(s => s.status === 'ABERTO' || s.status === 'EM_ANALISE');
   const openBugs = bugs.filter(b => b.status === 'ABERTO' || b.status === 'EM_ANALISE');
 
@@ -175,7 +182,7 @@ export const DashboardPage: React.FC = () => {
           <div className="space-y-3">
             {projects.slice(0, 4).map((project) => {
               const projectTasks = tasks.filter(t => t.projectId === project.id);
-              const doneTasks = projectTasks.filter(t => t.columnId.includes('done') || t.columnId.includes('concluid'));
+              const doneTasks = projectTasks.filter(t => doneColumnIds.has(t.columnId));
               const progress = projectTasks.length > 0 ? Math.round((doneTasks.length / projectTasks.length) * 100) : 0;
 
               return (
