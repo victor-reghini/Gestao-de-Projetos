@@ -1,11 +1,5 @@
-import { 
-  doc, 
-  setDoc, 
-  updateDoc, 
-  deleteDoc 
-} from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from './firebase';
+import { storage } from './firebase';
 import { 
   Project, 
   ProjectColumn, 
@@ -18,8 +12,23 @@ import {
   Visibility,
   ProjectStatus
 } from '@/types';
+import { RealtimeSyncService } from './realtimeSyncService';
+import { CloudSqlService } from './cloudSqlService';
+import { DataConnectService } from './dataConnectService';
 
-// Helper for local mock fallback storage
+// Backward compatibility helpers (no-op since Firestore was removed)
+export function sanitizeForFirestore<T>(data: T): T {
+  return data;
+}
+
+export function safeFirestoreWrite(promise: Promise<any>): void {
+  promise.catch(() => {});
+}
+
+export async function safeFirestoreQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  return fallback;
+}
+
 const LOCAL_STORAGE_KEY_PREFIX = 'gestao_projetos_db_';
 
 function getLocalData<T>(key: string, defaultValue: T[]): T[] {
@@ -40,8 +49,8 @@ function setLocalData<T>(key: string, data: T[]): void {
   }
 }
 
-// Initial seed sample data for an impressive first impression
-const initialProjects: Project[] = [
+// Initial seed sample data
+export const initialProjects: Project[] = [
   {
     id: 'proj-1',
     ownerId: 'demo-user-123',
@@ -94,7 +103,7 @@ const initialProjects: Project[] = [
   }
 ];
 
-const initialColumns: ProjectColumn[] = [
+export const initialColumns: ProjectColumn[] = [
   { id: 'col-1', projectId: 'proj-1', name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   { id: 'col-2', projectId: 'proj-1', name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
   { id: 'col-3', projectId: 'proj-1', name: 'Revisão / Testes', key: 'review', position: 2, color: '#f59e0b', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
@@ -105,7 +114,7 @@ const initialColumns: ProjectColumn[] = [
   { id: 'col-22', projectId: 'proj-2', name: 'Concluído', key: 'done', position: 2, color: '#10b981', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
 
-const initialTasks: Task[] = [
+export const initialTasks: Task[] = [
   {
     id: 'task-1',
     projectId: 'proj-1',
@@ -164,7 +173,7 @@ const initialTasks: Task[] = [
   }
 ];
 
-const initialIdeas: Idea[] = [
+export const initialIdeas: Idea[] = [
   {
     id: 'idea-1',
     ownerId: 'demo-user-123',
@@ -195,7 +204,7 @@ const initialIdeas: Idea[] = [
   }
 ];
 
-const initialDocs: ProjectDocument[] = [
+export const initialDocs: ProjectDocument[] = [
   {
     id: 'doc-1',
     projectId: 'proj-1',
@@ -207,8 +216,8 @@ O **Gestor de Projetos e Ideias** foi concebido com os seguintes pilares:
 
 1. **Frontend:** React + Vite + TypeScript.
 2. **Backend/API:** Serverless Netlify Functions disponibilizando endpoints REST em \`/api/v1\`.
-3. **Persistência:** Firebase Firestore com suporte a dados relacionais e modo offline resiliente.
-4. **Armazenamento:** Firebase Storage para prints de tela em reportes de bugs.
+3. **Persistência:** Google Cloud SQL (PostgreSQL) com sincronização em tempo real via Realtime Database.
+4. **Armazenamento:** Firebase Storage para anexos e imagens.
 
 ## Diagrama de Fluxo de Dados
 Consulte a aba de diagramas para visualizar a topologia completa dos serviços.
@@ -224,9 +233,11 @@ Consulte a aba de diagramas para visualizar a topologia completa dos serviços.
     title: 'Diagrama de Arquitetura C4',
     content: `graph TD
     Client[Browser / Usuário] -->|HTTPS SPA| Netlify[Netlify CDN]
-    Client -->|Auth & Sync| Firebase[Firebase Auth & Firestore]
+    Client -->|Auth| FirebaseAuth[Firebase Auth]
+    Client -->|WebSocket Live Sync| RTDB[Firebase Realtime Database]
+    Client -->|Persistência Relacional| CloudSQL[Google Cloud SQL PostgreSQL]
     ExternalApp[Aplicações Externas] -->|REST API v1| NetlifyFunctions[Netlify Functions /api/v1]
-    NetlifyFunctions -->|Persistência| Firebase
+    NetlifyFunctions -->|Persistência| CloudSQL
     Client -->|Upload Anexos| Storage[Firebase Storage]
 `,
     position: 1,
@@ -235,7 +246,7 @@ Consulte a aba de diagramas para visualizar a topologia completa dos serviços.
   }
 ];
 
-const initialSuggestions: Suggestion[] = [
+export const initialSuggestions: Suggestion[] = [
   {
     id: 'sug-1',
     projectId: 'proj-1',
@@ -250,7 +261,7 @@ const initialSuggestions: Suggestion[] = [
   }
 ];
 
-const initialBugs: BugReport[] = [
+export const initialBugs: BugReport[] = [
   {
     id: 'bug-1',
     projectId: 'proj-1',
@@ -315,38 +326,32 @@ ensureSeedData();
 // --- PROJECT SERVICE ---
 export const ProjectService = {
   async getAll(userId?: string): Promise<Project[]> {
-    try {
-      if (userId) {
-        // Query projects owned by user or shared/public
-        const local = getLocalData<Project>('projects', initialProjects);
-        return local.filter(p => p.ownerId === userId || p.visibility === 'PUBLIC' || p.visibility === 'SHARED');
-      }
-      return getLocalData<Project>('projects', initialProjects);
-    } catch {
-      return getLocalData<Project>('projects', initialProjects);
+    const local = getLocalData<Project>('projects', initialProjects);
+    if (userId) {
+      return local.filter(p => p.ownerId === userId || p.visibility === 'PUBLIC' || p.visibility === 'SHARED');
     }
+    return local;
   },
 
   async getPublicProjects(): Promise<Project[]> {
-    const list = getLocalData<Project>('projects', initialProjects);
+    const list = await this.getAll();
     return list.filter(p => p.visibility === 'PUBLIC' && p.status !== 'ARQUIVADO');
   },
 
   async getById(id: string): Promise<Project | null> {
-    const list = getLocalData<Project>('projects', initialProjects);
-    return list.find(p => p.id === id) || null;
+    const local = getLocalData<Project>('projects', initialProjects);
+    return local.find(p => p.id === id) || null;
   },
 
   async getBySlug(slug: string): Promise<Project | null> {
-    const list = getLocalData<Project>('projects', initialProjects);
-    return list.find(p => p.slug === slug || p.id === slug) || null;
+    const local = getLocalData<Project>('projects', initialProjects);
+    return local.find(p => p.slug === slug || p.id === slug) || null;
   },
 
   async create(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'slug'> & { slug?: string }): Promise<Project> {
-    const id = 'proj_' + Math.random().toString(36).substring(2, 9);
+    const id = 'proj_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
     const slugBase = data.slug ? slugify(data.slug) : slugify(data.name);
     
-    // Ensure slug uniqueness
     const existing = getLocalData<Project>('projects', initialProjects);
     let finalSlug = slugBase;
     let counter = 1;
@@ -365,18 +370,11 @@ export const ProjectService = {
     const updated = [newProject, ...existing];
     setLocalData('projects', updated);
 
-    // Safely attempt Firebase Firestore write in background without blocking
-    try {
-      setDoc(doc(db, 'projects', id), newProject).catch((err) => {
-        // Safe logging for offline/unconfigured Firestore
-      });
-    } catch {
-      // Ignored for resilient offline mode
-    }
+    // Persist to Google Cloud SQL & Data Connect
+    CloudSqlService.syncProject(newProject).catch(() => {});
+    DataConnectService.syncProject(newProject).catch(() => {});
 
-    // Automatically create default columns: Backlog, Em Execução, Concluído
     await ColumnService.createDefaultColumns(id);
-
     return newProject;
   },
 
@@ -394,12 +392,9 @@ export const ProjectService = {
     list[index] = updatedItem;
     setLocalData('projects', list);
 
-    try {
-      updateDoc(doc(db, 'projects', id), { ...updates, updatedAt: updatedItem.updatedAt }).catch(() => {});
-    } catch {
-      // Ignored for resilient offline mode
-    }
-
+    // Persist to Google Cloud SQL & Data Connect
+    CloudSqlService.syncProject(updatedItem).catch(() => {});
+    DataConnectService.syncProject(updatedItem).catch(() => {});
     return updatedItem;
   },
 
@@ -412,20 +407,21 @@ export const ProjectService = {
     const filtered = list.filter(p => p.id !== id);
     setLocalData('projects', filtered);
 
-    try {
-      deleteDoc(doc(db, 'projects', id)).catch(() => {});
-    } catch {
-      // Ignored for resilient offline mode
-    }
+    // Persist deletion to Google Cloud SQL & Data Connect
+    CloudSqlService.deleteProject(id).catch(() => {});
+    DataConnectService.deleteProject(id).catch(() => {});
   }
 };
 
 // --- KANBAN COLUMNS SERVICE ---
 export const ColumnService = {
   async getByProject(projectId: string): Promise<ProjectColumn[]> {
-    const list = getLocalData<ProjectColumn>('columns', initialColumns);
-    const cols = list.filter(c => c.projectId === projectId);
-    return cols.sort((a, b) => a.position - b.position);
+    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+    const localCols = allCols.filter(c => c.projectId === projectId).sort((a, b) => a.position - b.position);
+
+    // Sync with Realtime Database cache
+    RealtimeSyncService.syncColumns(projectId, localCols, 'sync_columns').catch(() => {});
+    return localCols;
   },
 
   async createDefaultColumns(projectId: string): Promise<ProjectColumn[]> {
@@ -448,15 +444,23 @@ export const ColumnService = {
     }));
 
     setLocalData('columns', [...allCols, ...newCols]);
+
+    // Sync to Realtime DB and Google Cloud SQL
+    RealtimeSyncService.syncColumns(projectId, newCols, 'col_defaults').catch(() => {});
+    for (const c of newCols) {
+      CloudSqlService.syncColumn(c).catch(() => {});
+      DataConnectService.syncColumn(c).catch(() => {});
+    }
     return newCols;
   },
 
   async create(projectId: string, name: string, color = '#6366f1'): Promise<ProjectColumn> {
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
     const projectCols = allCols.filter(c => c.projectId === projectId);
+    const id = `col_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
     
     const newCol: ProjectColumn = {
-      id: `col_${Math.random().toString(36).substring(2, 9)}`,
+      id,
       projectId,
       name,
       key: slugify(name),
@@ -467,6 +471,11 @@ export const ColumnService = {
     };
 
     setLocalData('columns', [...allCols, newCol]);
+
+    // Sync to Realtime DB and Google Cloud SQL
+    RealtimeSyncService.syncColumns(projectId, [...projectCols, newCol], 'col_create').catch(() => {});
+    CloudSqlService.syncColumn(newCol).catch(() => {});
+    DataConnectService.syncColumn(newCol).catch(() => {});
     return newCol;
   },
 
@@ -482,42 +491,70 @@ export const ColumnService = {
     };
 
     setLocalData('columns', allCols);
+
+    // Sync to Realtime DB and Google Cloud SQL
+    const projCols = allCols.filter(c => c.projectId === allCols[index].projectId);
+    RealtimeSyncService.syncColumns(allCols[index].projectId, projCols, 'col_update').catch(() => {});
+    CloudSqlService.syncColumn(allCols[index]).catch(() => {});
+    DataConnectService.syncColumn(allCols[index]).catch(() => {});
     return allCols[index];
   },
 
-  async reorder(projectId: string, orderedColumnIds: string[]): Promise<void> {
+  async reorder(projectId: string, columnIds: string[]): Promise<ProjectColumn[]> {
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const updated = allCols.map(col => {
-      if (col.projectId === projectId) {
-        const newPos = orderedColumnIds.indexOf(col.id);
-        if (newPos !== -1) {
-          return { ...col, position: newPos, updatedAt: new Date().toISOString() };
-        }
+    const projectCols = allCols.filter(c => c.projectId === projectId);
+    const otherCols = allCols.filter(c => c.projectId !== projectId);
+
+    const reordered: ProjectColumn[] = [];
+    columnIds.forEach((id, index) => {
+      const col = projectCols.find(c => c.id === id);
+      if (col) {
+        reordered.push({ ...col, position: index, updatedAt: new Date().toISOString() });
       }
-      return col;
     });
 
-    setLocalData('columns', updated);
+    const finalCols = [...otherCols, ...reordered];
+    setLocalData('columns', finalCols);
+
+    // Sync to Realtime DB and Google Cloud SQL
+    RealtimeSyncService.syncColumns(projectId, reordered, 'col_reorder').catch(() => {});
+    for (const c of reordered) {
+      CloudSqlService.syncColumn(c).catch(() => {});
+      DataConnectService.syncColumn(c).catch(() => {});
+    }
+    return reordered;
   },
 
-  async delete(columnId: string, targetFallbackColumnId?: string): Promise<void> {
+  async delete(columnId: string, fallbackColumnId?: string): Promise<void> {
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const colToDelete = allCols.find(c => c.id === columnId);
-    if (!colToDelete) return;
+    const targetCol = allCols.find(c => c.id === columnId);
+    setLocalData('columns', allCols.filter(c => c.id !== columnId));
 
-    // Migrate tasks if fallback is provided
-    if (targetFallbackColumnId) {
-      const allTasks = getLocalData<Task>('tasks', initialTasks);
-      const migratedTasks = allTasks.map(t => {
+    // Handle tasks in this column: move to fallbackColumnId or delete
+    const allTasks = getLocalData<Task>('tasks', initialTasks);
+    if (fallbackColumnId) {
+      const fallbackTasks = allTasks.filter(t => t.columnId === fallbackColumnId);
+      let nextPos = fallbackTasks.length;
+      const updatedTasks = allTasks.map(t => {
         if (t.columnId === columnId) {
-          return { ...t, columnId: targetFallbackColumnId, updatedAt: new Date().toISOString() };
+          const moved = { ...t, columnId: fallbackColumnId, position: nextPos++, updatedAt: new Date().toISOString() };
+          CloudSqlService.syncTask(moved).catch(() => {});
+          DataConnectService.syncTask(moved).catch(() => {});
+          return moved;
         }
         return t;
       });
-      setLocalData('tasks', migratedTasks);
+      setLocalData('tasks', updatedTasks);
+    } else {
+      const remainingTasks = allTasks.filter(t => t.columnId !== columnId);
+      setLocalData('tasks', remainingTasks);
     }
 
-    setLocalData('columns', allCols.filter(c => c.id !== columnId));
+    if (targetCol) {
+      RealtimeSyncService.deleteColumn(targetCol.projectId, columnId).catch(() => {});
+    }
+    CloudSqlService.deleteColumn(columnId).catch(() => {});
+    DataConnectService.deleteColumn(columnId).catch(() => {});
   }
 };
 
@@ -525,13 +562,17 @@ export const ColumnService = {
 export const TaskService = {
   async getByProject(projectId: string): Promise<Task[]> {
     const allTasks = getLocalData<Task>('tasks', initialTasks);
-    return allTasks.filter(t => t.projectId === projectId).sort((a, b) => a.position - b.position);
+    const localTasks = allTasks.filter(t => t.projectId === projectId).sort((a, b) => a.position - b.position);
+
+    // Cache to Realtime Database
+    const allCols = getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId);
+    RealtimeSyncService.syncFullProjectBoard(projectId, allCols, localTasks).catch(() => {});
+    return localTasks;
   },
 
   async create(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'position'> & { position?: number }): Promise<Task> {
     const allTasks = getLocalData<Task>('tasks', initialTasks);
     
-    // Resolve columnId fallback if missing or empty
     let targetColId = data.columnId;
     if (!targetColId) {
       const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
@@ -542,25 +583,36 @@ export const TaskService = {
     }
 
     const columnTasks = allTasks.filter(t => t.columnId === targetColId);
+    const id = `task_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
 
     const newTask: Task = {
       ...data,
       columnId: targetColId,
-      id: `task_${Math.random().toString(36).substring(2, 9)}`,
+      id,
       position: data.position !== undefined ? data.position : columnTasks.length,
+      dueDate: data.dueDate || null,
+      description: data.description || '',
+      priority: data.priority || 'MEDIA',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     setLocalData('tasks', [...allTasks, newTask]);
+
+    // Persist to Realtime Database, Google Cloud SQL, and Data Connect
+    RealtimeSyncService.syncTask(newTask, 'task_create').catch(() => {});
+    CloudSqlService.syncTask(newTask).catch(() => {});
+    DataConnectService.syncTask(newTask).catch(() => {});
     return newTask;
   },
 
   async update(id: string, updates: Partial<Task>): Promise<Task> {
     const allTasks = getLocalData<Task>('tasks', initialTasks);
     const index = allTasks.findIndex(t => t.id === id);
+    let updatedItem: Task;
+
     if (index === -1) {
-      const newTask: Task = {
+      updatedItem = {
         id,
         projectId: updates.projectId || 'proj-1',
         columnId: updates.columnId || 'col-1',
@@ -574,28 +626,31 @@ export const TaskService = {
         createdAt: updates.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      setLocalData('tasks', [...allTasks, newTask]);
-      return newTask;
+      setLocalData('tasks', [...allTasks, updatedItem]);
+    } else {
+      const currentTask = allTasks[index];
+      let position = updates.position !== undefined ? updates.position : currentTask.position;
+
+      if (updates.columnId && updates.columnId !== currentTask.columnId && updates.position === undefined) {
+        const destColumnTasks = allTasks.filter(t => t.columnId === updates.columnId && t.id !== id);
+        position = destColumnTasks.length;
+      }
+
+      updatedItem = {
+        ...currentTask,
+        ...updates,
+        position,
+        updatedAt: new Date().toISOString()
+      };
+      allTasks[index] = updatedItem;
+      setLocalData('tasks', allTasks);
     }
 
-    const currentTask = allTasks[index];
-    let position = updates.position !== undefined ? updates.position : currentTask.position;
-
-    // If moved to a new column without explicit position, append to end of that column
-    if (updates.columnId && updates.columnId !== currentTask.columnId && updates.position === undefined) {
-      const destColumnTasks = allTasks.filter(t => t.columnId === updates.columnId && t.id !== id);
-      position = destColumnTasks.length;
-    }
-
-    allTasks[index] = {
-      ...currentTask,
-      ...updates,
-      position,
-      updatedAt: new Date().toISOString()
-    };
-
-    setLocalData('tasks', allTasks);
-    return allTasks[index];
+    // Persist to Realtime Database, Google Cloud SQL, and Data Connect
+    RealtimeSyncService.syncTask(updatedItem, 'task_update').catch(() => {});
+    CloudSqlService.syncTask(updatedItem).catch(() => {});
+    DataConnectService.syncTask(updatedItem).catch(() => {});
+    return updatedItem;
   },
 
   async move(taskId: string, targetColumnId: string, newPosition: number): Promise<void> {
@@ -603,12 +658,12 @@ export const TaskService = {
     const task = allTasks.find(t => t.id === taskId);
     if (!task) return;
 
-    // Reorder destination column
     const otherTasksInTarget = allTasks
       .filter(t => t.columnId === targetColumnId && t.id !== taskId)
       .sort((a, b) => a.position - b.position);
 
-    otherTasksInTarget.splice(newPosition, 0, { ...task, columnId: targetColumnId, position: newPosition });
+    const movedTask: Task = { ...task, columnId: targetColumnId, position: newPosition, updatedAt: new Date().toISOString() };
+    otherTasksInTarget.splice(newPosition, 0, movedTask);
 
     const updatedColumnTasks = otherTasksInTarget.map((t, idx) => ({
       ...t,
@@ -622,40 +677,56 @@ export const TaskService = {
     });
 
     setLocalData('tasks', finalTasks);
+
+    // Persist to Realtime Database, Google Cloud SQL, and Data Connect
+    RealtimeSyncService.syncTaskMove(task.projectId, updatedColumnTasks).catch(() => {});
+    for (const t of updatedColumnTasks) {
+      CloudSqlService.syncTask(t).catch(() => {});
+      DataConnectService.syncTask(t).catch(() => {});
+    }
   },
 
   async delete(id: string): Promise<void> {
     const allTasks = getLocalData<Task>('tasks', initialTasks);
+    const taskToDelete = allTasks.find(t => t.id === id);
     setLocalData('tasks', allTasks.filter(t => t.id !== id));
+
+    if (taskToDelete) {
+      RealtimeSyncService.deleteTask(taskToDelete.projectId, id).catch(() => {});
+    }
+    CloudSqlService.deleteTask(id).catch(() => {});
+    DataConnectService.deleteTask(id).catch(() => {});
   }
 };
 
 // --- IDEAS SERVICE ---
 export const IdeaService = {
   async getAll(userId?: string): Promise<Idea[]> {
-    const list = getLocalData<Idea>('ideas', initialIdeas);
+    const local = getLocalData<Idea>('ideas', initialIdeas);
     if (userId) {
-      return list.filter(i => i.ownerId === userId || i.visibility === 'PUBLIC' || i.visibility === 'SHARED');
+      return local.filter(i => i.ownerId === userId || i.visibility === 'PUBLIC' || i.visibility === 'SHARED');
     }
-    return list;
+    return local;
   },
 
   async getById(id: string): Promise<Idea | null> {
-    const list = getLocalData<Idea>('ideas', initialIdeas);
-    return list.find(i => i.id === id) || null;
+    const local = getLocalData<Idea>('ideas', initialIdeas);
+    return local.find(i => i.id === id) || null;
   },
 
   async create(data: Omit<Idea, 'id' | 'createdAt' | 'updatedAt' | 'convertedProjectId'>): Promise<Idea> {
     const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
+    const id = `idea_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
     const newIdea: Idea = {
       ...data,
-      id: `idea_${Math.random().toString(36).substring(2, 9)}`,
+      id,
       convertedProjectId: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     setLocalData('ideas', [newIdea, ...allIdeas]);
+    CloudSqlService.syncIdea(newIdea).catch(() => {});
     return newIdea;
   },
 
@@ -671,6 +742,7 @@ export const IdeaService = {
     };
 
     setLocalData('ideas', allIdeas);
+    CloudSqlService.syncIdea(allIdeas[index]).catch(() => {});
     return allIdeas[index];
   },
 
@@ -678,7 +750,6 @@ export const IdeaService = {
     const idea = await this.getById(ideaId);
     if (!idea) throw new Error('Ideia não encontrada');
 
-    // Create the project from the idea
     const newProject = await ProjectService.create({
       ownerId,
       ownerName,
@@ -692,7 +763,6 @@ export const IdeaService = {
       readme: `# ${idea.title}\n\n${idea.description}\n\n*Convertido a partir de ideia.*`
     });
 
-    // Update the idea status and converted link
     await this.update(ideaId, {
       status: 'CONVERTIDA',
       convertedProjectId: newProject.id
@@ -704,6 +774,7 @@ export const IdeaService = {
   async delete(id: string): Promise<void> {
     const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
     setLocalData('ideas', allIdeas.filter(i => i.id !== id));
+    CloudSqlService.deleteIdea(id).catch(() => {});
   }
 };
 
@@ -716,14 +787,16 @@ export const DocumentService = {
 
   async create(data: Omit<ProjectDocument, 'id' | 'createdAt' | 'updatedAt'>): Promise<ProjectDocument> {
     const docs = getLocalData<ProjectDocument>('documents', initialDocs);
+    const id = `doc_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
     const newDoc: ProjectDocument = {
       ...data,
-      id: `doc_${Math.random().toString(36).substring(2, 9)}`,
+      id,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     setLocalData('documents', [...docs, newDoc]);
+    CloudSqlService.syncDocument(newDoc).catch(() => {});
     return newDoc;
   },
 
@@ -739,12 +812,14 @@ export const DocumentService = {
     };
 
     setLocalData('documents', docs);
+    CloudSqlService.syncDocument(docs[index]).catch(() => {});
     return docs[index];
   },
 
   async delete(id: string): Promise<void> {
     const docs = getLocalData<ProjectDocument>('documents', initialDocs);
     setLocalData('documents', docs.filter(d => d.id !== id));
+    CloudSqlService.deleteDocument(id).catch(() => {});
   }
 };
 
@@ -757,22 +832,40 @@ export const SuggestionService = {
 
   async create(data: Omit<Suggestion, 'id' | 'status' | 'createdAt' | 'updatedAt'>): Promise<Suggestion> {
     const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
+    const id = `sug_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
     const newSug: Suggestion = {
       ...data,
-      id: `sug_${Math.random().toString(36).substring(2, 9)}`,
+      id,
       status: 'ABERTO',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     setLocalData('suggestions', [newSug, ...list]);
+    CloudSqlService.syncSuggestion(newSug).catch(() => {});
     return newSug;
   },
 
   async updateStatus(id: string, status: Suggestion['status']): Promise<Suggestion> {
     const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
     const index = list.findIndex(s => s.id === id);
-    if (index === -1) throw new Error('Sugestão não encontrada');
+    if (index === -1) {
+      const item: Suggestion = {
+        id,
+        projectId: 'proj-1',
+        authorUserId: null,
+        authorName: 'Usuário',
+        authorEmail: null,
+        title: 'Sugestão',
+        description: '',
+        status,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      setLocalData('suggestions', [...list, item]);
+      CloudSqlService.syncSuggestion(item).catch(() => {});
+      return item;
+    }
 
     list[index] = {
       ...list[index],
@@ -781,7 +874,14 @@ export const SuggestionService = {
     };
 
     setLocalData('suggestions', list);
+    CloudSqlService.syncSuggestion(list[index]).catch(() => {});
     return list[index];
+  },
+
+  async delete(id: string): Promise<void> {
+    const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
+    setLocalData('suggestions', list.filter(s => s.id !== id));
+    CloudSqlService.deleteSuggestion(id).catch(() => {});
   }
 };
 
@@ -794,22 +894,41 @@ export const BugReportService = {
 
   async create(data: Omit<BugReport, 'id' | 'status' | 'createdAt' | 'updatedAt'>): Promise<BugReport> {
     const list = getLocalData<BugReport>('bugs', initialBugs);
+    const id = `bug_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
     const newBug: BugReport = {
       ...data,
-      id: `bug_${Math.random().toString(36).substring(2, 9)}`,
+      id,
       status: 'ABERTO',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
 
     setLocalData('bugs', [newBug, ...list]);
+    CloudSqlService.syncBugReport(newBug).catch(() => {});
     return newBug;
   },
 
   async updateStatus(id: string, status: BugReport['status']): Promise<BugReport> {
     const list = getLocalData<BugReport>('bugs', initialBugs);
     const index = list.findIndex(b => b.id === id);
-    if (index === -1) throw new Error('Bug report não encontrado');
+    if (index === -1) {
+      const item: BugReport = {
+        id,
+        projectId: 'proj-1',
+        authorUserId: null,
+        authorName: 'Usuário',
+        authorEmail: null,
+        title: 'Bug Report',
+        description: '',
+        severity: 'MEDIA',
+        status,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+      setLocalData('bugs', [...list, item]);
+      CloudSqlService.syncBugReport(item).catch(() => {});
+      return item;
+    }
 
     list[index] = {
       ...list[index],
@@ -818,7 +937,14 @@ export const BugReportService = {
     };
 
     setLocalData('bugs', list);
+    CloudSqlService.syncBugReport(list[index]).catch(() => {});
     return list[index];
+  },
+
+  async delete(id: string): Promise<void> {
+    const list = getLocalData<BugReport>('bugs', initialBugs);
+    setLocalData('bugs', list.filter(b => b.id !== id));
+    CloudSqlService.deleteBugReport(id).catch(() => {});
   },
 
   async uploadScreenshot(file: File): Promise<string> {
@@ -846,8 +972,9 @@ export const MemberService = {
 
   async addMember(projectId: string, email: string, name: string, role: ProjectMember['role']): Promise<ProjectMember> {
     const members = getLocalData<ProjectMember>('members', []);
+    const id = `mem_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
     const newMember: ProjectMember = {
-      id: `mem_${Math.random().toString(36).substring(2, 9)}`,
+      id,
       projectId,
       userId: `user_${Math.random().toString(36).substring(2, 9)}`,
       userEmail: email,
@@ -884,3 +1011,28 @@ export const UserService = {
   }
 };
 
+// Helper to batch-sync all local entities to Google Cloud SQL
+export async function syncAllLocalToCloudSql(): Promise<{ success: boolean; message: string; syncedCount?: any }> {
+  const projects = getLocalData<Project>('projects', initialProjects);
+  const columns = getLocalData<ProjectColumn>('columns', initialColumns);
+  const tasks = getLocalData<Task>('tasks', initialTasks);
+  const ideas = getLocalData<Idea>('ideas', initialIdeas);
+  const documents = getLocalData<ProjectDocument>('documents', initialDocs);
+  const suggestions = getLocalData<Suggestion>('suggestions', initialSuggestions);
+  const bugs = getLocalData<BugReport>('bugs', initialBugs);
+
+  return CloudSqlService.syncAll({ projects, columns, tasks, ideas, documents, suggestions, bugs });
+}
+
+// Helper to generate SQL INSERT statements for direct execution in Cloud SQL Studio
+export function generateCloudSqlScript(): string {
+  const projects = getLocalData<Project>('projects', initialProjects);
+  const columns = getLocalData<ProjectColumn>('columns', initialColumns);
+  const tasks = getLocalData<Task>('tasks', initialTasks);
+  const ideas = getLocalData<Idea>('ideas', initialIdeas);
+  const documents = getLocalData<ProjectDocument>('documents', initialDocs);
+  const suggestions = getLocalData<Suggestion>('suggestions', initialSuggestions);
+  const bugs = getLocalData<BugReport>('bugs', initialBugs);
+
+  return CloudSqlService.generateSqlScript({ projects, columns, tasks, ideas, documents, suggestions, bugs });
+}

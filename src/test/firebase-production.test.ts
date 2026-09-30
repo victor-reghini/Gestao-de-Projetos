@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, signInAnonymously } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { getStorage } from 'firebase/storage';
+import { getDatabase } from 'firebase/database';
 import { handler } from '../../netlify/functions/api';
 import { 
   ProjectService, 
@@ -22,12 +22,13 @@ const firebaseConfig = {
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "gestao-projetos-ea44c",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "gestao-projetos-ea44c.firebasestorage.app",
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "947089271740",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:947089271740:web:97823942e9df0e58cf59b9"
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:947089271740:web:97823942e9df0e58cf59b9",
+  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://gestao-projetos-ea44c-default-rtdb.firebaseio.com"
 };
 
 describe('Firebase & Production Integration Test Suite', () => {
   const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+  const rtdb = getDatabase(app);
   const storage = getStorage(app);
 
   describe('1. Firebase Configuration & Instance Verification', () => {
@@ -37,8 +38,8 @@ describe('Firebase & Production Integration Test Suite', () => {
       expect(app.options.storageBucket).toBe('gestao-projetos-ea44c.firebasestorage.app');
     });
 
-    it('initializes Firestore and Storage instances correctly', () => {
-      expect(db.type).toBe('firestore');
+    it('initializes Realtime Database and Storage instances correctly', () => {
+      expect(rtdb.app.name).toBe(app.name);
       expect(storage.app.name).toBe(app.name);
     });
   });

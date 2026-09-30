@@ -14,6 +14,16 @@ export type BugSeverity = 'BAIXA' | 'MEDIA' | 'ALTA' | 'CRITICA';
 
 export type DocumentType = 'markdown' | 'mermaid' | 'diagram' | 'note';
 
+export type SyncState = 'synced' | 'syncing' | 'slow_connection' | 'offline';
+
+export interface SyncValidationStatus {
+  state: SyncState;
+  lastSyncedAt?: string;
+  pendingChangesCount: number;
+  message: string;
+  source: 'realtime' | 'cloudsql' | 'localStorage';
+}
+
 export interface User {
   id: string;
   name: string;

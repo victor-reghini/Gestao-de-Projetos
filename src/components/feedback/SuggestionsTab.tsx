@@ -138,16 +138,15 @@ export const SuggestionsTab: React.FC<SuggestionsTabProps> = ({
                     <option value="RESOLVIDO">Status: Resolvido</option>
                   </select>
 
-                  {sug.status !== 'ACEITO' && sug.status !== 'RESOLVIDO' && (
-                    <button
-                      onClick={() => handleConvertToTask(sug)}
-                      disabled={convertingId === sug.id}
-                      className="btn btn-primary btn-sm text-xs flex items-center gap-1.5"
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                      {convertingId === sug.id ? 'Convertendo...' : 'Criar Atividade Kanban'}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleConvertToTask(sug)}
+                    disabled={convertingId === sug.id}
+                    title="Transformar esta sugestão em atividade no Kanban"
+                    className="btn btn-primary btn-sm text-xs flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>{convertingId === sug.id ? 'Convertendo...' : (sug.status === 'ACEITO' ? 'Gerar Nova Atividade' : 'Transformar em Atividade')}</span>
+                  </button>
                 </div>
               )}
             </div>

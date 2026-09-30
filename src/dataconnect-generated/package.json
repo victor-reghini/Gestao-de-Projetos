@@ -1,0 +1,17 @@
+{
+  "name": "@dataconnect/generated",
+  "version": "1.0.0",
+  "main": "index.cjs.js",
+  "module": "esm/index.esm.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./esm/index.esm.js",
+      "require": "./index.cjs.js"
+    }
+  },
+  "dependencies": {
+    "firebase": "^11.0.0"
+  }
+}

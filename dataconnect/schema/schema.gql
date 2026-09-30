@@ -1,0 +1,97 @@
+type User @table {
+  id: String! @col(name: "id")
+  email: String!
+  name: String!
+  photoUrl: String
+  role: String
+  status: String
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+type Project @table {
+  id: String! @col(name: "id")
+  name: String!
+  slug: String!
+  description: String
+  coverUrl: String
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+type ProjectColumn @table {
+  id: String! @col(name: "id")
+  projectId: String!
+  name: String!
+  order: Int!
+  color: String
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+type Task @table {
+  id: String! @col(name: "id")
+  projectId: String!
+  columnId: String!
+  title: String!
+  description: String
+  priority: String
+  status: String
+  dueDate: Timestamp
+  assigneeId: String
+  tags: [String]
+  progress: Int
+  coverUrl: String
+  checklist: Any
+  attachments: Any
+  comments: Any
+  order: Int
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+type Idea @table {
+  id: String! @col(name: "id")
+  projectId: String!
+  title: String!
+  description: String
+  status: String
+  authorId: String
+  likes: Int
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+type Suggestion @table {
+  id: String! @col(name: "id")
+  projectId: String!
+  title: String!
+  description: String
+  status: String
+  authorId: String
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+type Bug @table {
+  id: String! @col(name: "id")
+  projectId: String!
+  title: String!
+  description: String
+  status: String
+  severity: String
+  authorId: String
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}
+
+type Document @table {
+  id: String! @col(name: "id")
+  projectId: String!
+  title: String!
+  content: String
+  fileUrl: String
+  category: String
+  createdAt: Timestamp
+  updatedAt: Timestamp
+}

@@ -315,7 +315,7 @@ export const ProjectDetailPage: React.FC = () => {
             projectId={project.id}
             documents={documents}
             onRefresh={loadProjectData}
-            isReadOnly={!isOwner}
+            isReadOnly={!canEdit}
           />
         )}
 
@@ -324,7 +324,7 @@ export const ProjectDetailPage: React.FC = () => {
             projectId={project.id}
             suggestions={suggestions}
             onRefresh={loadProjectData}
-            isReadOnly={!isOwner}
+            isReadOnly={!canEdit}
           />
         )}
 
@@ -333,7 +333,7 @@ export const ProjectDetailPage: React.FC = () => {
             projectId={project.id}
             bugs={bugs}
             onRefresh={loadProjectData}
-            isReadOnly={!isOwner}
+            isReadOnly={!canEdit}
           />
         )}
 

@@ -1,0 +1,88 @@
+# Users Mutations
+mutation UpsertUser($id: String!, $email: String!, $name: String!, $photoUrl: String, $role: String, $status: String) @auth(level: PUBLIC) {
+  user_upsert(data: {
+    id: $id,
+    email: $email,
+    name: $name,
+    photoUrl: $photoUrl,
+    role: $role,
+    status: $status
+  })
+}
+
+mutation DeleteUser($id: String!) @auth(level: PUBLIC) {
+  user_delete(id: $id)
+}
+
+# Projects Mutations
+mutation UpsertProject($id: String!, $name: String!, $slug: String!, $description: String, $coverUrl: String) @auth(level: PUBLIC) {
+  project_upsert(data: {
+    id: $id,
+    name: $name,
+    slug: $slug,
+    description: $description,
+    coverUrl: $coverUrl
+  })
+}
+
+mutation DeleteProject($id: String!) @auth(level: PUBLIC) {
+  project_delete(id: $id)
+}
+
+# ProjectColumns Mutations
+mutation UpsertProjectColumn($id: String!, $projectId: String!, $name: String!, $order: Int!, $color: String) @auth(level: PUBLIC) {
+  projectColumn_upsert(data: {
+    id: $id,
+    projectId: $projectId,
+    name: $name,
+    order: $order,
+    color: $color
+  })
+}
+
+mutation DeleteProjectColumn($id: String!) @auth(level: PUBLIC) {
+  projectColumn_delete(id: $id)
+}
+
+# Tasks Mutations
+mutation UpsertTask(
+  $id: String!,
+  $projectId: String!,
+  $columnId: String!,
+  $title: String!,
+  $description: String,
+  $priority: String,
+  $status: String,
+  $dueDate: Timestamp,
+  $assigneeId: String,
+  $tags: [String],
+  $progress: Int,
+  $coverUrl: String,
+  $checklist: Any,
+  $attachments: Any,
+  $comments: Any,
+  $order: Int
+) @auth(level: PUBLIC) {
+  task_upsert(data: {
+    id: $id,
+    projectId: $projectId,
+    columnId: $columnId,
+    title: $title,
+    description: $description,
+    priority: $priority,
+    status: $status,
+    dueDate: $dueDate,
+    assigneeId: $assigneeId,
+    tags: $tags,
+    progress: $progress,
+    coverUrl: $coverUrl,
+    checklist: $checklist,
+    attachments: $attachments,
+    comments: $comments,
+    order: $order
+  })
+}
+
+mutation DeleteTask($id: String!) @auth(level: PUBLIC) {
+  task_delete(id: $id)
+}

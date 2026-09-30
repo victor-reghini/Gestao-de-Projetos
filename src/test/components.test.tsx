@@ -7,7 +7,10 @@ import { LoginPage } from '@/pages/auth/LoginPage';
 import { ApiDocsPage } from '@/pages/public/ApiDocsPage';
 import { TaskModal } from '@/components/kanban/TaskModal';
 import { ImageCropperModal } from '@/components/profile/ImageCropperModal';
-import { ProjectColumn, Task } from '@/types';
+import { AppLayout } from '@/components/layout/AppLayout';
+import { SuggestionsTab } from '@/components/feedback/SuggestionsTab';
+import { BugsTab } from '@/components/feedback/BugsTab';
+import { ProjectColumn, Task, Suggestion, BugReport } from '@/types';
 
 const mockColumns: ProjectColumn[] = [
   { id: 'col-1', projectId: 'p1', name: 'Backlog', key: 'backlog', position: 0, createdAt: '', updatedAt: '' },
@@ -138,5 +141,114 @@ describe('UI Components & Pages Tests', () => {
     expect(screen.getByText(/Arraste para ajustar a posição/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Recortar e Salvar/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Cancelar/i })).toBeInTheDocument();
+  });
+
+  it('toggles collapsible sidebar and stores state in localStorage', () => {
+    localStorage.removeItem('gestao_sidebar_collapsed');
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <AppLayout />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    const toggleBtn = screen.getByLabelText(/Minimizar menu lateral/i);
+    expect(toggleBtn).toBeInTheDocument();
+
+    // Initially expanded
+    expect(screen.getByText('Hub Ágil & Docs')).toBeInTheDocument();
+
+    // Click to collapse
+    fireEvent.click(toggleBtn);
+    expect(localStorage.getItem('gestao_sidebar_collapsed')).toBe('true');
+    expect(screen.queryByText('Hub Ágil & Docs')).not.toBeInTheDocument();
+
+    // Click to expand again
+    const expandBtn = screen.getByLabelText(/Expandir menu lateral/i);
+    fireEvent.click(expandBtn);
+    expect(localStorage.getItem('gestao_sidebar_collapsed')).toBe('false');
+    expect(screen.getByText('Hub Ágil & Docs')).toBeInTheDocument();
+  });
+
+  it('renders "Transformar em Atividade" button on suggestion cards and converts to task', async () => {
+    const onRefresh = vi.fn();
+    const mockSuggestions: Suggestion[] = [
+      {
+        id: 'sug-test-1',
+        projectId: 'p1',
+        authorUserId: null,
+        authorName: 'Tester User',
+        authorEmail: 'tester@example.com',
+        title: 'Sugestão de Atalho',
+        description: 'Descrição da sugestão de atalho',
+        status: 'ABERTO',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ];
+
+    render(
+      <SuggestionsTab
+        projectId="p1"
+        suggestions={mockSuggestions}
+        onRefresh={onRefresh}
+        isReadOnly={false}
+      />
+    );
+
+    const convertBtn = screen.getByRole('button', { name: /Transformar em Atividade/i });
+    expect(convertBtn).toBeInTheDocument();
+
+    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    fireEvent.click(convertBtn);
+
+    await waitFor(() => {
+      expect(onRefresh).toHaveBeenCalled();
+    });
+
+    alertMock.mockRestore();
+  });
+
+  it('renders "Transformar em Atividade" button on bug cards and converts to task', async () => {
+    const onRefresh = vi.fn();
+    const mockBugs: BugReport[] = [
+      {
+        id: 'bug-test-1',
+        projectId: 'p1',
+        authorUserId: null,
+        authorName: 'QA Tester',
+        authorEmail: 'qa@example.com',
+        title: 'Falha no Botão de Envio',
+        description: 'O botão não responde ao clique',
+        severity: 'ALTA',
+        status: 'ABERTO',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+    ];
+
+    render(
+      <BugsTab
+        projectId="p1"
+        bugs={mockBugs}
+        onRefresh={onRefresh}
+        isReadOnly={false}
+      />
+    );
+
+    const convertBtn = screen.getByRole('button', { name: /Transformar em Atividade/i });
+    expect(convertBtn).toBeInTheDocument();
+
+    const alertMock = vi.spyOn(window, 'alert').mockImplementation(() => {});
+
+    fireEvent.click(convertBtn);
+
+    await waitFor(() => {
+      expect(onRefresh).toHaveBeenCalled();
+    });
+
+    alertMock.mockRestore();
   });
 });

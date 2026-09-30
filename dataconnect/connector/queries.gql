@@ -1,0 +1,75 @@
+# Users Queries
+query GetUser($id: String!) @auth(level: PUBLIC) {
+  user(id: $id) {
+    id
+    email
+    name
+    photoUrl
+    role
+    status
+    createdAt
+    updatedAt
+  }
+}
+
+# Projects Queries
+query ListProjects @auth(level: PUBLIC) {
+  projects {
+    id
+    name
+    slug
+    description
+    coverUrl
+    createdAt
+    updatedAt
+  }
+}
+
+query GetProjectBySlug($slug: String!) @auth(level: PUBLIC) {
+  projects(where: { slug: { eq: $slug } }) {
+    id
+    name
+    slug
+    description
+    coverUrl
+    createdAt
+    updatedAt
+  }
+}
+
+# ProjectColumns Queries
+query ListProjectColumns($projectId: String!) @auth(level: PUBLIC) {
+  projectColumns(where: { projectId: { eq: $projectId } }, orderBy: [{ order: ASC }]) {
+    id
+    projectId
+    name
+    order
+    color
+    createdAt
+    updatedAt
+  }
+}
+
+# Tasks Queries
+query ListTasksByProject($projectId: String!) @auth(level: PUBLIC) {
+  tasks(where: { projectId: { eq: $projectId } }) {
+    id
+    projectId
+    columnId
+    title
+    description
+    priority
+    status
+    dueDate
+    assigneeId
+    tags
+    progress
+    coverUrl
+    checklist
+    attachments
+    comments
+    order
+    createdAt
+    updatedAt
+  }
+}

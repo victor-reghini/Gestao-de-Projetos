@@ -1,4 +1,22 @@
 import type { Handler, HandlerEvent, HandlerContext } from '@netlify/functions';
+import { 
+  testCloudSqlConnection, 
+  persistTask, 
+  persistColumn, 
+  persistProject, 
+  persistIdea,
+  persistDocument,
+  persistSuggestion,
+  persistBugReport,
+  deleteCloudSqlTask, 
+  deleteCloudSqlColumn, 
+  deleteCloudSqlProject, 
+  deleteCloudSqlIdea,
+  deleteCloudSqlDocument,
+  deleteCloudSqlSuggestion,
+  deleteCloudSqlBugReport,
+  syncAllToCloudSql 
+} from '../../src/services/server/cloudSqlDb';
 
 // Simple in-memory rate limiter per IP
 const ipRequestCounts = new Map<string, { count: number; resetTime: number }>();
@@ -77,10 +95,104 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
             'POST /api/v1/projects/:slug/suggestions',
             'GET /api/v1/projects/:slug/bugs',
             'POST /api/v1/projects/:slug/bugs',
-            'GET /api/v1/projects/:slug/docs'
+            'GET /api/v1/projects/:slug/docs',
+            'GET /api/v1/cloudsql/status',
+            'POST /api/v1/cloudsql/sync-all',
+            'POST /api/v1/cloudsql/sync-task',
+            'POST /api/v1/cloudsql/sync-column',
+            'POST /api/v1/cloudsql/sync-project'
           ]
         })
       };
+    }
+
+    if (segments[0] === 'cloudsql') {
+      const action = segments[1];
+      const body = event.body ? JSON.parse(event.body) : {};
+
+      if (action === 'status' && event.httpMethod === 'GET') {
+        const status = await testCloudSqlConnection();
+        return {
+          statusCode: 200,
+          headers: corsHeaders,
+          body: JSON.stringify(status)
+        };
+      }
+
+      if (action === 'sync-task' && event.httpMethod === 'POST') {
+        await persistTask(body);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'sync-column' && event.httpMethod === 'POST') {
+        await persistColumn(body);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'sync-project' && event.httpMethod === 'POST') {
+        await persistProject(body);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'sync-idea' && event.httpMethod === 'POST') {
+        await persistIdea(body);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'sync-document' && event.httpMethod === 'POST') {
+        await persistDocument(body);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'sync-suggestion' && event.httpMethod === 'POST') {
+        await persistSuggestion(body);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'sync-bug' && event.httpMethod === 'POST') {
+        await persistBugReport(body);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'delete-task' && event.httpMethod === 'POST') {
+        if (body.taskId) await deleteCloudSqlTask(body.taskId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'delete-column' && event.httpMethod === 'POST') {
+        if (body.columnId) await deleteCloudSqlColumn(body.columnId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'delete-project' && event.httpMethod === 'POST') {
+        if (body.projectId) await deleteCloudSqlProject(body.projectId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'delete-idea' && event.httpMethod === 'POST') {
+        if (body.ideaId) await deleteCloudSqlIdea(body.ideaId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'delete-document' && event.httpMethod === 'POST') {
+        if (body.docId) await deleteCloudSqlDocument(body.docId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'delete-suggestion' && event.httpMethod === 'POST') {
+        if (body.sugId) await deleteCloudSqlSuggestion(body.sugId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'delete-bug' && event.httpMethod === 'POST') {
+        if (body.bugId) await deleteCloudSqlBugReport(body.bugId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
+      }
+
+      if (action === 'sync-all' && event.httpMethod === 'POST') {
+        const result = await syncAllToCloudSql(body);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify(result) };
+      }
     }
 
     if (segments[0] === 'projects') {

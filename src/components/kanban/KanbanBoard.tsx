@@ -1,13 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { ProjectColumn, Task, TaskPriority } from '@/types';
+import { ProjectColumn, Task, TaskPriority, SyncValidationStatus } from '@/types';
 import { ColumnService, TaskService } from '@/services/dbService';
-import { 
-  Plus, 
-  Edit2, 
-  Trash2, 
-  Calendar, 
-  Search, 
-  GripVertical
+import { RealtimeSyncService } from '@/services/realtimeSyncService';
+import {
+  Plus,
+  Edit2,
+  Trash2,
+  Calendar,
+  Search,
+  GripVertical,
+  RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  WifiOff
 } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 import { ColumnModal } from './NewColumnModal';
@@ -21,6 +26,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
   const [columns, setColumns] = useState<ProjectColumn[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Sync state
+  const [syncStatus, setSyncStatus] = useState<SyncValidationStatus>(() =>
+    RealtimeSyncService.getCurrentStatus()
+  );
+  const [isValidating, setIsValidating] = useState(false);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -48,6 +59,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
 
       const tList = await TaskService.getByProject(projectId);
       setTasks(tList);
+
+      // Validate sync with Realtime Database cache
+      RealtimeSyncService.validateProjectSync(projectId, tList, cols).then(result => {
+        if (!result.isValid && result.remoteTasks && result.remoteColumns) {
+          if (result.remoteTasks.length > 0) setTasks(result.remoteTasks);
+          if (result.remoteColumns.length > 0) setColumns(result.remoteColumns);
+        }
+      }).catch(() => { });
     } catch (err) {
       console.error('Error loading kanban:', err);
     } finally {
@@ -57,7 +76,46 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
 
   useEffect(() => {
     loadKanban();
+
+    // Subscribe to Realtime Database live updates for this project
+    const unsubscribeKanban = RealtimeSyncService.subscribeProjectKanban(
+      projectId,
+      ({ tasks: remoteTasks, columns: remoteCols }) => {
+        if (remoteCols && remoteCols.length > 0) {
+          setColumns(remoteCols);
+        }
+        if (remoteTasks) {
+          setTasks(remoteTasks);
+        }
+      }
+    );
+
+    // Subscribe to connection & sync status updates
+    const unsubscribeStatus = RealtimeSyncService.subscribeSyncStatus((status) => {
+      setSyncStatus(status);
+    });
+
+    return () => {
+      unsubscribeKanban();
+      unsubscribeStatus();
+    };
   }, [projectId]);
+
+  const handleManualSync = async () => {
+    setIsValidating(true);
+    try {
+      await RealtimeSyncService.processSyncQueue();
+      const res = await RealtimeSyncService.validateProjectSync(projectId, tasks, columns);
+      if (res.remoteTasks && res.remoteTasks.length > 0) {
+        setTasks(res.remoteTasks);
+      }
+      if (res.remoteColumns && res.remoteColumns.length > 0) {
+        setColumns(res.remoteColumns);
+      }
+    } finally {
+      setIsValidating(false);
+    }
+  };
 
   // Drag & Drop Handlers
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
@@ -152,7 +210,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[300px] rounded-2xl bg-slate-900 border border-slate-800">
+      <div className="flex items-center justify-center p-3.5 min-h-[300px] rounded-2xl bg-slate-900 border border-slate-800">
         <div className="flex flex-col items-center gap-2.5 text-slate-400 text-xs">
           <div className="w-7 h-7 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
           <span>Carregando quadro Kanban...</span>
@@ -193,29 +251,80 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
           </div>
         </div>
 
-        {!isReadOnly && (
-          <div className="flex items-center gap-2 self-end sm:self-auto">
+        <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
+          {/* Sync Status Badge */}
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${syncStatus.state === 'synced'
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                : syncStatus.state === 'syncing'
+                  ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                  : syncStatus.state === 'slow_connection'
+                    ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    : 'bg-slate-800 text-slate-300 border-slate-700'
+              }`}
+            title={`${syncStatus.message} • ${syncStatus.source === 'realtime' ? 'Firebase Realtime DB' : 'Cache Local (localStorage)'}`}
+          >
+            {syncStatus.state === 'synced' && (
+              <>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="hidden sm:inline">Sincronizado</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              </>
+            )}
+            {syncStatus.state === 'syncing' && (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-400" />
+                <span>Sincronizando...</span>
+              </>
+            )}
+            {syncStatus.state === 'slow_connection' && (
+              <>
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                <span>Conexão Lenta (Cache)</span>
+              </>
+            )}
+            {syncStatus.state === 'offline' && (
+              <>
+                <WifiOff className="w-3.5 h-3.5 text-slate-400" />
+                <span>Offline (Local)</span>
+              </>
+            )}
             <button
-              onClick={() => {
-                setColToEdit(null);
-                setIsColModalOpen(true);
-              }}
-              className="btn btn-secondary btn-sm text-xs flex items-center gap-1"
+              onClick={handleManualSync}
+              disabled={isValidating}
+              title="Validar sincronização com banco de dados"
+              aria-label="Validar sincronização"
+              className="ml-1 p-0.5 text-slate-400 hover:text-white rounded transition-colors"
             >
-              <Plus className="w-3.5 h-3.5" /> Nova Coluna
-            </button>
-            <button
-              onClick={() => {
-                setTaskToEdit(null);
-                setSelectedColumnId(columns[0]?.id);
-                setIsTaskModalOpen(true);
-              }}
-              className="btn btn-primary btn-sm text-xs flex items-center gap-1"
-            >
-              <Plus className="w-3.5 h-3.5" /> Nova Atividade
+              <RefreshCw className={`w-3 h-3 ${isValidating ? 'animate-spin' : ''}`} />
             </button>
           </div>
-        )}
+
+
+          {!isReadOnly && (
+            <>
+              <button
+                onClick={() => {
+                  setColToEdit(null);
+                  setIsColModalOpen(true);
+                }}
+                className="btn btn-secondary btn-sm text-xs flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nova Coluna
+              </button>
+              <button
+                onClick={() => {
+                  setTaskToEdit(null);
+                  setSelectedColumnId(columns[0]?.id);
+                  setIsTaskModalOpen(true);
+                }}
+                className="btn btn-primary btn-sm text-xs flex items-center gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" /> Nova Atividade
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Columns Horizontal Board */}
@@ -230,9 +339,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
               onDragOver={(e) => handleDragOver(e, column.id)}
               onDragLeave={() => handleDragLeave(column.id)}
               onDrop={(e) => handleDrop(e, column.id)}
-              className={`w-80 shrink-0 flex flex-col rounded-2xl bg-slate-900 border transition-all duration-150 ${
-                isOver ? 'border-blue-500 bg-slate-800/90 ring-2 ring-blue-500/20' : 'border-slate-800'
-              }`}
+              className={`w-80 shrink-0 flex flex-col rounded-2xl bg-slate-900 border transition-all duration-150 ${isOver ? 'border-blue-500 bg-slate-800/90 ring-2 ring-blue-500/20' : 'border-slate-800'
+                }`}
             >
               {/* Column Header */}
               <div className="p-3.5 border-b border-slate-800 flex items-center justify-between">
@@ -295,9 +403,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
                         setIsTaskModalOpen(true);
                       }
                     }}
-                    className={`group p-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700/80 shadow-sm transition-all cursor-pointer ${
-                      draggedTaskId === task.id ? 'opacity-40 scale-95' : 'hover:-translate-y-0.5 hover:border-blue-500/50 hover:shadow-md'
-                    }`}
+                    className={`group p-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700/80 shadow-sm transition-all cursor-pointer ${draggedTaskId === task.id ? 'opacity-40 scale-95' : 'hover:-translate-y-0.5 hover:border-blue-500/50 hover:shadow-md'
+                      }`}
                   >
                     <div className="flex items-start justify-between gap-2 mb-2">
                       <span className={`badge text-[10px] py-0.5 px-2 ${getPriorityBadgeClass(task.priority)}`}>

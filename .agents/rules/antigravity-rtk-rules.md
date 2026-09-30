@@ -1,25 +1,33 @@
-# RTK
+# RTK (Rust Token Killer) Automation Rule
 
-Prefix every shell command with `rtk`: `rtk git status`, `rtk cargo test`,
-`rtk npm run build`, `rtk ls src/`. Keep the prefix inside chains:
-`rtk git add . && rtk git commit -m "msg"`. Commands RTK has no filter for
-run as-is, so the prefix is always safe.
+## RTK (Rust Token Killer) Optimization Rule
+Prefix every shell/terminal execution command with `rtk`:
+- `rtk git status`, `rtk git diff -U1`, `rtk git log -n 5`
+- `rtk npm test`, `rtk npm run build`, `rtk vitest run`
+- `rtk ls src/`, `rtk tree -L 2`, `rtk rg "pattern"`
 
-# Command output
+Keep the prefix inside chains: `rtk git add . && rtk git commit -m "msg"`.
+Commands RTK has no filter for run as-is, so the prefix is always safe.
 
-Command output here is condensed to save tokens, keeping every signal and
-dropping costly noise. Treat it as the complete result: run commands
-normally, and batch related commands into one call to avoid extra turns.
-Truncated results state their recovery path in their own output. Re-run a
-command as `rtk proxy <cmd>` only when its result is unusable: empty when
-output was clearly expected, contradicting its exit code, or garbled.
+### Output & Token Optimization
+Command output is condensed to save 60-90% LLM context window tokens while preserving every critical signal, error, and exit code.
+- `rtk gain` / `rtk gain --history` - View token savings scoreboard.
+- `rtk proxy <cmd>` - Run a command unfiltered if raw output is strictly needed.
+- `RTK_DISABLED=1 <cmd>` - Skip RTK for one command.
 
-## About RTK
+## Headroom Context Compression (Upstream: headroomlabs-ai/headroom)
+- Utilize Headroom context compression and Compress-Cache-Retrieve (CCR) for heavy JSON structures, file reads, and tool payloads to minimize prompt tokens.
 
-RTK (Rust Token Killer) is a CLI proxy that filters command output to save
-tokens; behavior and exit code are unchanged.
 
-- `rtk gain` / `rtk gain --history` — token savings, overall and per command.
-- `rtk proxy <cmd>` — run a command unfiltered, still tracked.
-- `RTK_DISABLED=1 <cmd>` — skip RTK for one command.
-- `rtk discover` — find past commands RTK could have condensed.
+## Output & Generation Token Saver Rule (Ponytail Mode: FULL)
+- **YAGNI & Shortest Diff:** Only write code that must exist. Reach for standard library before custom code or new dependencies. Shortest working diff wins.
+- **Terse Responses:** Code first. At most 3 short lines of explanation: what was skipped, when to add it. No essays, no unsolicited design tours, no feature walkthroughs.
+
+## Terse Agent Directives
+- Eliminate pleasantries, greetings, and conversational filler. Provide direct answers and actionable code.
+- Avoid reprinting unchanged code blocks. Use targeted search/replace blocks or concise snippets.
+
+## Context Optimization (Compact Diffs & Outlines)
+- Inspect git changes using compact single-line diffs: `rtk git diff -U1` instead of wide multi-line context.
+- When exploring codebases, inspect function signatures / AST outlines (/rtk-outline) before reading entire files into context.
+

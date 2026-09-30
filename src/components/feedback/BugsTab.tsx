@@ -226,16 +226,15 @@ export const BugsTab: React.FC<BugsTabProps> = ({
                     <option value="REJEITADO">Status: Rejeitado</option>
                   </select>
 
-                  {bug.status !== 'ACEITO' && bug.status !== 'RESOLVIDO' && (
-                    <button
-                      onClick={() => handleConvertToTask(bug)}
-                      disabled={convertingId === bug.id}
-                      className="btn btn-primary btn-sm text-xs flex items-center gap-1.5"
-                    >
-                      <Layers className="w-3.5 h-3.5" />
-                      {convertingId === bug.id ? 'Convertendo...' : 'Criar Tarefa no Kanban'}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleConvertToTask(bug)}
+                    disabled={convertingId === bug.id}
+                    title="Transformar este bug reportado em atividade no Kanban"
+                    className="btn btn-primary btn-sm text-xs flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>{convertingId === bug.id ? 'Convertendo...' : (bug.status === 'ACEITO' ? 'Gerar Nova Atividade' : 'Transformar em Atividade')}</span>
+                  </button>
                 </div>
               )}
             </div>
