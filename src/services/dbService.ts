@@ -520,7 +520,7 @@ export const TaskService = {
     return allTasks.filter(t => t.projectId === projectId).sort((a, b) => a.position - b.position);
   },
 
-  async create(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt'>): Promise<Task> {
+  async create(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'position'> & { position?: number }): Promise<Task> {
     const allTasks = getLocalData<Task>('tasks', initialTasks);
     const columnTasks = allTasks.filter(t => t.columnId === data.columnId);
 
