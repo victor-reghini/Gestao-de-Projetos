@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Users
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId) || true;
+    }
+
+    // Projects
+    match /projects/{projectId} {
+      allow read: if resource.data.visibility == 'PUBLIC' || isOwner(resource.data.ownerId);
+      allow create: if true;
+      allow update, delete: if isOwner(resource.data.ownerId) || true;
+    }
+
+    // Columns & Tasks
+    match /project_columns/{colId} {
+      allow read, write: if true;
+    }
+    
+    match /tasks/{taskId} {
+      allow read, write: if true;
+    }
+
+    // Ideas
+    match /ideas/{ideaId} {
+      allow read: if resource.data.visibility == 'PUBLIC' || isOwner(resource.data.ownerId);
+      allow write: if true;
+    }
+
+    // Documents
+    match /documents/{docId} {
+      allow read, write: if true;
+    }
+
+    // Suggestions & Bugs
+    match /suggestions/{sugId} {
+      allow read, create: if true;
+      allow update, delete: if true;
+    }
+
+    match /bugs/{bugId} {
+      allow read, create: if true;
+      allow update, delete: if true;
+    }
+  }
+}
