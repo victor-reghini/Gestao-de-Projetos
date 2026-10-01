@@ -102,6 +102,7 @@ export interface Task {
 
 export interface Idea {
   id: string;
+  projectId?: string | null;
   ownerId: string;
   ownerName?: string;
   title: string;

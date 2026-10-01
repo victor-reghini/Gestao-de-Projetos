@@ -251,7 +251,7 @@ export const CloudSqlService = {
     const lines: string[] = [
       '--',
       '-- SCRIPT DE CARGA PARA GOOGLE CLOUD SQL (Cloud SQL Studio)',
-      `-- Instância: gestao-projetos-ea44c-instance (Database: postgres)`,
+      `-- Instância: gestao-projetos-ea44c-instance (Database: gestao-projetos-ea44c-database)`,
       `-- Gerado em: ${new Date().toISOString()}`,
       '--',
       'BEGIN;',
@@ -260,7 +260,7 @@ export const CloudSqlService = {
 
     // Users
     lines.push('-- Inserção de Usuário Padrão');
-    lines.push(`INSERT INTO "public"."users" (id, name, email) 
+    lines.push(`INSERT INTO "public"."user" (id, name, email) 
 VALUES ('demo-user-123', 'Victor Reghini', 'contato@victorreghini.com.br')
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email;`);
     lines.push('');
@@ -276,7 +276,7 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email;`);
       const readme = (p.readme || '').replace(/'/g, "''");
 
       lines.push(`INSERT INTO "public"."project" (id, owner_id, name, slug, short_description, description, visibility, status, technologies, links, readme, created_at, updated_at)
-VALUES ('${p.id}', '${p.ownerId || 'demo-user-123'}', '${name}', '${p.slug}', '${shortDesc}', '${desc}', '${p.visibility}', '${p.status}', '${tech}', '${links}'::jsonb, '${readme}', '${p.createdAt}', '${p.updatedAt}')
+VALUES ('${p.id}', '${p.ownerId || 'demo-user-123'}', '${name}', '${p.slug}', '${shortDesc}', '${desc}', '${p.visibility}', '${p.status}', '${tech}', '${links}', '${readme}', '${p.createdAt}', '${p.updatedAt}')
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, status = EXCLUDED.status, updated_at = NOW();`);
     }
     lines.push('');
@@ -313,10 +313,9 @@ ON CONFLICT (id) DO UPDATE SET column_id = EXCLUDED.column_id, title = EXCLUDED.
         const desc = (i.description || '').replace(/'/g, "''");
         const tech = `{${(i.technologies || []).map(t => `"${t.replace(/"/g, '\\"')}"`).join(',')}}`;
         const links = JSON.stringify(i.links || []).replace(/'/g, "''");
-        const authorName = (i.ownerName || 'Victor Reghini').replace(/'/g, "''");
 
-        lines.push(`INSERT INTO "public"."idea" (id, owner_id, owner_name, title, description, visibility, status, technologies, links, created_at, updated_at)
-VALUES ('${i.id}', '${i.ownerId || 'demo-user-123'}', '${authorName}', '${title}', '${desc}', '${i.visibility}', '${i.status}', '${tech}', '${links}'::jsonb, '${i.createdAt}', '${i.updatedAt}')
+        lines.push(`INSERT INTO "public"."idea" (id, project_id, owner_id, converted_project_id, title, description, visibility, status, technologies, links, created_at, updated_at)
+VALUES ('${i.id}', ${i.projectId ? `'${i.projectId}'` : 'NULL'}, '${i.ownerId || 'demo-user-123'}', ${i.convertedProjectId ? `'${i.convertedProjectId}'` : 'NULL'}, '${title}', '${desc}', '${i.visibility}', '${i.status}', '${tech}', '${links}', '${i.createdAt}', '${i.updatedAt}')
 ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, status = EXCLUDED.status, updated_at = NOW();`);
       }
       lines.push('');
@@ -342,8 +341,9 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, content = EXCLUDED.conten
         const title = (s.title || '').replace(/'/g, "''");
         const desc = (s.description || '').replace(/'/g, "''");
         const name = (s.authorName || 'Anônimo').replace(/'/g, "''");
-        lines.push(`INSERT INTO "public"."suggestion" (id, project_id, author_id, author_name, title, description, status, created_at, updated_at)
-VALUES ('${s.id}', '${s.projectId}', ${s.authorUserId ? `'${s.authorUserId}'` : 'NULL'}, '${name}', '${title}', '${desc}', '${s.status || 'PENDENTE'}', '${s.createdAt}', '${s.updatedAt}')
+        const email = s.authorEmail ? `'${s.authorEmail.replace(/'/g, "''")}'` : 'NULL';
+        lines.push(`INSERT INTO "public"."suggestion" (id, project_id, author_user_id, author_name, author_email, title, description, status, created_at, updated_at)
+VALUES ('${s.id}', '${s.projectId}', ${s.authorUserId ? `'${s.authorUserId}'` : 'NULL'}, '${name}', ${email}, '${title}', '${desc}', '${s.status || 'PENDENTE'}', '${s.createdAt}', '${s.updatedAt}')
 ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, status = EXCLUDED.status, updated_at = NOW();`);
       }
       lines.push('');
@@ -356,10 +356,11 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.de
         const title = (b.title || '').replace(/'/g, "''");
         const desc = (b.description || '').replace(/'/g, "''");
         const name = (b.authorName || 'Anônimo').replace(/'/g, "''");
+        const email = b.authorEmail ? `'${b.authorEmail.replace(/'/g, "''")}'` : 'NULL';
         const screenshot = b.imageUrl ? `'${b.imageUrl.replace(/'/g, "''")}'` : 'NULL';
-        lines.push(`INSERT INTO "public"."bug_report" (id, project_id, author_id, author_name, title, description, severity, status, screenshot_url, created_at, updated_at)
-VALUES ('${b.id}', '${b.projectId}', ${b.authorUserId ? `'${b.authorUserId}'` : 'NULL'}, '${name}', '${title}', '${desc}', '${b.severity || 'MEDIA'}', '${b.status || 'PENDENTE'}', ${screenshot}, '${b.createdAt}', '${b.updatedAt}')
-ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, severity = EXCLUDED.severity, status = EXCLUDED.status, screenshot_url = EXCLUDED.screenshot_url, updated_at = NOW();`);
+        lines.push(`INSERT INTO "public"."bug_report" (id, project_id, author_user_id, author_name, author_email, title, description, severity, status, image_url, created_at, updated_at)
+VALUES ('${b.id}', '${b.projectId}', ${b.authorUserId ? `'${b.authorUserId}'` : 'NULL'}, '${name}', ${email}, '${title}', '${desc}', '${b.severity || 'MEDIA'}', '${b.status || 'PENDENTE'}', ${screenshot}, '${b.createdAt}', '${b.updatedAt}')
+ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, severity = EXCLUDED.severity, status = EXCLUDED.status, image_url = EXCLUDED.image_url, updated_at = NOW();`);
       }
       lines.push('');
     }

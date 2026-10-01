@@ -10,7 +10,7 @@ export function getCloudSqlConfig() {
   const host = process.env.PGHOST || process.env.VITE_PGHOST;
   const user = process.env.PGUSER || process.env.VITE_PGUSER || 'postgres';
   const password = process.env.PGPASSWORD || process.env.VITE_PGPASSWORD;
-  const database = process.env.PGDATABASE || process.env.VITE_PGDATABASE || 'postgres';
+  const database = process.env.PGDATABASE || process.env.VITE_PGDATABASE || 'gestao-projetos-ea44c-database';
   const port = parseInt(process.env.PGPORT || process.env.VITE_PGPORT || '5432', 10);
   const ssl = process.env.PGSSL === 'false' ? false : { rejectUnauthorized: false };
 
@@ -126,12 +126,12 @@ export async function persistUser(user: { id: string; name: string; email: strin
 
   try {
     await p.query(
-      `INSERT INTO "public"."users" (id, name, email, avatar_url, updated_at)
+      `INSERT INTO "public"."user" (id, name, email, avatar_url, updated_at)
        VALUES ($1, $2, $3, $4, NOW())
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name,
          email = EXCLUDED.email,
-         avatar_url = COALESCE(EXCLUDED.avatar_url, "users".avatar_url),
+         avatar_url = COALESCE(EXCLUDED.avatar_url, "user".avatar_url),
          updated_at = NOW()`,
       [user.id, user.name, user.email, user.avatarUrl || null]
     );
@@ -308,9 +308,11 @@ export async function persistIdea(idea: Idea): Promise<void> {
 
     await p.query(
       `INSERT INTO "public"."idea" 
-       (id, owner_id, owner_name, title, description, visibility, status, technologies, links, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (id, project_id, owner_id, converted_project_id, title, description, visibility, status, technologies, links, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (id) DO UPDATE SET
+         project_id = EXCLUDED.project_id,
+         converted_project_id = EXCLUDED.converted_project_id,
          title = EXCLUDED.title,
          description = EXCLUDED.description,
          visibility = EXCLUDED.visibility,
@@ -320,8 +322,9 @@ export async function persistIdea(idea: Idea): Promise<void> {
          updated_at = NOW()`,
       [
         idea.id,
+        idea.projectId || null,
         idea.ownerId || 'demo-user-123',
-        idea.ownerName || null,
+        idea.convertedProjectId || null,
         idea.title,
         idea.description,
         idea.visibility || 'PUBLIC',
@@ -395,9 +398,11 @@ export async function persistSuggestion(sug: Suggestion): Promise<void> {
   try {
     await p.query(
       `INSERT INTO "public"."suggestion" 
-       (id, project_id, author_id, author_name, title, description, status, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       (id, project_id, author_user_id, author_name, author_email, title, description, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (id) DO UPDATE SET
+         author_name = EXCLUDED.author_name,
+         author_email = EXCLUDED.author_email,
          title = EXCLUDED.title,
          description = EXCLUDED.description,
          status = EXCLUDED.status,
@@ -407,6 +412,7 @@ export async function persistSuggestion(sug: Suggestion): Promise<void> {
         sug.projectId,
         sug.authorUserId || null,
         sug.authorName || 'Anônimo',
+        sug.authorEmail || null,
         sug.title,
         sug.description,
         sug.status || 'PENDENTE',
@@ -436,24 +442,35 @@ export async function persistBugReport(bug: BugReport): Promise<void> {
   try {
     await p.query(
       `INSERT INTO "public"."bug_report" 
-       (id, project_id, author_id, author_name, title, description, severity, status, screenshot_url, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       (id, project_id, author_user_id, author_name, author_email, title, description, severity, status, environment, steps_to_reproduce, expected_behavior, observed_behavior, image_url, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        ON CONFLICT (id) DO UPDATE SET
+         author_name = EXCLUDED.author_name,
+         author_email = EXCLUDED.author_email,
          title = EXCLUDED.title,
          description = EXCLUDED.description,
          severity = EXCLUDED.severity,
          status = EXCLUDED.status,
-         screenshot_url = EXCLUDED.screenshot_url,
+         environment = EXCLUDED.environment,
+         steps_to_reproduce = EXCLUDED.steps_to_reproduce,
+         expected_behavior = EXCLUDED.expected_behavior,
+         observed_behavior = EXCLUDED.observed_behavior,
+         image_url = EXCLUDED.image_url,
          updated_at = NOW()`,
       [
         bug.id,
         bug.projectId,
         bug.authorUserId || null,
         bug.authorName || 'Anônimo',
+        bug.authorEmail || null,
         bug.title,
         bug.description,
         bug.severity || 'MEDIA',
         bug.status || 'PENDENTE',
+        bug.environment || null,
+        bug.stepsToReproduce || null,
+        bug.expectedBehavior || null,
+        bug.observedBehavior || null,
         bug.imageUrl || null,
         bug.createdAt || new Date().toISOString(),
         bug.updatedAt || new Date().toISOString()
@@ -511,7 +528,7 @@ export async function syncAllToCloudSql(data: {
     // 1. Projects
     for (const proj of (data.projects || [])) {
       await client.query(
-        `INSERT INTO "public"."users" (id, name, email, updated_at)
+        `INSERT INTO "public"."user" (id, name, email, updated_at)
          VALUES ($1, $2, $3, NOW())
          ON CONFLICT (id) DO NOTHING`,
         [proj.ownerId || 'demo-user-123', proj.ownerName || 'Victor Reghini', 'contato@victorreghini.com.br']
@@ -579,7 +596,7 @@ export async function syncAllToCloudSql(data: {
     for (const task of (data.tasks || [])) {
       if (task.createdById) {
         await client.query(
-          `INSERT INTO "public"."users" (id, name, email, updated_at)
+          `INSERT INTO "public"."user" (id, name, email, updated_at)
            VALUES ($1, $2, $3, NOW())
            ON CONFLICT (id) DO NOTHING`,
           [task.createdById, task.createdByName || 'Usuário', `${task.createdById}@example.com`]
@@ -617,11 +634,22 @@ export async function syncAllToCloudSql(data: {
 
     // 4. Ideas
     for (const idea of (data.ideas || [])) {
+      if (idea.ownerId) {
+        await client.query(
+          `INSERT INTO "public"."user" (id, name, email, updated_at)
+           VALUES ($1, $2, $3, NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [idea.ownerId, idea.ownerName || 'Usuário', `${idea.ownerId}@example.com`]
+        );
+      }
+
       await client.query(
         `INSERT INTO "public"."idea" 
-         (id, owner_id, owner_name, title, description, visibility, status, technologies, links, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (id, project_id, owner_id, converted_project_id, title, description, visibility, status, technologies, links, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
          ON CONFLICT (id) DO UPDATE SET
+           project_id = EXCLUDED.project_id,
+           converted_project_id = EXCLUDED.converted_project_id,
            title = EXCLUDED.title,
            description = EXCLUDED.description,
            visibility = EXCLUDED.visibility,
@@ -631,8 +659,9 @@ export async function syncAllToCloudSql(data: {
            updated_at = NOW()`,
         [
           idea.id,
+          idea.projectId || null,
           idea.ownerId || 'demo-user-123',
-          idea.ownerName || null,
+          idea.convertedProjectId || null,
           idea.title,
           idea.description,
           idea.visibility || 'PUBLIC',
@@ -674,9 +703,11 @@ export async function syncAllToCloudSql(data: {
     for (const sug of (data.suggestions || [])) {
       await client.query(
         `INSERT INTO "public"."suggestion" 
-         (id, project_id, author_id, author_name, title, description, status, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+         (id, project_id, author_user_id, author_name, author_email, title, description, status, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          ON CONFLICT (id) DO UPDATE SET
+           author_name = EXCLUDED.author_name,
+           author_email = EXCLUDED.author_email,
            title = EXCLUDED.title,
            description = EXCLUDED.description,
            status = EXCLUDED.status,
@@ -686,6 +717,7 @@ export async function syncAllToCloudSql(data: {
           sug.projectId,
           sug.authorUserId || null,
           sug.authorName || 'Anônimo',
+          sug.authorEmail || null,
           sug.title,
           sug.description,
           sug.status || 'PENDENTE',
@@ -699,24 +731,35 @@ export async function syncAllToCloudSql(data: {
     for (const bug of (data.bugs || [])) {
       await client.query(
         `INSERT INTO "public"."bug_report" 
-         (id, project_id, author_id, author_name, title, description, severity, status, screenshot_url, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (id, project_id, author_user_id, author_name, author_email, title, description, severity, status, environment, steps_to_reproduce, expected_behavior, observed_behavior, image_url, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (id) DO UPDATE SET
+           author_name = EXCLUDED.author_name,
+           author_email = EXCLUDED.author_email,
            title = EXCLUDED.title,
            description = EXCLUDED.description,
            severity = EXCLUDED.severity,
            status = EXCLUDED.status,
-           screenshot_url = EXCLUDED.screenshot_url,
+           environment = EXCLUDED.environment,
+           steps_to_reproduce = EXCLUDED.steps_to_reproduce,
+           expected_behavior = EXCLUDED.expected_behavior,
+           observed_behavior = EXCLUDED.observed_behavior,
+           image_url = EXCLUDED.image_url,
            updated_at = NOW()`,
         [
           bug.id,
           bug.projectId,
           bug.authorUserId || null,
           bug.authorName || 'Anônimo',
+          bug.authorEmail || null,
           bug.title,
           bug.description,
           bug.severity || 'MEDIA',
           bug.status || 'PENDENTE',
+          bug.environment || null,
+          bug.stepsToReproduce || null,
+          bug.expectedBehavior || null,
+          bug.observedBehavior || null,
           bug.imageUrl || null,
           bug.createdAt || new Date().toISOString(),
           bug.updatedAt || new Date().toISOString()
@@ -762,7 +805,7 @@ export function generateSqlInsertScript(data: {
   const lines: string[] = [
     '--',
     '-- SCRIPT DE CARGA COMPLETO PARA GOOGLE CLOUD SQL (Cloud SQL Studio)',
-    `-- Instância: gestao-projetos-ea44c-instance (Database: postgres)`,
+    `-- Instância: gestao-projetos-ea44c-instance (Database: gestao-projetos-ea44c-database)`,
     `-- Gerado em: ${new Date().toISOString()}`,
     '--',
     'BEGIN;',
@@ -771,7 +814,7 @@ export function generateSqlInsertScript(data: {
 
   // Users
   lines.push('-- 1. Usuários');
-  lines.push(`INSERT INTO "public"."users" (id, name, email) 
+  lines.push(`INSERT INTO "public"."user" (id, name, email) 
 VALUES ('demo-user-123', 'Victor Reghini', 'contato@victorreghini.com.br')
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email;`);
   lines.push('');
@@ -787,7 +830,7 @@ ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, email = EXCLUDED.email;`);
     const readme = (p.readme || '').replace(/'/g, "''");
 
     lines.push(`INSERT INTO "public"."project" (id, owner_id, name, slug, short_description, description, visibility, status, technologies, links, readme, created_at, updated_at)
-VALUES ('${p.id}', '${p.ownerId || 'demo-user-123'}', '${name}', '${p.slug}', '${shortDesc}', '${desc}', '${p.visibility}', '${p.status}', '${tech}', '${links}'::jsonb, '${readme}', '${p.createdAt}', '${p.updatedAt}')
+VALUES ('${p.id}', '${p.ownerId || 'demo-user-123'}', '${name}', '${p.slug}', '${shortDesc}', '${desc}', '${p.visibility}', '${p.status}', '${tech}', '${links}', '${readme}', '${p.createdAt}', '${p.updatedAt}')
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, status = EXCLUDED.status, updated_at = NOW();`);
   }
   lines.push('');
@@ -824,10 +867,9 @@ ON CONFLICT (id) DO UPDATE SET column_id = EXCLUDED.column_id, title = EXCLUDED.
       const desc = (i.description || '').replace(/'/g, "''");
       const tech = `{${(i.technologies || []).map(t => `"${t.replace(/"/g, '\\"')}"`).join(',')}}`;
       const links = JSON.stringify(i.links || []).replace(/'/g, "''");
-      const authorName = (i.ownerName || 'Victor Reghini').replace(/'/g, "''");
 
-      lines.push(`INSERT INTO "public"."idea" (id, owner_id, owner_name, title, description, visibility, status, technologies, links, created_at, updated_at)
-VALUES ('${i.id}', '${i.ownerId || 'demo-user-123'}', '${authorName}', '${title}', '${desc}', '${i.visibility}', '${i.status}', '${tech}', '${links}'::jsonb, '${i.createdAt}', '${i.updatedAt}')
+      lines.push(`INSERT INTO "public"."idea" (id, project_id, owner_id, converted_project_id, title, description, visibility, status, technologies, links, created_at, updated_at)
+VALUES ('${i.id}', ${i.projectId ? `'${i.projectId}'` : 'NULL'}, '${i.ownerId || 'demo-user-123'}', ${i.convertedProjectId ? `'${i.convertedProjectId}'` : 'NULL'}, '${title}', '${desc}', '${i.visibility}', '${i.status}', '${tech}', '${links}', '${i.createdAt}', '${i.updatedAt}')
 ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, status = EXCLUDED.status, updated_at = NOW();`);
     }
     lines.push('');
@@ -853,8 +895,9 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, content = EXCLUDED.conten
       const title = (s.title || '').replace(/'/g, "''");
       const desc = (s.description || '').replace(/'/g, "''");
       const name = (s.authorName || 'Anônimo').replace(/'/g, "''");
-      lines.push(`INSERT INTO "public"."suggestion" (id, project_id, author_id, author_name, title, description, status, created_at, updated_at)
-VALUES ('${s.id}', '${s.projectId}', ${s.authorUserId ? `'${s.authorUserId}'` : 'NULL'}, '${name}', '${title}', '${desc}', '${s.status || 'PENDENTE'}', '${s.createdAt}', '${s.updatedAt}')
+      const email = s.authorEmail ? `'${s.authorEmail.replace(/'/g, "''")}'` : 'NULL';
+      lines.push(`INSERT INTO "public"."suggestion" (id, project_id, author_user_id, author_name, author_email, title, description, status, created_at, updated_at)
+VALUES ('${s.id}', '${s.projectId}', ${s.authorUserId ? `'${s.authorUserId}'` : 'NULL'}, '${name}', ${email}, '${title}', '${desc}', '${s.status || 'PENDENTE'}', '${s.createdAt}', '${s.updatedAt}')
 ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, status = EXCLUDED.status, updated_at = NOW();`);
     }
     lines.push('');
@@ -867,10 +910,11 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.de
       const title = (b.title || '').replace(/'/g, "''");
       const desc = (b.description || '').replace(/'/g, "''");
       const name = (b.authorName || 'Anônimo').replace(/'/g, "''");
+      const email = b.authorEmail ? `'${b.authorEmail.replace(/'/g, "''")}'` : 'NULL';
       const screenshot = b.imageUrl ? `'${b.imageUrl.replace(/'/g, "''")}'` : 'NULL';
-      lines.push(`INSERT INTO "public"."bug_report" (id, project_id, author_id, author_name, title, description, severity, status, screenshot_url, created_at, updated_at)
-VALUES ('${b.id}', '${b.projectId}', ${b.authorUserId ? `'${b.authorUserId}'` : 'NULL'}, '${name}', '${title}', '${desc}', '${b.severity || 'MEDIA'}', '${b.status || 'PENDENTE'}', ${screenshot}, '${b.createdAt}', '${b.updatedAt}')
-ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, severity = EXCLUDED.severity, status = EXCLUDED.status, screenshot_url = EXCLUDED.screenshot_url, updated_at = NOW();`);
+      lines.push(`INSERT INTO "public"."bug_report" (id, project_id, author_user_id, author_name, author_email, title, description, severity, status, image_url, created_at, updated_at)
+VALUES ('${b.id}', '${b.projectId}', ${b.authorUserId ? `'${b.authorUserId}'` : 'NULL'}, '${name}', ${email}, '${title}', '${desc}', '${b.severity || 'MEDIA'}', '${b.status || 'PENDENTE'}', ${screenshot}, '${b.createdAt}', '${b.updatedAt}')
+ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, severity = EXCLUDED.severity, status = EXCLUDED.status, image_url = EXCLUDED.image_url, updated_at = NOW();`);
     }
     lines.push('');
   }
@@ -885,6 +929,7 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.de
   lines.push('SELECT COUNT(*) AS total_documentos FROM "public"."project_document";');
   lines.push('SELECT COUNT(*) AS total_sugestoes FROM "public"."suggestion";');
   lines.push('SELECT COUNT(*) AS total_bugs FROM "public"."bug_report";');
+  lines.push('SELECT COUNT(*) AS total_usuarios FROM "public"."user";');
 
   return lines.join('\n');
 }

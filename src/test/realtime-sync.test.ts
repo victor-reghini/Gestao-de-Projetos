@@ -187,7 +187,7 @@ describe('Firebase Realtime Database & Sync Cache Architecture Tests', () => {
 
     it('generates valid SQL insert statements for Cloud SQL Studio', () => {
       const script = generateCloudSqlScript();
-      expect(script).toContain('INSERT INTO "public"."users"');
+      expect(script).toContain('INSERT INTO "public"."user"');
       expect(script).toContain('INSERT INTO "public"."project"');
       expect(script).toContain('INSERT INTO "public"."project_column"');
       expect(script).toContain('INSERT INTO "public"."task"');

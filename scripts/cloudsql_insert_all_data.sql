@@ -1,14 +1,14 @@
 -- ============================================================================
 -- SCRIPT DE CARGA COMPLETO PARA GOOGLE CLOUD SQL (PostgreSQL)
 -- Instância: gestao-projetos-ea44c:us-east4:gestao-projetos-ea44c-instance
--- Database: postgres | Schema: public
+-- Database: gestao-projetos-ea44c-database | Schema: public
 -- Execute diretamente no Cloud SQL Studio do Google Cloud Console
 -- ============================================================================
 
 BEGIN;
 
 -- 1. Usuário Proprietário Padrão
-INSERT INTO "public"."users" (id, name, email, avatar_url, updated_at) 
+INSERT INTO "public"."user" (id, name, email, avatar_url, updated_at) 
 VALUES (
   'demo-user-123', 
   'Victor Reghini', 
@@ -35,7 +35,7 @@ INSERT INTO "public"."project" (
   'PUBLIC',
   'EM_ANDAMENTO',
   '{"React","TypeScript","Vite","Firebase","Netlify","TailwindCSS/Vanilla CSS"}',
-  '[{"title":"Repositório GitHub","url":"https://github.com/victor-reghini/Gestao-de-Projetos"},{"title":"Documentação da API","url":"/docs/api"}]'::jsonb,
+  '[{"title":"Repositório GitHub","url":"https://github.com/victor-reghini/Gestao-de-Projetos"},{"title":"Documentação da API","url":"/docs/api"}]',
   '# Gestão de Projetos\n\nHub central para projetos e ideias com Kanban e API aberta.',
   '2026-09-23T12:00:00.000Z',
   NOW()
@@ -50,7 +50,7 @@ INSERT INTO "public"."project" (
   'PRIVATE',
   'PLANEJAMENTO',
   '{"Node.js","Go","Redis","Docker"}',
-  '[{"title":"Design Doc","url":"https://github.com"}]'::jsonb,
+  '[{"title":"Design Doc","url":"https://github.com"}]',
   '# API Gateway & Autenticação Biométrica\n\nSegurança de alta performance.',
   '2026-09-27T12:00:00.000Z',
   NOW()
@@ -157,31 +157,31 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- 5. Ideias
 INSERT INTO "public"."idea" (
-  id, owner_id, owner_name, title, description, visibility, status, technologies, links, created_at, updated_at
+  id, project_id, owner_id, title, description, visibility, status, technologies, links, created_at, updated_at
 ) VALUES 
 (
   'idea-1',
+  'proj-1',
   'demo-user-123',
-  'Victor Reghini',
   'Gerador Automático de Changelog com IA',
   'Ferramenta CLI e web que analisa commits Git convencionais e gera relatórios semânticos de versão e release notes para equipes.',
   'PUBLIC',
   'VALIDADA',
   '{"TypeScript","Gemini API","CLI","GitHub Actions"}',
-  '[{"title":"Pesquisa inicial","url":"https://keepachangelog.com"}]'::jsonb,
+  '[{"title":"Pesquisa inicial","url":"https://keepachangelog.com"}]',
   '2026-09-25T12:00:00.000Z',
   NOW()
 ),
 (
   'idea-2',
+  'proj-1',
   'demo-user-123',
-  'Victor Reghini',
   'Dashboard de Monitoramento de Web Vitals para Jamstack',
   'Agente leve em JavaScript para coletar métricas LCP, FID e CLS em produção e alertar no Discord/Slack.',
   'PRIVATE',
   'NOVA',
   '{"Web Workers","FastAPI","TimescaleDB"}',
-  '[]'::jsonb,
+  '[]',
   '2026-09-28T12:00:00.000Z',
   NOW()
 )
@@ -227,13 +227,14 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- 7. Sugestões da Comunidade
 INSERT INTO "public"."suggestion" (
-  id, project_id, author_id, author_name, title, description, status, created_at, updated_at
+  id, project_id, author_user_id, author_name, author_email, title, description, status, created_at, updated_at
 ) VALUES 
 (
   'sug-1',
   'proj-1',
-  NULL,
+  'demo-user-123',
   'Ana Clara (Comunidade)',
+  'ana.clara@example.com',
   'Adicionar atalhos de teclado no Kanban',
   'Seria muito produtivo poder navegar entre cards e colunas usando as setas do teclado e a tecla N para nova atividade.',
   'EM_ANALISE',
@@ -248,17 +249,22 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- 8. Relatórios de Bug
 INSERT INTO "public"."bug_report" (
-  id, project_id, author_id, author_name, title, description, severity, status, screenshot_url, created_at, updated_at
+  id, project_id, author_user_id, author_name, author_email, title, description, severity, status, environment, steps_to_reproduce, expected_behavior, observed_behavior, image_url, created_at, updated_at
 ) VALUES 
 (
   'bug-1',
   'proj-1',
-  NULL,
+  'demo-user-123',
   'Carlos Dev',
+  'carlos@example.com',
   'Quebra de linha no preview de Markdown longo em telas pequenas',
   'Blocos de código sem quebra horizontal causam overflow na visualização mobile.',
   'BAIXA',
   'ABERTO',
+  'Safari Mobile no iOS 17',
+  '1. Acessar tela de documentação no celular\n2. Abrir documento com bloco de código longo',
+  'O bloco de código deve ter scroll horizontal sem esticar a tela',
+  'A tela do navegador sofre overflow horizontal',
   NULL,
   '2026-09-28T12:00:00.000Z',
   NOW()
@@ -285,4 +291,6 @@ SELECT 'Documentos:', COUNT(*) FROM "public"."project_document"
 UNION ALL
 SELECT 'Sugestões:', COUNT(*) FROM "public"."suggestion"
 UNION ALL
-SELECT 'Bugs:', COUNT(*) FROM "public"."bug_report";
+SELECT 'Bugs:', COUNT(*) FROM "public"."bug_report"
+UNION ALL
+SELECT 'Usuários:', COUNT(*) FROM "public"."user";
