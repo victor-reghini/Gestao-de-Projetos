@@ -26,7 +26,35 @@ import {
   fetchCloudSqlBugs,
   fetchCloudSqlAll
 } from '../../src/services/server/cloudSqlDb';
-import { initialProjects } from '../../src/services/dbService';
+
+const defaultFallbackProjects = [
+  {
+    id: 'proj-1',
+    ownerId: 'demo-user-123',
+    ownerName: 'Victor Reghini',
+    name: 'Sistema de Gestão de Projetos & Ideias',
+    slug: 'sistema-gestao-projetos',
+    shortDescription: 'Plataforma moderna para centralização de projetos, Kanban, documentação e API pública.',
+    description: 'Sistema completo construído com React, TypeScript, Vite, Firebase e Netlify Functions. Suporta Kanban dinâmico, renderização de diagramas Mermaid, controle de visibilidade (privado, compartilhado, público) e API REST v1 para integrações externas.',
+    visibility: 'PUBLIC' as const,
+    status: 'EM_ANDAMENTO' as const,
+    technologies: ['React', 'TypeScript', 'Vite', 'Firebase', 'Netlify', 'TailwindCSS/Vanilla CSS'],
+    links: [
+      { title: 'Repositório GitHub', url: 'https://github.com/victor-reghini/Gestao-de-Projetos' },
+      { title: 'Documentação da API', url: '/docs/api' }
+    ],
+    repository: {
+      provider: 'github' as const,
+      owner: 'victor-reghini',
+      name: 'Gestao-de-Projetos',
+      url: 'https://github.com/victor-reghini/Gestao-de-Projetos',
+      defaultBranch: 'main'
+    },
+    members: [],
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z'
+  }
+];
 
 // Simple in-memory rate limiter per IP
 const ipRequestCounts = new Map<string, { count: number; resetTime: number }>();
@@ -269,7 +297,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
       // Route: GET /api/v1/projects/:slug
       if (!resource && event.httpMethod === 'GET') {
-        const proj = (await fetchCloudSqlProjectByIdOrSlug(slug)) || initialProjects.find(p => p.slug === slug || p.id === slug);
+        const proj = (await fetchCloudSqlProjectByIdOrSlug(slug)) || defaultFallbackProjects.find(p => p.slug === slug || p.id === slug);
         if (proj) {
           return {
             statusCode: 200,

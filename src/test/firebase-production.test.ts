@@ -16,14 +16,16 @@ import {
   slugify 
 } from '../services/dbService';
 
+import { getEnvVar } from '../services/firebase';
+
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBjRfirLy7Rcstm5yAA36EHzlrIxIgLS04",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "gestao-projetos-ea44c.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "gestao-projetos-ea44c",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "gestao-projetos-ea44c.firebasestorage.app",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "947089271740",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:947089271740:web:97823942e9df0e58cf59b9",
-  databaseURL: import.meta.env.VITE_FIREBASE_DATABASE_URL || "https://gestao-projetos-ea44c-default-rtdb.firebaseio.com"
+  apiKey: getEnvVar('VITE_FIREBASE_API_KEY'),
+  authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN'),
+  projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID'),
+  storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET'),
+  messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID'),
+  appId: getEnvVar('VITE_FIREBASE_APP_ID'),
+  databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL')
 };
 
 describe('Firebase & Production Integration Test Suite', () => {

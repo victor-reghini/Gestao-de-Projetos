@@ -35,7 +35,7 @@ Hub de desenvolvimento ágil para centralizar projetos, ideias, quadros Kanban, 
 - **Frontend:** React 18, Vite, TypeScript, Vanilla CSS (Glassmorphism, variáveis HSL, fontes Inter/Outfit).
 - **Backend Serverless:** Netlify Functions (`netlify/functions/api.ts`) e Vite dev proxy expondo `/api/v1/...`.
 - **Persistência Relacional & Real-Time:**
-  1. `Google Cloud SQL (PostgreSQL)`: Persistência relacional direta via pool PostgreSQL (`src/services/server/cloudSqlDb.ts`), instância `gestao-projetos-ea44c-instance`, host `34.181.161.180:5432`.
+  1. `Google Cloud SQL (PostgreSQL)`: Persistência relacional direta via pool PostgreSQL (`src/services/server/cloudSqlDb.ts`), instância `gestao-projetos-ea44c-instance` (host via `PGHOST` no `.env`).
   2. `Firebase Realtime Database`: Sincronização ao vivo via WebSockets entre navegadores e abas ativas (`projects/{id}`).
   3. `LocalStorage`: Inicialização instantânea (0ms) e cache resiliente com fila de sincronização offline (`gestao_offline_sync_queue`).
   *(Nota: Firestore foi descontinuado em prol da combinação Cloud SQL PostgreSQL + Realtime Database).*

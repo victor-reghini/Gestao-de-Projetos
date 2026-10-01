@@ -30,16 +30,15 @@ function loadEnv() {
 }
 loadEnv();
 
-const host = process.env.PGHOST || '34.181.161.180';
+const host = process.env.PGHOST;
 const port = parseInt(process.env.PGPORT || '5432', 10);
 const database = process.env.PGDATABASE || 'gestao-projetos-ea44c-database';
 const user = process.env.PGUSER || 'postgres';
 const password = process.env.PGPASSWORD;
 
-if (!password) {
-  console.log('\n⚠️  PGPASSWORD não definido no .env.');
-  console.log('💡 Para carregar diretamente via terminal:');
-  console.log('   PGPASSWORD="sua_senha" node scripts/seed-cloudsql.mjs\n');
+if (!host || !password) {
+  console.log('\n⚠️  PGHOST ou PGPASSWORD não definido no .env.');
+  console.log('💡 Defina as variáveis no arquivo .env antes de executar o seed.\n');
   process.exit(0);
 }
 

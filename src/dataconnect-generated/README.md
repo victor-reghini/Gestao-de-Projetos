@@ -7,7 +7,7 @@ This SDK was generated for the Data Connect service `gestao-projetos-service` co
 - **Connector:** `default`
 - **Service:** `gestao-projetos-service`
 - **Location:** `us-east4`
-- **Host:** `34.181.161.180`
+- **Host:** Configurado via `PGHOST` no `.env`
 - **Port:** `5432`
 
 ## Usage
