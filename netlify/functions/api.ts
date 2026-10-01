@@ -169,7 +169,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
 
       if (action === 'delete-column' && event.httpMethod === 'POST') {
-        if (body.columnId) await deleteCloudSqlColumn(body.columnId);
+        if (body.columnId) await deleteCloudSqlColumn(body.columnId, body.projectId, body.fallbackColumnId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ProjectColumn, Task, TaskPriority, SyncValidationStatus } from '@/types';
-import { ColumnService, TaskService } from '@/services/dbService';
+import { ColumnService, TaskService, deduplicateColumns } from '@/services/dbService';
 import { RealtimeSyncService } from '@/services/realtimeSyncService';
 import {
   Plus,
@@ -55,7 +55,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
       if (cols.length === 0) {
         cols = await ColumnService.createDefaultColumns(projectId);
       }
-      setColumns(cols);
+      setColumns(deduplicateColumns(cols));
 
       const tList = await TaskService.getByProject(projectId);
       setTasks(tList);
@@ -64,7 +64,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
       RealtimeSyncService.validateProjectSync(projectId, tList, cols).then(result => {
         if (!result.isValid && result.remoteTasks && result.remoteColumns) {
           if (result.remoteTasks.length > 0) setTasks(result.remoteTasks);
-          if (result.remoteColumns.length > 0) setColumns(result.remoteColumns);
+          if (result.remoteColumns.length > 0) setColumns(deduplicateColumns(result.remoteColumns));
         }
       }).catch(() => { });
     } catch (err) {
@@ -82,7 +82,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
       projectId,
       ({ tasks: remoteTasks, columns: remoteCols }) => {
         if (remoteCols && remoteCols.length > 0) {
-          setColumns(remoteCols);
+          setColumns(deduplicateColumns(remoteCols));
         }
         if (remoteTasks) {
           setTasks(remoteTasks);
@@ -180,12 +180,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     if (columnTasks.length > 0) {
       const fallback = columns.find(c => c.id !== columnId);
       if (confirm(`Esta coluna possui ${columnTasks.length} atividade(s). Deseja mover as atividades para "${fallback?.name}" e excluir a coluna?`)) {
-        await ColumnService.delete(columnId, fallback?.id);
+        await ColumnService.delete(columnId, fallback?.id, projectId);
         loadKanban();
       }
     } else {
       if (confirm('Deseja excluir esta coluna?')) {
-        await ColumnService.delete(columnId);
+        await ColumnService.delete(columnId, undefined, projectId);
         loadKanban();
       }
     }

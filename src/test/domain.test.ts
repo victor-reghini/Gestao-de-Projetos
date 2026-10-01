@@ -181,4 +181,141 @@ describe('Domain & Business Rules Tests', () => {
       expect(bug.status).toBe('ABERTO');
     });
   });
+
+  describe('Column Isolation & Scoped Deletion per Project', () => {
+    it('ensures removing a column removes it ONLY from its project, even when another project has a column with the exact same name', async () => {
+      // 1. Create two separate projects
+      const projectA = await ProjectService.create({
+        ownerId: 'user-1',
+        name: 'Projeto Alfa',
+        description: 'Projeto Alfa desc',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: [],
+        links: []
+      });
+
+      const projectB = await ProjectService.create({
+        ownerId: 'user-1',
+        name: 'Projeto Beta',
+        description: 'Projeto Beta desc',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: [],
+        links: []
+      });
+
+      // Both projects initialize default columns: "Backlog", "Em Execução", "Concluído"
+      const colsA = await ColumnService.getByProject(projectA.id);
+      const colsB = await ColumnService.getByProject(projectB.id);
+
+      expect(colsA.length).toBe(3);
+      expect(colsB.length).toBe(3);
+
+      const backlogA = colsA.find(c => c.name === 'Backlog');
+      const backlogB = colsB.find(c => c.name === 'Backlog');
+
+      expect(backlogA).toBeDefined();
+      expect(backlogB).toBeDefined();
+      // IDs must be unique per project
+      expect(backlogA?.id).not.toBe(backlogB?.id);
+      expect(backlogA?.projectId).toBe(projectA.id);
+      expect(backlogB?.projectId).toBe(projectB.id);
+
+      // Add a custom column with the identical name to both projects
+      const customColA = await ColumnService.create(projectA.id, 'Em Homologação', '#ec4899');
+      const customColB = await ColumnService.create(projectB.id, 'Em Homologação', '#ec4899');
+
+      expect(customColA.name).toBe('Em Homologação');
+      expect(customColB.name).toBe('Em Homologação');
+      expect(customColA.projectId).toBe(projectA.id);
+      expect(customColB.projectId).toBe(projectB.id);
+      expect(customColA.id).not.toBe(customColB.id);
+
+      // 2. Remove "Em Homologação" from Project A only
+      await ColumnService.delete(customColA.id, undefined, projectA.id);
+
+      // 3. Verify Project A no longer has "Em Homologação"
+      const updatedColsA = await ColumnService.getByProject(projectA.id);
+      expect(updatedColsA.find(c => c.id === customColA.id)).toBeUndefined();
+      expect(updatedColsA.find(c => c.name === 'Em Homologação')).toBeUndefined();
+
+      // 4. Verify Project B STILL HAS "Em Homologação" completely intact!
+      const updatedColsB = await ColumnService.getByProject(projectB.id);
+      const remainingCustomB = updatedColsB.find(c => c.id === customColB.id);
+      expect(remainingCustomB).toBeDefined();
+      expect(remainingCustomB?.name).toBe('Em Homologação');
+      expect(remainingCustomB?.projectId).toBe(projectB.id);
+
+      // 5. Verify deleting default column "Backlog" in Project A does NOT affect Project B's "Backlog"
+      const fallbackA = updatedColsA.find(c => c.id !== backlogA?.id);
+      await ColumnService.delete(backlogA!.id, fallbackA?.id, projectA.id);
+
+      const finalColsA = await ColumnService.getByProject(projectA.id);
+      const finalColsB = await ColumnService.getByProject(projectB.id);
+
+      expect(finalColsA.find(c => c.id === backlogA?.id)).toBeUndefined();
+      expect(finalColsB.find(c => c.id === backlogB?.id)).toBeDefined();
+      expect(finalColsB.find(c => c.name === 'Backlog')?.projectId).toBe(projectB.id);
+    });
+
+    it('scopes task reassignment and deletion strictly to the project when deleting a column', async () => {
+      const projA = await ProjectService.create({
+        ownerId: 'user-1',
+        name: 'Projeto Tasks A',
+        description: 'Desc',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: [],
+        links: []
+      });
+
+      const projB = await ProjectService.create({
+        ownerId: 'user-1',
+        name: 'Projeto Tasks B',
+        description: 'Desc',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: [],
+        links: []
+      });
+
+      const colsA = await ColumnService.getByProject(projA.id);
+      const colsB = await ColumnService.getByProject(projB.id);
+
+      // Create task in Project A in column 0 (Backlog)
+      const taskA = await TaskService.create({
+        projectId: projA.id,
+        columnId: colsA[0].id,
+        title: 'Tarefa no Backlog de A',
+        description: 'Descrição da tarefa A',
+        priority: 'MEDIA',
+        createdById: 'user-1'
+      });
+
+      // Create task in Project B in column 0 (Backlog)
+      const taskB = await TaskService.create({
+        projectId: projB.id,
+        columnId: colsB[0].id,
+        title: 'Tarefa no Backlog de B',
+        description: 'Descrição da tarefa B',
+        priority: 'ALTA',
+        createdById: 'user-1'
+      });
+
+      // Delete column 0 from Project A with fallback to column 1
+      await ColumnService.delete(colsA[0].id, colsA[1].id, projA.id);
+
+      // Project A task should have moved to column 1
+      const tasksA = await TaskService.getByProject(projA.id);
+      const updatedTaskA = tasksA.find(t => t.id === taskA.id);
+      expect(updatedTaskA?.columnId).toBe(colsA[1].id);
+
+      // Project B task should be completely untouched and still in Project B's column 0
+      const tasksB = await TaskService.getByProject(projB.id);
+      const unchangedTaskB = tasksB.find(t => t.id === taskB.id);
+      expect(unchangedTaskB?.columnId).toBe(colsB[0].id);
+      expect(unchangedTaskB?.projectId).toBe(projB.id);
+    });
+  });
 });

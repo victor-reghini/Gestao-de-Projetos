@@ -15,10 +15,10 @@ O **Gestor de Projetos e Ideias** é uma plataforma moderna concebida para centr
 - **Frontend:** [React 18](https://react.dev/) + [Vite](https://vitejs.dev/) + [TypeScript](https://www.typescriptlang.org/)
 - **Estilização:** Vanilla CSS customizado com Glassmorphism, variáveis HSL, micro-animações táteis e tipografia [Google Fonts (Inter & Outfit)](https://fonts.google.com/)
 - **Diagramação:** [Mermaid.js](https://mermaid.js.org/) para renderização visual em tempo real (Arquitetura C4, Fluxogramas, Sequência, ERD)
-- **Backend / API Pública:** [Netlify Serverless Functions](https://www.netlify.com/products/functions/) versionada em `/api/v1`
-- **Banco de Dados & Auth:** [Firebase](https://firebase.google.com/) (Auth, Firestore, Storage) com sincronização local resiliente
+- **Backend / API Pública:** [Netlify Serverless Functions](https://www.netlify.com/products/functions/) versionada em `/api/v1` + endpoints de persistência Cloud SQL
+- **Banco de Dados & Auth:** [Google Cloud SQL](https://cloud.google.com/sql) (PostgreSQL), [Firebase](https://firebase.google.com/) (Auth, Realtime Database, Storage) com sincronização local e live sync
 - **Ícones:** [Lucide React](https://lucide.dev/)
-- **Testes:** [Vitest](https://vitest.dev/) + [Testing Library](https://testing-library.com/)
+- **Testes:** [Vitest](https://vitest.dev/) (52 testes automatizados) + [Testing Library](https://testing-library.com/)
 
 ---
 
@@ -36,7 +36,9 @@ O **Gestor de Projetos e Ideias** é uma plataforma moderna concebida para centr
 - Controle granular de membros e permissões (**Owner**, **Editor**, **Viewer**).
 
 ### 3. 📋 Kanban Dinâmico e Interativo
+- Colunas isoladas por projeto com integridade referencial: cada coluna é estritamente vinculada ao projeto, impedindo colisões mesmo com nomes homônimos em outros projetos.
 - Colunas padrão (**Backlog**, **Em Execução**, **Concluído**) + criação de colunas personalizadas com seletor de cores.
+- Remoção segura com remanejamento ou limpeza automática de atividades no Cloud SQL e Realtime Database.
 - **Drag-and-Drop suave** entre colunas e reordenação interna.
 - Atividades com título, descrição detalhada, prioridade (**Baixa**, **Média**, **Alta**, **Urgente**), prazo de entrega e autor.
 - Filtros instantâneos por texto de busca e prioridade.

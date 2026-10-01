@@ -262,7 +262,16 @@ export const RealtimeSyncService = {
       if (snapshot.exists()) {
         const val = snapshot.val();
         const tasks = dictToList<Task>(val.tasks || {}).sort((a, b) => a.position - b.position);
-        const columns = dictToList<ProjectColumn>(val.columns || {}).sort((a, b) => a.position - b.position);
+        const rawCols = dictToList<ProjectColumn>(val.columns || {});
+        const colMap = new Map<string, ProjectColumn>();
+        for (const c of rawCols) {
+          if (!c || !c.id) continue;
+          const key = `${c.projectId || projectId}:${(c.key || c.name || '').toLowerCase().trim()}`;
+          if (!colMap.has(key)) {
+            colMap.set(key, c);
+          }
+        }
+        const columns = Array.from(colMap.values()).sort((a, b) => a.position - b.position);
         const syncInfo = val._syncInfo as ProjectSyncInfo | undefined;
 
         if (syncInfo?.lastSyncAt) {
@@ -318,7 +327,16 @@ export const RealtimeSyncService = {
       }
 
       const remoteTasks = dictToList<Task>(snap.tasks || {});
-      const remoteColumns = dictToList<ProjectColumn>(snap.columns || {});
+      const rawRemoteCols = dictToList<ProjectColumn>(snap.columns || {});
+      const colMap = new Map<string, ProjectColumn>();
+      for (const c of rawRemoteCols) {
+        if (!c || !c.id) continue;
+        const key = `${c.projectId || projectId}:${(c.key || c.name || '').toLowerCase().trim()}`;
+        if (!colMap.has(key)) {
+          colMap.set(key, c);
+        }
+      }
+      const remoteColumns = Array.from(colMap.values()).sort((a, b) => a.position - b.position);
       const syncInfo = snap._syncInfo as ProjectSyncInfo | undefined;
 
       const isTaskCountMatch = remoteTasks.length === localTasks.length;

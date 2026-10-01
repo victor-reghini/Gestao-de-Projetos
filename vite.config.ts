@@ -181,8 +181,8 @@ function cloudSqlApiPlugin(): Plugin {
           }
 
           if (pathname === '/api/v1/cloudsql/delete-column' && req.method === 'POST') {
-            const { columnId } = await readBody();
-            if (columnId) await deleteCloudSqlColumn(columnId);
+            const { columnId, projectId, fallbackColumnId } = await readBody();
+            if (columnId) await deleteCloudSqlColumn(columnId, projectId, fallbackColumnId);
             res.end(JSON.stringify({ success: true }));
             return;
           }

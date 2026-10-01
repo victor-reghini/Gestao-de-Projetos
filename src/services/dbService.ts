@@ -472,25 +472,40 @@ export const ProjectService = {
   }
 };
 
+export function deduplicateColumns(columns: ProjectColumn[]): ProjectColumn[] {
+  const map = new Map<string, ProjectColumn>();
+  for (const c of columns) {
+    if (!c || !c.id) continue;
+    // Each column belongs to a single specific project! Deduplication MUST be scoped per project:
+    const key = `${c.projectId || ''}:${(c.key || slugify(c.name)).toLowerCase().trim()}`;
+    if (!map.has(key)) {
+      map.set(key, c);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.position - b.position);
+}
+
 // --- KANBAN COLUMNS SERVICE ---
 export const ColumnService = {
   async getByProject(projectId: string): Promise<ProjectColumn[]> {
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    let localCols = allCols.filter(c => c.projectId === projectId).sort((a, b) => a.position - b.position);
+    let localCols = deduplicateColumns(allCols.filter(c => c.projectId === projectId));
 
     try {
       const remoteCols = await CloudSqlService.fetchColumns(projectId);
       if (remoteCols && remoteCols.length > 0) {
-        const remoteMap = new Map(remoteCols.map(c => [c.id, c]));
+        const finalCols = deduplicateColumns(remoteCols);
         const otherCols = allCols.filter(c => c.projectId !== projectId);
-        const localOnly = allCols.filter(c => c.projectId === projectId && !remoteMap.has(c.id));
-        const merged = [...remoteCols, ...localOnly].sort((a, b) => a.position - b.position);
-        setLocalData('columns', [...otherCols, ...merged]);
-        RealtimeSyncService.syncColumns(projectId, merged, 'sync_columns').catch(() => {});
-        return merged;
+        setLocalData('columns', [...otherCols, ...finalCols]);
+        RealtimeSyncService.syncColumns(projectId, finalCols, 'sync_columns').catch(() => {});
+        return finalCols;
       }
     } catch (err) {
       console.warn('Failed to fetch columns from Cloud SQL:', err);
+    }
+
+    if (localCols.length === 0) {
+      localCols = await this.createDefaultColumns(projectId);
     }
 
     // Sync with Realtime Database cache
@@ -499,15 +514,20 @@ export const ColumnService = {
   },
 
   async createDefaultColumns(projectId: string): Promise<ProjectColumn[]> {
+    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+    const existing = allCols.filter(c => c.projectId === projectId);
+    if (existing.length > 0) {
+      return deduplicateColumns(existing);
+    }
+
     const defaults = [
       { name: 'Backlog', key: 'backlog', position: 0, color: '#64748b' },
       { name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1' },
       { name: 'Concluído', key: 'done', position: 2, color: '#10b981' }
     ];
 
-    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const newCols: ProjectColumn[] = defaults.map((d, index) => ({
-      id: `col_${projectId}_${index}_${Math.random().toString(36).substring(2, 6)}`,
+    const newCols: ProjectColumn[] = defaults.map((d) => ({
+      id: `col_${projectId}_${d.key}`,
       projectId,
       name: d.name,
       key: d.key,
@@ -531,7 +551,7 @@ export const ColumnService = {
   async create(projectId: string, name: string, color = '#6366f1'): Promise<ProjectColumn> {
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
     const projectCols = allCols.filter(c => c.projectId === projectId);
-    const id = `col_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+    const id = `col_${projectId}_${slugify(name)}_${Math.random().toString(36).substring(2, 7)}`;
     
     const newCol: ProjectColumn = {
       id,
@@ -599,18 +619,34 @@ export const ColumnService = {
     return reordered;
   },
 
-  async delete(columnId: string, fallbackColumnId?: string): Promise<void> {
+  async delete(columnId: string, fallbackColumnId?: string, projectId?: string): Promise<void> {
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const targetCol = allCols.find(c => c.id === columnId);
-    setLocalData('columns', allCols.filter(c => c.id !== columnId));
+    const targetCol = allCols.find(c => c.id === columnId && (!projectId || c.projectId === projectId)) 
+      || allCols.find(c => c.id === columnId);
 
-    // Handle tasks in this column: move to fallbackColumnId or delete
+    const targetProjectId = projectId || targetCol?.projectId;
+
+    // Filter out only the column belonging to this project
+    const remainingCols = allCols.filter(c => {
+      if (c.id === columnId) {
+        if (targetProjectId) {
+          return c.projectId !== targetProjectId;
+        }
+        return false;
+      }
+      return true;
+    });
+    setLocalData('columns', remainingCols);
+
+    // Handle tasks in this column: move to fallbackColumnId or delete ONLY for this project
     const allTasks = getLocalData<Task>('tasks', initialTasks);
+    let finalProjectTasks: Task[] = [];
+
     if (fallbackColumnId) {
-      const fallbackTasks = allTasks.filter(t => t.columnId === fallbackColumnId);
+      const fallbackTasks = allTasks.filter(t => t.columnId === fallbackColumnId && (!targetProjectId || t.projectId === targetProjectId));
       let nextPos = fallbackTasks.length;
       const updatedTasks = allTasks.map(t => {
-        if (t.columnId === columnId) {
+        if (t.columnId === columnId && (!targetProjectId || t.projectId === targetProjectId)) {
           const moved = { ...t, columnId: fallbackColumnId, position: nextPos++, updatedAt: new Date().toISOString() };
           CloudSqlService.syncTask(moved).catch(() => {});
           DataConnectService.syncTask(moved).catch(() => {});
@@ -619,15 +655,19 @@ export const ColumnService = {
         return t;
       });
       setLocalData('tasks', updatedTasks);
+      finalProjectTasks = targetProjectId ? updatedTasks.filter(t => t.projectId === targetProjectId) : [];
     } else {
-      const remainingTasks = allTasks.filter(t => t.columnId !== columnId);
+      const remainingTasks = allTasks.filter(t => !(t.columnId === columnId && (!targetProjectId || t.projectId === targetProjectId)));
       setLocalData('tasks', remainingTasks);
+      finalProjectTasks = targetProjectId ? remainingTasks.filter(t => t.projectId === targetProjectId) : [];
     }
 
-    if (targetCol) {
-      RealtimeSyncService.deleteColumn(targetCol.projectId, columnId).catch(() => {});
+    if (targetProjectId) {
+      const remainingProjectCols = remainingCols.filter(c => c.projectId === targetProjectId);
+      RealtimeSyncService.deleteColumn(targetProjectId, columnId).catch(() => {});
+      RealtimeSyncService.syncFullProjectBoard(targetProjectId, remainingProjectCols, finalProjectTasks).catch(() => {});
     }
-    CloudSqlService.deleteColumn(columnId).catch(() => {});
+    CloudSqlService.deleteColumn(columnId, targetProjectId, fallbackColumnId).catch(() => {});
     DataConnectService.deleteColumn(columnId).catch(() => {});
   }
 };
@@ -1190,9 +1230,8 @@ export async function hydrateFromCloudSql(): Promise<boolean> {
     }
     if (all.columns && all.columns.length > 0) {
       const local = getLocalData<ProjectColumn>('columns', initialColumns);
-      const remoteMap = new Map(all.columns.map(c => [c.id, c]));
-      const localOnly = local.filter(c => !remoteMap.has(c.id));
-      setLocalData('columns', [...all.columns, ...localOnly]);
+      const combined = deduplicateColumns([...all.columns, ...local]);
+      setLocalData('columns', combined);
     }
     if (all.tasks && all.tasks.length > 0) {
       const local = getLocalData<Task>('tasks', initialTasks);

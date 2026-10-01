@@ -232,13 +232,13 @@ export const CloudSqlService = {
     } catch {}
   },
 
-  async deleteColumn(columnId: string): Promise<void> {
+  async deleteColumn(columnId: string, projectId?: string, fallbackColumnId?: string): Promise<void> {
     if (IS_TEST) return;
     try {
       await fetch('/api/v1/cloudsql/delete-column', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ columnId })
+        body: JSON.stringify({ columnId, projectId, fallbackColumnId })
       });
     } catch {}
   },

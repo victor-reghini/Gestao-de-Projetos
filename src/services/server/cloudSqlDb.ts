@@ -280,16 +280,29 @@ export async function fetchCloudSqlProjectByIdOrSlug(idOrSlug: string): Promise<
   }
 }
 
+function deduplicateColumnsByKey(columns: ProjectColumn[]): ProjectColumn[] {
+  const map = new Map<string, ProjectColumn>();
+  for (const c of columns) {
+    if (!c || !c.id) continue;
+    const key = `${c.projectId}:${(c.key || c.name || '').toLowerCase().trim()}`;
+    if (!map.has(key)) {
+      map.set(key, c);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.position - b.position);
+}
+
 export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectColumn[]> {
   const p = getPool();
   if (!p) return [];
   try {
     const query = projectId 
       ? 'SELECT * FROM "public"."project_column" WHERE project_id = $1 ORDER BY position ASC'
-      : 'SELECT * FROM "public"."project_column" ORDER BY position ASC';
+      : 'SELECT * FROM "public"."project_column" ORDER BY project_id, position ASC';
     const params = projectId ? [projectId] : [];
     const res = await p.query(query, params);
-    return res.rows.map(mapColumnRow);
+    const mapped = res.rows.map(mapColumnRow);
+    return deduplicateColumnsByKey(mapped);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlColumns error:', err);
     return [];
@@ -480,6 +493,17 @@ export async function persistColumn(column: ProjectColumn): Promise<void> {
   if (!p) return;
 
   try {
+    // Ensure project exists to satisfy project_column_project_id_fkey
+    const projCheck = await p.query('SELECT id FROM "public"."project" WHERE id = $1', [column.projectId]);
+    if (projCheck.rows.length === 0) {
+      await p.query(
+        `INSERT INTO "public"."project" (id, name, slug, description, visibility, status, created_at, updated_at)
+         VALUES ($1, 'Projeto', $1, '', 'PUBLIC', 'EM_ANDAMENTO', NOW(), NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        [column.projectId]
+      );
+    }
+
     await p.query(
       `INSERT INTO "public"."project_column" 
        (id, project_id, name, key, position, color, created_at, updated_at)
@@ -502,15 +526,33 @@ export async function persistColumn(column: ProjectColumn): Promise<void> {
       ]
     );
   } catch (err) {
-    console.warn('[CloudSQL] persistColumn error:', err);
+    console.error('[CloudSQL] persistColumn error:', err);
   }
 }
 
-export async function deleteCloudSqlColumn(columnId: string): Promise<void> {
+export async function deleteCloudSqlColumn(columnId: string, projectId?: string, fallbackColumnId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
   try {
-    await p.query('DELETE FROM "public"."project_column" WHERE id = $1', [columnId]);
+    if (fallbackColumnId) {
+      if (projectId) {
+        await p.query('UPDATE "public"."task" SET column_id = $1, updated_at = NOW() WHERE column_id = $2 AND project_id = $3', [fallbackColumnId, columnId, projectId]);
+      } else {
+        await p.query('UPDATE "public"."task" SET column_id = $1, updated_at = NOW() WHERE column_id = $2', [fallbackColumnId, columnId]);
+      }
+    } else {
+      if (projectId) {
+        await p.query('DELETE FROM "public"."task" WHERE column_id = $1 AND project_id = $2', [columnId, projectId]);
+      } else {
+        await p.query('DELETE FROM "public"."task" WHERE column_id = $1', [columnId]);
+      }
+    }
+
+    if (projectId) {
+      await p.query('DELETE FROM "public"."project_column" WHERE id = $1 AND project_id = $2', [columnId, projectId]);
+    } else {
+      await p.query('DELETE FROM "public"."project_column" WHERE id = $1', [columnId]);
+    }
   } catch (err) {
     console.warn('[CloudSQL] deleteCloudSqlColumn error:', err);
   }
@@ -527,6 +569,37 @@ export async function persistTask(task: Task): Promise<void> {
         name: task.createdByName || 'Usuário',
         email: `${task.createdById}@example.com`
       });
+    }
+
+    // 1. Ensure project exists to satisfy task_project_id_fkey
+    const projCheck = await p.query('SELECT id FROM "public"."project" WHERE id = $1', [task.projectId]);
+    if (projCheck.rows.length === 0) {
+      await p.query(
+        `INSERT INTO "public"."project" (id, name, slug, description, visibility, status, created_at, updated_at)
+         VALUES ($1, 'Projeto', $1, '', 'PUBLIC', 'EM_ANDAMENTO', NOW(), NOW())
+         ON CONFLICT (id) DO NOTHING`,
+        [task.projectId]
+      );
+    }
+
+    // 2. Ensure column exists in THIS project to satisfy task_column_id_fkey and project isolation
+    const colCheck = await p.query('SELECT id FROM "public"."project_column" WHERE id = $1 AND project_id = $2', [task.columnId, task.projectId]);
+    if (colCheck.rows.length === 0) {
+      // Check if project has any column we can map to
+      const anyColRes = await p.query('SELECT id FROM "public"."project_column" WHERE project_id = $1 ORDER BY position LIMIT 1', [task.projectId]);
+      if (anyColRes.rows.length > 0) {
+        task.columnId = anyColRes.rows[0].id;
+      } else {
+        // Auto-create column scoped to this project so foreign key constraint is satisfied
+        const newColId = task.columnId.includes(task.projectId) ? task.columnId : `col_${task.projectId}_backlog`;
+        task.columnId = newColId;
+        await p.query(
+          `INSERT INTO "public"."project_column" (id, project_id, name, key, position, color, created_at, updated_at)
+           VALUES ($1, $2, 'Backlog', 'backlog', 0, '#64748b', NOW(), NOW())
+           ON CONFLICT (id) DO NOTHING`,
+          [newColId, task.projectId]
+        );
+      }
     }
 
     await p.query(
@@ -557,7 +630,7 @@ export async function persistTask(task: Task): Promise<void> {
       ]
     );
   } catch (err) {
-    console.warn('[CloudSQL] persistTask error:', err);
+    console.error('[CloudSQL] persistTask error:', err);
   }
 }
 
