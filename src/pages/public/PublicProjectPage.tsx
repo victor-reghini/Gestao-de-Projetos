@@ -41,7 +41,10 @@ export const PublicProjectPage: React.FC = () => {
     if (!slug) return;
     setLoading(true);
     try {
-      const proj = await ProjectService.getBySlug(slug);
+      let proj = await ProjectService.getBySlug(slug);
+      if (!proj) {
+        proj = await ProjectService.getById(slug);
+      }
       if (!proj || proj.visibility === 'PRIVATE') {
         setProject(null);
         setLoading(false);

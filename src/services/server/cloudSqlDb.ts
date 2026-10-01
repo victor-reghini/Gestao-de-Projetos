@@ -117,6 +117,284 @@ export async function testCloudSqlConnection(): Promise<{
 }
 
 // ==========================================================
+// ROW MAPPERS
+// ==========================================================
+
+function mapProjectRow(row: any): Project {
+  let parsedLinks: any[] = [];
+  try {
+    parsedLinks = typeof row.links === 'string' ? JSON.parse(row.links) : (row.links || []);
+  } catch {
+    parsedLinks = [];
+  }
+  return {
+    id: row.id,
+    ownerId: row.owner_id || 'demo-user-123',
+    ownerName: row.owner_name || 'Victor Reghini',
+    name: row.name,
+    slug: row.slug,
+    shortDescription: row.short_description || undefined,
+    description: row.description || '',
+    visibility: row.visibility || 'PUBLIC',
+    status: row.status || 'EM_ANDAMENTO',
+    technologies: Array.isArray(row.technologies) ? row.technologies : [],
+    links: Array.isArray(parsedLinks) ? parsedLinks : [],
+    readme: row.readme || undefined,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+  };
+}
+
+function mapColumnRow(row: any): ProjectColumn {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    key: row.key,
+    position: row.position,
+    color: row.color || '#6366f1',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+  };
+}
+
+function mapTaskRow(row: any): Task {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    columnId: row.column_id,
+    title: row.title,
+    description: row.description || '',
+    priority: row.priority || 'MEDIA',
+    position: row.position,
+    dueDate: row.due_date ? new Date(row.due_date).toISOString() : null,
+    createdById: row.created_by_id || 'demo-user-123',
+    createdByName: row.created_by_name || 'Usuário',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+  };
+}
+
+function mapIdeaRow(row: any): Idea {
+  let parsedLinks: any[] = [];
+  try {
+    parsedLinks = typeof row.links === 'string' ? JSON.parse(row.links) : (row.links || []);
+  } catch {
+    parsedLinks = [];
+  }
+  return {
+    id: row.id,
+    projectId: row.project_id || null,
+    ownerId: row.owner_id || 'demo-user-123',
+    ownerName: row.owner_name || 'Victor Reghini',
+    title: row.title,
+    description: row.description || '',
+    visibility: row.visibility || 'PUBLIC',
+    status: row.status || 'NOVA',
+    technologies: Array.isArray(row.technologies) ? row.technologies : [],
+    links: Array.isArray(parsedLinks) ? parsedLinks : [],
+    convertedProjectId: row.converted_project_id || null,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+  };
+}
+
+function mapDocumentRow(row: any): ProjectDocument {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    title: row.title,
+    content: row.content || '',
+    type: row.type || 'MARKDOWN',
+    position: row.position ?? 0,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+  };
+}
+
+function mapSuggestionRow(row: any): Suggestion {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    authorUserId: row.author_user_id || null,
+    authorName: row.author_name || 'Anônimo',
+    authorEmail: row.author_email || null,
+    title: row.title,
+    description: row.description || '',
+    status: row.status || 'PENDENTE',
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+  };
+}
+
+function mapBugReportRow(row: any): BugReport {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    authorUserId: row.author_user_id || null,
+    authorName: row.author_name || 'Anônimo',
+    authorEmail: row.author_email || null,
+    title: row.title,
+    description: row.description || '',
+    severity: row.severity || 'MEDIA',
+    status: row.status || 'PENDENTE',
+    environment: row.environment || undefined,
+    stepsToReproduce: row.steps_to_reproduce || undefined,
+    expectedBehavior: row.expected_behavior || undefined,
+    observedBehavior: row.observed_behavior || undefined,
+    imageUrl: row.image_url || undefined,
+    createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
+  };
+}
+
+// ==========================================================
+// QUERY FUNCTIONS (READ FROM CLOUD SQL)
+// ==========================================================
+
+export async function fetchCloudSqlProjects(): Promise<Project[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const res = await p.query('SELECT * FROM "public"."project" ORDER BY created_at DESC');
+    return res.rows.map(mapProjectRow);
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlProjects error:', err);
+    return [];
+  }
+}
+
+export async function fetchCloudSqlProjectByIdOrSlug(idOrSlug: string): Promise<Project | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    const res = await p.query(
+      'SELECT * FROM "public"."project" WHERE id = $1 OR slug = $1 LIMIT 1',
+      [idOrSlug]
+    );
+    if (res.rows.length === 0) return null;
+    return mapProjectRow(res.rows[0]);
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlProjectByIdOrSlug error:', err);
+    return null;
+  }
+}
+
+export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectColumn[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const query = projectId 
+      ? 'SELECT * FROM "public"."project_column" WHERE project_id = $1 ORDER BY position ASC'
+      : 'SELECT * FROM "public"."project_column" ORDER BY position ASC';
+    const params = projectId ? [projectId] : [];
+    const res = await p.query(query, params);
+    return res.rows.map(mapColumnRow);
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlColumns error:', err);
+    return [];
+  }
+}
+
+export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const query = projectId 
+      ? 'SELECT * FROM "public"."task" WHERE project_id = $1 ORDER BY position ASC'
+      : 'SELECT * FROM "public"."task" ORDER BY position ASC';
+    const params = projectId ? [projectId] : [];
+    const res = await p.query(query, params);
+    return res.rows.map(mapTaskRow);
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlTasks error:', err);
+    return [];
+  }
+}
+
+export async function fetchCloudSqlIdeas(): Promise<Idea[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const res = await p.query('SELECT * FROM "public"."idea" ORDER BY created_at DESC');
+    return res.rows.map(mapIdeaRow);
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlIdeas error:', err);
+    return [];
+  }
+}
+
+export async function fetchCloudSqlDocuments(projectId?: string): Promise<ProjectDocument[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const query = projectId
+      ? 'SELECT * FROM "public"."project_document" WHERE project_id = $1 ORDER BY position ASC'
+      : 'SELECT * FROM "public"."project_document" ORDER BY position ASC';
+    const params = projectId ? [projectId] : [];
+    const res = await p.query(query, params);
+    return res.rows.map(mapDocumentRow);
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlDocuments error:', err);
+    return [];
+  }
+}
+
+export async function fetchCloudSqlSuggestions(projectId?: string): Promise<Suggestion[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const query = projectId
+      ? 'SELECT * FROM "public"."suggestion" WHERE project_id = $1 ORDER BY created_at DESC'
+      : 'SELECT * FROM "public"."suggestion" ORDER BY created_at DESC';
+    const params = projectId ? [projectId] : [];
+    const res = await p.query(query, params);
+    return res.rows.map(mapSuggestionRow);
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlSuggestions error:', err);
+    return [];
+  }
+}
+
+export async function fetchCloudSqlBugs(projectId?: string): Promise<BugReport[]> {
+  const p = getPool();
+  if (!p) return [];
+  try {
+    const query = projectId
+      ? 'SELECT * FROM "public"."bug_report" WHERE project_id = $1 ORDER BY created_at DESC'
+      : 'SELECT * FROM "public"."bug_report" ORDER BY created_at DESC';
+    const params = projectId ? [projectId] : [];
+    const res = await p.query(query, params);
+    return res.rows.map(mapBugReportRow);
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlBugs error:', err);
+    return [];
+  }
+}
+
+export async function fetchCloudSqlAll(): Promise<{
+  projects: Project[];
+  columns: ProjectColumn[];
+  tasks: Task[];
+  ideas: Idea[];
+  documents: ProjectDocument[];
+  suggestions: Suggestion[];
+  bugs: BugReport[];
+}> {
+  const [projects, columns, tasks, ideas, documents, suggestions, bugs] = await Promise.all([
+    fetchCloudSqlProjects(),
+    fetchCloudSqlColumns(),
+    fetchCloudSqlTasks(),
+    fetchCloudSqlIdeas(),
+    fetchCloudSqlDocuments(),
+    fetchCloudSqlSuggestions(),
+    fetchCloudSqlBugs()
+  ]);
+
+  return { projects, columns, tasks, ideas, documents, suggestions, bugs };
+}
+
+// ==========================================================
 // ENTITY PERSISTENCE FUNCTIONS
 // ==========================================================
 

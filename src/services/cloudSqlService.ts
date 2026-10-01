@@ -47,6 +47,156 @@ export const CloudSqlService = {
     }
   },
 
+  // Read operations from Cloud SQL
+  async fetchProjects(): Promise<Project[]> {
+    if (IS_TEST) return [];
+    try {
+      const res = await fetch('/api/v1/cloudsql/projects');
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  async fetchProjectByIdOrSlug(idOrSlug: string): Promise<Project | null> {
+    if (IS_TEST) return null;
+    try {
+      const res = await fetch(`/api/v1/cloudsql/projects?id=${encodeURIComponent(idOrSlug)}`);
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  async fetchColumns(projectId?: string): Promise<ProjectColumn[]> {
+    if (IS_TEST) return [];
+    try {
+      const url = projectId 
+        ? `/api/v1/cloudsql/columns?projectId=${encodeURIComponent(projectId)}`
+        : '/api/v1/cloudsql/columns';
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  async fetchTasks(projectId?: string): Promise<Task[]> {
+    if (IS_TEST) return [];
+    try {
+      const url = projectId 
+        ? `/api/v1/cloudsql/tasks?projectId=${encodeURIComponent(projectId)}`
+        : '/api/v1/cloudsql/tasks';
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  async fetchIdeas(): Promise<Idea[]> {
+    if (IS_TEST) return [];
+    try {
+      const res = await fetch('/api/v1/cloudsql/ideas');
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  async fetchDocuments(projectId?: string): Promise<ProjectDocument[]> {
+    if (IS_TEST) return [];
+    try {
+      const url = projectId 
+        ? `/api/v1/cloudsql/documents?projectId=${encodeURIComponent(projectId)}`
+        : '/api/v1/cloudsql/documents';
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  async fetchSuggestions(projectId?: string): Promise<Suggestion[]> {
+    if (IS_TEST) return [];
+    try {
+      const url = projectId 
+        ? `/api/v1/cloudsql/suggestions?projectId=${encodeURIComponent(projectId)}`
+        : '/api/v1/cloudsql/suggestions';
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  async fetchBugs(projectId?: string): Promise<BugReport[]> {
+    if (IS_TEST) return [];
+    try {
+      const url = projectId 
+        ? `/api/v1/cloudsql/bugs?projectId=${encodeURIComponent(projectId)}`
+        : '/api/v1/cloudsql/bugs';
+      const res = await fetch(url);
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  },
+
+  async fetchAll(): Promise<{
+    projects: Project[];
+    columns: ProjectColumn[];
+    tasks: Task[];
+    ideas: Idea[];
+    documents: ProjectDocument[];
+    suggestions: Suggestion[];
+    bugs: BugReport[];
+  } | null> {
+    if (IS_TEST) return null;
+    try {
+      const res = await fetch('/api/v1/cloudsql/all');
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
   // Task operations
   async syncTask(task: Task): Promise<void> {
     if (IS_TEST) return;

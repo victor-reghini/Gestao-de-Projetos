@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/context/AuthContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { PublicLayout } from '@/components/layout/PublicLayout';
+import { hydrateFromCloudSql } from '@/services/dbService';
 
 // Auth pages
 import { LoginPage } from '@/pages/auth/LoginPage';
@@ -30,6 +31,10 @@ const RootRedirect: React.FC = () => {
 };
 
 export const App: React.FC = () => {
+  useEffect(() => {
+    hydrateFromCloudSql();
+  }, []);
+
   return (
     <AuthProvider>
       <Routes>

@@ -15,7 +15,16 @@ import {
   deleteCloudSqlDocument,
   deleteCloudSqlSuggestion,
   deleteCloudSqlBugReport,
-  syncAllToCloudSql 
+  syncAllToCloudSql,
+  fetchCloudSqlProjects,
+  fetchCloudSqlProjectByIdOrSlug,
+  fetchCloudSqlColumns,
+  fetchCloudSqlTasks,
+  fetchCloudSqlIdeas,
+  fetchCloudSqlDocuments,
+  fetchCloudSqlSuggestions,
+  fetchCloudSqlBugs,
+  fetchCloudSqlAll
 } from '../../src/services/server/cloudSqlDb';
 
 // Simple in-memory rate limiter per IP
@@ -193,6 +202,56 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
         const result = await syncAllToCloudSql(body);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify(result) };
       }
+
+      if (action === 'projects' && event.httpMethod === 'GET') {
+        const idOrSlug = segments[2] || event.queryStringParameters?.id;
+        if (idOrSlug) {
+          const project = await fetchCloudSqlProjectByIdOrSlug(idOrSlug);
+          return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: project }) };
+        }
+        const projects = await fetchCloudSqlProjects();
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: projects }) };
+      }
+
+      if (action === 'columns' && event.httpMethod === 'GET') {
+        const projectId = event.queryStringParameters?.projectId || segments[2];
+        const cols = await fetchCloudSqlColumns(projectId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: cols }) };
+      }
+
+      if (action === 'tasks' && event.httpMethod === 'GET') {
+        const projectId = event.queryStringParameters?.projectId || segments[2];
+        const tasks = await fetchCloudSqlTasks(projectId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: tasks }) };
+      }
+
+      if (action === 'ideas' && event.httpMethod === 'GET') {
+        const ideas = await fetchCloudSqlIdeas();
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: ideas }) };
+      }
+
+      if (action === 'documents' && event.httpMethod === 'GET') {
+        const projectId = event.queryStringParameters?.projectId || segments[2];
+        const docs = await fetchCloudSqlDocuments(projectId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: docs }) };
+      }
+
+      if (action === 'suggestions' && event.httpMethod === 'GET') {
+        const projectId = event.queryStringParameters?.projectId || segments[2];
+        const sugs = await fetchCloudSqlSuggestions(projectId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: sugs }) };
+      }
+
+      if (action === 'bugs' && event.httpMethod === 'GET') {
+        const projectId = event.queryStringParameters?.projectId || segments[2];
+        const bugs = await fetchCloudSqlBugs(projectId);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: bugs }) };
+      }
+
+      if (action === 'all' && event.httpMethod === 'GET') {
+        const allData = await fetchCloudSqlAll();
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: allData }) };
+      }
     }
 
     if (segments[0] === 'projects') {
@@ -209,17 +268,23 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
       // Route: GET /api/v1/projects/:slug
       if (!resource && event.httpMethod === 'GET') {
+        const proj = await fetchCloudSqlProjectByIdOrSlug(slug);
+        if (proj) {
+          return {
+            statusCode: 200,
+            headers: corsHeaders,
+            body: JSON.stringify({
+              success: true,
+              data: proj
+            })
+          };
+        }
         return {
-          statusCode: 200,
+          statusCode: 404,
           headers: corsHeaders,
           body: JSON.stringify({
-            success: true,
-            data: {
-              slug,
-              visibility: 'PUBLIC',
-              message: `Dados públicos do projeto '${slug}' retornados com sucesso.`,
-              timestamp: new Date().toISOString()
-            }
+            success: false,
+            error: `Projeto '${slug}' não encontrado.`
           })
         };
       }

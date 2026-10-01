@@ -18,7 +18,16 @@ import {
   deleteCloudSqlDocument,
   deleteCloudSqlSuggestion,
   deleteCloudSqlBugReport,
-  syncAllToCloudSql 
+  syncAllToCloudSql,
+  fetchCloudSqlProjects,
+  fetchCloudSqlProjectByIdOrSlug,
+  fetchCloudSqlColumns,
+  fetchCloudSqlTasks,
+  fetchCloudSqlIdeas,
+  fetchCloudSqlDocuments,
+  fetchCloudSqlSuggestions,
+  fetchCloudSqlBugs,
+  fetchCloudSqlAll
 } from './src/services/server/cloudSqlDb';
 
 function cloudSqlApiPlugin(): Plugin {
@@ -53,6 +62,65 @@ function cloudSqlApiPlugin(): Plugin {
           if (pathname === '/api/v1/cloudsql/status' && req.method === 'GET') {
             const status = await testCloudSqlConnection();
             res.end(JSON.stringify(status));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/projects' && req.method === 'GET') {
+            const id = url.searchParams.get('id');
+            if (id) {
+              const proj = await fetchCloudSqlProjectByIdOrSlug(id);
+              res.end(JSON.stringify({ success: true, data: proj }));
+              return;
+            }
+            const projects = await fetchCloudSqlProjects();
+            res.end(JSON.stringify({ success: true, data: projects }));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/columns' && req.method === 'GET') {
+            const projectId = url.searchParams.get('projectId') || undefined;
+            const cols = await fetchCloudSqlColumns(projectId);
+            res.end(JSON.stringify({ success: true, data: cols }));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/tasks' && req.method === 'GET') {
+            const projectId = url.searchParams.get('projectId') || undefined;
+            const tasks = await fetchCloudSqlTasks(projectId);
+            res.end(JSON.stringify({ success: true, data: tasks }));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/ideas' && req.method === 'GET') {
+            const ideas = await fetchCloudSqlIdeas();
+            res.end(JSON.stringify({ success: true, data: ideas }));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/documents' && req.method === 'GET') {
+            const projectId = url.searchParams.get('projectId') || undefined;
+            const docs = await fetchCloudSqlDocuments(projectId);
+            res.end(JSON.stringify({ success: true, data: docs }));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/suggestions' && req.method === 'GET') {
+            const projectId = url.searchParams.get('projectId') || undefined;
+            const sugs = await fetchCloudSqlSuggestions(projectId);
+            res.end(JSON.stringify({ success: true, data: sugs }));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/bugs' && req.method === 'GET') {
+            const projectId = url.searchParams.get('projectId') || undefined;
+            const bugs = await fetchCloudSqlBugs(projectId);
+            res.end(JSON.stringify({ success: true, data: bugs }));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/all' && req.method === 'GET') {
+            const all = await fetchCloudSqlAll();
+            res.end(JSON.stringify({ success: true, data: all }));
             return;
           }
 

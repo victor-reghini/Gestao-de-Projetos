@@ -52,20 +52,19 @@ export const ProjectDetailPage: React.FC = () => {
     if (!id) return;
     setLoading(true);
     try {
-      const proj = await ProjectService.getById(id);
-      if (!proj) {
-        const projBySlug = await ProjectService.getBySlug(id);
-        if (projBySlug) {
-          setProject(projBySlug);
-        } else {
-          setLoading(false);
-          return;
-        }
-      } else {
-        setProject(proj);
+      let activeProj = await ProjectService.getById(id);
+      if (!activeProj) {
+        activeProj = await ProjectService.getBySlug(id);
       }
 
-      const pId = proj ? proj.id : id;
+      if (!activeProj) {
+        setProject(null);
+        setLoading(false);
+        return;
+      }
+
+      setProject(activeProj);
+      const pId = activeProj.id;
       const [docs, sugs, bgs, mems] = await Promise.all([
         DocumentService.getByProject(pId),
         SuggestionService.getByProject(pId),
