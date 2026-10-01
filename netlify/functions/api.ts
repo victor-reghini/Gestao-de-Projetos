@@ -26,6 +26,7 @@ import {
   fetchCloudSqlBugs,
   fetchCloudSqlAll
 } from '../../src/services/server/cloudSqlDb';
+import { initialProjects } from '../../src/services/dbService';
 
 // Simple in-memory rate limiter per IP
 const ipRequestCounts = new Map<string, { count: number; resetTime: number }>();
@@ -268,7 +269,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
       // Route: GET /api/v1/projects/:slug
       if (!resource && event.httpMethod === 'GET') {
-        const proj = await fetchCloudSqlProjectByIdOrSlug(slug);
+        const proj = (await fetchCloudSqlProjectByIdOrSlug(slug)) || initialProjects.find(p => p.slug === slug || p.id === slug);
         if (proj) {
           return {
             statusCode: 200,

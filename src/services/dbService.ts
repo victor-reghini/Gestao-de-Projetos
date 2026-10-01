@@ -715,14 +715,16 @@ export const TaskService = {
       }
     }
 
-    const columnTasks = allTasks.filter(t => t.columnId === targetColId);
+    const columnTasks = allTasks.filter(t => t.columnId === targetColId && (!data.projectId || t.projectId === data.projectId));
+    const maxPos = columnTasks.length > 0 ? Math.max(...columnTasks.map(t => t.position ?? 0)) : -1;
+    const finalPosition = data.position !== undefined ? data.position : maxPos + 1;
     const id = `task_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
 
     const newTask: Task = {
       ...data,
       columnId: targetColId,
       id,
-      position: data.position !== undefined ? data.position : columnTasks.length,
+      position: finalPosition,
       dueDate: data.dueDate || null,
       description: data.description || '',
       priority: data.priority || 'MEDIA',

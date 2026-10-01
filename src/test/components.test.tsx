@@ -6,12 +6,13 @@ import { AuthProvider } from '@/context/AuthContext';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { ApiDocsPage } from '@/pages/public/ApiDocsPage';
 import { ProjectsListPage } from '@/pages/projects/ProjectsListPage';
+import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { TaskModal } from '@/components/kanban/TaskModal';
 import { ImageCropperModal } from '@/components/profile/ImageCropperModal';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SuggestionsTab } from '@/components/feedback/SuggestionsTab';
 import { BugsTab } from '@/components/feedback/BugsTab';
-import { ProjectService, TaskService, SuggestionService, BugReportService } from '@/services/dbService';
+import { ColumnService, ProjectService, TaskService, SuggestionService, BugReportService } from '@/services/dbService';
 import { Project, ProjectColumn, Task, Suggestion, BugReport } from '@/types';
 
 const mockColumns: ProjectColumn[] = [
@@ -365,5 +366,52 @@ describe('UI Components & Pages Tests', () => {
     fireEvent.change(sortSelect, { target: { value: 'pending' } });
     titles = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent);
     expect(titles).toEqual(['Gamma Project', 'Beta Project', 'Alpha Project']);
+  });
+
+  it('renders KanbanBoard with grouped Colunas button and toggles column header commands', async () => {
+    vi.spyOn(ColumnService, 'getByProject').mockResolvedValue(mockColumns);
+    vi.spyOn(TaskService, 'getByProject').mockResolvedValue([]);
+
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <KanbanBoard projectId="p1" isReadOnly={false} />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Backlog')).toBeInTheDocument();
+      expect(screen.getByText('Em Execução')).toBeInTheDocument();
+    });
+
+    // Commands in column header should be hidden by default
+    expect(screen.queryByLabelText('Mover coluna para a esquerda')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Mover coluna para a direita')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Editar Coluna')).not.toBeInTheDocument();
+
+    // Grouped button "Colunas" should be visible
+    const colunasBtn = screen.getByRole('button', { name: /Menu de Colunas/i });
+    expect(colunasBtn).toBeInTheDocument();
+
+    // Open dropdown
+    fireEvent.click(colunasBtn);
+    expect(screen.getByText('Editar Colunas')).toBeInTheDocument();
+    expect(screen.getByText('Nova Coluna')).toBeInTheDocument();
+
+    // Click "Editar Colunas"
+    fireEvent.click(screen.getByText('Editar Colunas'));
+
+    // Now column header commands should be visible
+    expect(screen.getAllByLabelText('Mover coluna para a esquerda').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Mover coluna para a direita').length).toBeGreaterThan(0);
+    expect(screen.getAllByLabelText('Editar Coluna').length).toBeGreaterThan(0);
+
+    // Click "Colunas" again to toggle and hide
+    fireEvent.click(colunasBtn);
+    fireEvent.click(screen.getByText('Ocultar Comandos'));
+
+    // Commands are hidden again
+    expect(screen.queryByLabelText('Mover coluna para a esquerda')).not.toBeInTheDocument();
   });
 });

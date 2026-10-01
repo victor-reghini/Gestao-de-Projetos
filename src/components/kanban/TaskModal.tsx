@@ -93,7 +93,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           title: title.trim(),
           description: description.trim(),
           priority,
-          position: 0,
           dueDate: dueDate || null,
           createdById: user?.id || 'demo-user-123',
           createdByName: user?.name || 'Victor Reghini'

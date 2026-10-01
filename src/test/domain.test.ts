@@ -317,5 +317,96 @@ describe('Domain & Business Rules Tests', () => {
       expect(unchangedTaskB?.columnId).toBe(colsB[0].id);
       expect(unchangedTaskB?.projectId).toBe(projB.id);
     });
+
+    it('reorders columns within a project and persists new positions', async () => {
+      const proj = await ProjectService.create({
+        name: 'Projeto Reordenação de Colunas',
+        description: 'Teste',
+        visibility: 'PRIVATE',
+        status: 'PLANEJAMENTO',
+        technologies: ['TypeScript'],
+        links: [],
+        ownerId: 'user-1'
+      });
+
+      const cols = await ColumnService.getByProject(proj.id);
+      expect(cols.length).toBeGreaterThanOrEqual(2);
+
+      // Invert column order
+      const reversedIds = cols.map(c => c.id).reverse();
+      const reordered = await ColumnService.reorder(proj.id, reversedIds);
+
+      expect(reordered[0].id).toBe(reversedIds[0]);
+      expect(reordered[0].position).toBe(0);
+      expect(reordered[1].id).toBe(reversedIds[1]);
+      expect(reordered[1].position).toBe(1);
+
+      // Verify fetched from storage
+      const fetched = await ColumnService.getByProject(proj.id);
+      const sorted = [...fetched].sort((a, b) => a.position - b.position);
+      expect(sorted[0].id).toBe(reversedIds[0]);
+      expect(sorted[1].id).toBe(reversedIds[1]);
+    });
+
+    it('inserts newly created tasks at the end of the column list and allows reordering', async () => {
+      const proj = await ProjectService.create({
+        name: 'Projeto Posição de Tarefas',
+        description: 'Teste',
+        visibility: 'PRIVATE',
+        status: 'PLANEJAMENTO',
+        technologies: ['TypeScript'],
+        links: [],
+        ownerId: 'user-1'
+      });
+
+      const cols = await ColumnService.getByProject(proj.id);
+      const colId = cols[0].id;
+
+      // Create 3 tasks sequentially without specifying position
+      const task1 = await TaskService.create({
+        projectId: proj.id,
+        columnId: colId,
+        title: 'Primeira Tarefa',
+        description: 'Primeira',
+        priority: 'MEDIA',
+        createdById: 'user-1'
+      });
+
+      const task2 = await TaskService.create({
+        projectId: proj.id,
+        columnId: colId,
+        title: 'Segunda Tarefa',
+        description: 'Segunda',
+        priority: 'ALTA',
+        createdById: 'user-1'
+      });
+
+      const task3 = await TaskService.create({
+        projectId: proj.id,
+        columnId: colId,
+        title: 'Terceira Tarefa',
+        description: 'Terceira',
+        priority: 'BAIXA',
+        createdById: 'user-1'
+      });
+
+      // Verify tasks are ordered at the end of the list: 0, 1, 2
+      expect(task1.position).toBe(0);
+      expect(task2.position).toBe(1);
+      expect(task3.position).toBe(2);
+
+      // Reorder task3 to the top (position 0)
+      await TaskService.move(task3.id, colId, 0);
+
+      const tasksAfterMove = await TaskService.getByProject(proj.id);
+      const colTasks = tasksAfterMove.filter(t => t.columnId === colId).sort((a, b) => a.position - b.position);
+
+      expect(colTasks[0].id).toBe(task3.id);
+      expect(colTasks[0].position).toBe(0);
+      expect(colTasks[1].id).toBe(task1.id);
+      expect(colTasks[1].position).toBe(1);
+      expect(colTasks[2].id).toBe(task2.id);
+      expect(colTasks[2].position).toBe(2);
+    });
   });
 });
