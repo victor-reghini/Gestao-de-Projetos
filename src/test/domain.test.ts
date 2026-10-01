@@ -4,6 +4,7 @@ import {
   ColumnService, 
   TaskService, 
   IdeaService, 
+  DocumentService,
   SuggestionService,
   BugReportService,
   slugify 
@@ -407,6 +408,100 @@ describe('Domain & Business Rules Tests', () => {
       expect(colTasks[1].position).toBe(1);
       expect(colTasks[2].id).toBe(task2.id);
       expect(colTasks[2].position).toBe(2);
+    });
+
+    it('updates project updatedAt when kanban, docs, bugs, suggestions or settings change', async () => {
+      // 1. Create a project with an initial timestamp in the past
+      const pastTime = new Date(Date.now() - 60000).toISOString();
+      const proj = await ProjectService.create({
+        name: 'Projeto Timestamp Test',
+        description: 'Testando atualização de updatedAt',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: ['React'],
+        links: [],
+        ownerId: 'user-ts'
+      });
+
+      // Manually set older timestamp in localStorage to verify subsequent updates
+      const list = JSON.parse(localStorage.getItem('gestao_projetos_db_projects') || '[]');
+      const idx = list.findIndex((p: any) => p.id === proj.id);
+      if (idx !== -1) {
+        list[idx].updatedAt = pastTime;
+        localStorage.setItem('gestao_projetos_db_projects', JSON.stringify(list));
+      }
+
+      let currentProj = await ProjectService.getById(proj.id);
+      expect(currentProj?.updatedAt).toBe(pastTime);
+
+      // 2. Test Kanban: Task Creation updates project updatedAt
+      const cols = await ColumnService.getByProject(proj.id);
+      const task = await TaskService.create({
+        projectId: proj.id,
+        columnId: cols[0].id,
+        title: 'Nova tarefa para teste de touch',
+        description: 'Descrição de teste',
+        priority: 'MEDIA',
+        createdById: 'user-ts'
+      });
+      currentProj = await ProjectService.getById(proj.id);
+      expect(new Date(currentProj!.updatedAt).getTime()).toBeGreaterThan(new Date(pastTime).getTime());
+
+      // 3. Test Kanban: Task Move updates project updatedAt
+      const timeBeforeMove = currentProj!.updatedAt;
+      await new Promise(r => setTimeout(r, 10));
+      await TaskService.move(task.id, cols[1].id, 0);
+      currentProj = await ProjectService.getById(proj.id);
+      expect(new Date(currentProj!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(timeBeforeMove).getTime());
+
+      // 4. Test Docs: Document creation updates project updatedAt
+      const timeBeforeDoc = currentProj!.updatedAt;
+      await new Promise(r => setTimeout(r, 10));
+      const doc = await DocumentService.create({
+        projectId: proj.id,
+        title: 'Arquitetura do Sistema',
+        content: '# Arquitetura',
+        type: 'markdown',
+        position: 0
+      });
+      currentProj = await ProjectService.getById(proj.id);
+      expect(new Date(currentProj!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(timeBeforeDoc).getTime());
+
+      // 5. Test Bugs: Bug Report creation updates project updatedAt
+      const timeBeforeBug = currentProj!.updatedAt;
+      await new Promise(r => setTimeout(r, 10));
+      const bug = await BugReportService.create({
+        projectId: proj.id,
+        authorUserId: 'user-ts',
+        authorName: 'Tester',
+        authorEmail: 'tester@test.com',
+        title: 'Bug na tela inicial',
+        description: 'Erro 500',
+        severity: 'ALTA'
+      });
+      currentProj = await ProjectService.getById(proj.id);
+      expect(new Date(currentProj!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(timeBeforeBug).getTime());
+
+      // 6. Test Suggestions: Suggestion creation updates project updatedAt
+      const timeBeforeSug = currentProj!.updatedAt;
+      await new Promise(r => setTimeout(r, 10));
+      await SuggestionService.create({
+        projectId: proj.id,
+        authorUserId: 'user-ts',
+        authorName: 'Tester',
+        authorEmail: 'tester@test.com',
+        title: 'Melhoria no formulário',
+        description: 'Adicionar máscara'
+      });
+      currentProj = await ProjectService.getById(proj.id);
+      expect(new Date(currentProj!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(timeBeforeSug).getTime());
+
+      // 7. Test Settings/Visão Geral: ProjectService.update updates project updatedAt
+      const timeBeforeSettings = currentProj!.updatedAt;
+      await new Promise(r => setTimeout(r, 10));
+      await ProjectService.update(proj.id, { description: 'Nova descrição atualizada' });
+      currentProj = await ProjectService.getById(proj.id);
+      expect(new Date(currentProj!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(timeBeforeSettings).getTime());
     });
   });
 });

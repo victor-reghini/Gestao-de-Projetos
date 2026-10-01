@@ -25,9 +25,10 @@ import { ColumnModal } from './NewColumnModal';
 interface KanbanBoardProps {
   projectId: string;
   isReadOnly?: boolean;
+  onProjectUpdate?: () => void;
 }
 
-export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly = false }) => {
+export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly = false, onProjectUpdate }) => {
   const [columns, setColumns] = useState<ProjectColumn[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
@@ -146,6 +147,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     const reordered = newCols.map((c, i) => ({ ...c, position: i }));
     setColumns(reordered);
     await ColumnService.reorder(projectId, reordered.map(c => c.id));
+    onProjectUpdate?.();
   };
 
   const handleColumnDragStart = (e: React.DragEvent, columnId: string) => {
@@ -176,6 +178,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     const reordered = newCols.map((c, i) => ({ ...c, position: i }));
     setColumns(reordered);
     await ColumnService.reorder(projectId, reordered.map(c => c.id));
+    onProjectUpdate?.();
   };
 
   // Task Drag & Drop & Move Handlers
@@ -248,6 +251,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     setDraggedTaskId(null);
 
     await TaskService.move(taskId, targetColumnId, newPosition);
+    onProjectUpdate?.();
   };
 
   const handleDropOnTask = async (e: React.DragEvent, targetColumnId: string, targetIndex: number) => {
@@ -284,6 +288,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     setTasks([...otherTasks, ...reindexed]);
 
     await TaskService.move(taskId, targetColumnId, newPosition);
+    onProjectUpdate?.();
   };
 
   // Column Actions
@@ -299,11 +304,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
       if (confirm(`Esta coluna possui ${columnTasks.length} atividade(s). Deseja mover as atividades para "${fallback?.name}" e excluir a coluna?`)) {
         await ColumnService.delete(columnId, fallback?.id, projectId);
         loadKanban();
+        onProjectUpdate?.();
       }
     } else {
       if (confirm('Deseja excluir esta coluna?')) {
         await ColumnService.delete(columnId, undefined, projectId);
         loadKanban();
+        onProjectUpdate?.();
       }
     }
   };
@@ -673,7 +680,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
           columns={columns}
           defaultColumnId={selectedColumnId}
           taskToEdit={taskToEdit}
-          onSaved={loadKanban}
+          onSaved={() => {
+            loadKanban();
+            onProjectUpdate?.();
+          }}
         />
       )}
 
@@ -684,7 +694,10 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
           projectId={projectId}
           columnToEdit={colToEdit}
           columnsCount={columns.length}
-          onSaved={loadKanban}
+          onSaved={() => {
+            loadKanban();
+            onProjectUpdate?.();
+          }}
         />
       )}
     </div>

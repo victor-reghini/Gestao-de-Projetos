@@ -488,6 +488,16 @@ export async function deleteCloudSqlProject(projectId: string): Promise<void> {
   }
 }
 
+export async function touchCloudSqlProject(projectId: string): Promise<void> {
+  const p = getPool();
+  if (!p || !projectId) return;
+  try {
+    await p.query('UPDATE "public"."project" SET updated_at = NOW() WHERE id = $1', [projectId]);
+  } catch (err) {
+    console.warn('[CloudSQL] touchCloudSqlProject error:', err);
+  }
+}
+
 export async function persistColumn(column: ProjectColumn): Promise<void> {
   const p = getPool();
   if (!p) return;
@@ -525,6 +535,8 @@ export async function persistColumn(column: ProjectColumn): Promise<void> {
         column.updatedAt || new Date().toISOString()
       ]
     );
+
+    await touchCloudSqlProject(column.projectId);
   } catch (err) {
     console.error('[CloudSQL] persistColumn error:', err);
   }
@@ -550,6 +562,7 @@ export async function deleteCloudSqlColumn(columnId: string, projectId?: string,
 
     if (projectId) {
       await p.query('DELETE FROM "public"."project_column" WHERE id = $1 AND project_id = $2', [columnId, projectId]);
+      await touchCloudSqlProject(projectId);
     } else {
       await p.query('DELETE FROM "public"."project_column" WHERE id = $1', [columnId]);
     }
@@ -629,6 +642,8 @@ export async function persistTask(task: Task): Promise<void> {
         task.updatedAt || new Date().toISOString()
       ]
     );
+
+    await touchCloudSqlProject(task.projectId);
   } catch (err) {
     console.error('[CloudSQL] persistTask error:', err);
   }
@@ -727,6 +742,8 @@ export async function persistDocument(doc: ProjectDocument): Promise<void> {
         doc.updatedAt || new Date().toISOString()
       ]
     );
+
+    await touchCloudSqlProject(doc.projectId);
   } catch (err) {
     console.warn('[CloudSQL] persistDocument error:', err);
   }
@@ -771,6 +788,8 @@ export async function persistSuggestion(sug: Suggestion): Promise<void> {
         sug.updatedAt || new Date().toISOString()
       ]
     );
+
+    await touchCloudSqlProject(sug.projectId);
   } catch (err) {
     console.warn('[CloudSQL] persistSuggestion error:', err);
   }
@@ -827,6 +846,8 @@ export async function persistBugReport(bug: BugReport): Promise<void> {
         bug.updatedAt || new Date().toISOString()
       ]
     );
+
+    await touchCloudSqlProject(bug.projectId);
   } catch (err) {
     console.warn('[CloudSQL] persistBugReport error:', err);
   }

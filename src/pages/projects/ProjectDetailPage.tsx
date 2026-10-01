@@ -271,7 +271,7 @@ export const ProjectDetailPage: React.FC = () => {
       {/* Active Tab Content */}
       <div className="min-h-[500px]">
         {activeTab === 'kanban' && (
-          <KanbanBoard projectId={project.id} isReadOnly={!canEdit} />
+          <KanbanBoard projectId={project.id} isReadOnly={!canEdit} onProjectUpdate={loadProjectData} />
         )}
 
         {activeTab === 'overview' && (

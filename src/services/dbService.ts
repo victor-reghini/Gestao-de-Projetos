@@ -461,6 +461,26 @@ export const ProjectService = {
     return this.update(id, { status: 'ARQUIVADO' });
   },
 
+  async touch(id: string): Promise<Project | null> {
+    if (!id) return null;
+    const list = getLocalData<Project>('projects', initialProjects);
+    const index = list.findIndex(p => p.id === id);
+    if (index === -1) return null;
+
+    const updatedItem: Project = {
+      ...list[index],
+      updatedAt: new Date().toISOString()
+    };
+
+    list[index] = updatedItem;
+    setLocalData('projects', list);
+
+    // Persist to Google Cloud SQL & Data Connect
+    CloudSqlService.syncProject(updatedItem).catch(() => {});
+    DataConnectService.syncProject(updatedItem).catch(() => {});
+    return updatedItem;
+  },
+
   async delete(id: string): Promise<void> {
     const list = getLocalData<Project>('projects', initialProjects);
     const filtered = list.filter(p => p.id !== id);
@@ -566,6 +586,9 @@ export const ColumnService = {
 
     setLocalData('columns', [...allCols, newCol]);
 
+    // Update project updatedAt
+    ProjectService.touch(projectId).catch(() => {});
+
     // Sync to Realtime DB and Google Cloud SQL
     RealtimeSyncService.syncColumns(projectId, [...projectCols, newCol], 'col_create').catch(() => {});
     CloudSqlService.syncColumn(newCol).catch(() => {});
@@ -585,6 +608,11 @@ export const ColumnService = {
     };
 
     setLocalData('columns', allCols);
+
+    // Update project updatedAt
+    if (allCols[index].projectId) {
+      ProjectService.touch(allCols[index].projectId).catch(() => {});
+    }
 
     // Sync to Realtime DB and Google Cloud SQL
     const projCols = allCols.filter(c => c.projectId === allCols[index].projectId);
@@ -609,6 +637,9 @@ export const ColumnService = {
 
     const finalCols = [...otherCols, ...reordered];
     setLocalData('columns', finalCols);
+
+    // Update project updatedAt
+    ProjectService.touch(projectId).catch(() => {});
 
     // Sync to Realtime DB and Google Cloud SQL
     RealtimeSyncService.syncColumns(projectId, reordered, 'col_reorder').catch(() => {});
@@ -666,6 +697,7 @@ export const ColumnService = {
       const remainingProjectCols = remainingCols.filter(c => c.projectId === targetProjectId);
       RealtimeSyncService.deleteColumn(targetProjectId, columnId).catch(() => {});
       RealtimeSyncService.syncFullProjectBoard(targetProjectId, remainingProjectCols, finalProjectTasks).catch(() => {});
+      ProjectService.touch(targetProjectId).catch(() => {});
     }
     CloudSqlService.deleteColumn(columnId, targetProjectId, fallbackColumnId).catch(() => {});
     DataConnectService.deleteColumn(columnId).catch(() => {});
@@ -734,6 +766,11 @@ export const TaskService = {
 
     setLocalData('tasks', [...allTasks, newTask]);
 
+    // Update project updatedAt
+    if (newTask.projectId) {
+      ProjectService.touch(newTask.projectId).catch(() => {});
+    }
+
     // Persist to Realtime Database, Google Cloud SQL, and Data Connect
     RealtimeSyncService.syncTask(newTask, 'task_create').catch(() => {});
     CloudSqlService.syncTask(newTask).catch(() => {});
@@ -781,6 +818,11 @@ export const TaskService = {
       setLocalData('tasks', allTasks);
     }
 
+    // Update project updatedAt
+    if (updatedItem.projectId) {
+      ProjectService.touch(updatedItem.projectId).catch(() => {});
+    }
+
     // Persist to Realtime Database, Google Cloud SQL, and Data Connect
     RealtimeSyncService.syncTask(updatedItem, 'task_update').catch(() => {});
     CloudSqlService.syncTask(updatedItem).catch(() => {});
@@ -813,6 +855,11 @@ export const TaskService = {
 
     setLocalData('tasks', finalTasks);
 
+    // Update project updatedAt
+    if (task.projectId) {
+      ProjectService.touch(task.projectId).catch(() => {});
+    }
+
     // Persist to Realtime Database, Google Cloud SQL, and Data Connect
     RealtimeSyncService.syncTaskMove(task.projectId, updatedColumnTasks).catch(() => {});
     for (const t of updatedColumnTasks) {
@@ -826,8 +873,9 @@ export const TaskService = {
     const taskToDelete = allTasks.find(t => t.id === id);
     setLocalData('tasks', allTasks.filter(t => t.id !== id));
 
-    if (taskToDelete) {
+    if (taskToDelete?.projectId) {
       RealtimeSyncService.deleteTask(taskToDelete.projectId, id).catch(() => {});
+      ProjectService.touch(taskToDelete.projectId).catch(() => {});
     }
     CloudSqlService.deleteTask(id).catch(() => {});
     DataConnectService.deleteTask(id).catch(() => {});
@@ -955,6 +1003,9 @@ export const DocumentService = {
     };
 
     setLocalData('documents', [...docs, newDoc]);
+    if (newDoc.projectId) {
+      ProjectService.touch(newDoc.projectId).catch(() => {});
+    }
     CloudSqlService.syncDocument(newDoc).catch(() => {});
     return newDoc;
   },
@@ -964,6 +1015,7 @@ export const DocumentService = {
     const index = docs.findIndex(d => d.id === id);
     if (index === -1) throw new Error('Documento não encontrado');
 
+    const projectId = docs[index].projectId;
     docs[index] = {
       ...docs[index],
       ...updates,
@@ -971,13 +1023,20 @@ export const DocumentService = {
     };
 
     setLocalData('documents', docs);
+    if (projectId) {
+      ProjectService.touch(projectId).catch(() => {});
+    }
     CloudSqlService.syncDocument(docs[index]).catch(() => {});
     return docs[index];
   },
 
   async delete(id: string): Promise<void> {
     const docs = getLocalData<ProjectDocument>('documents', initialDocs);
+    const docToDelete = docs.find(d => d.id === id);
     setLocalData('documents', docs.filter(d => d.id !== id));
+    if (docToDelete?.projectId) {
+      ProjectService.touch(docToDelete.projectId).catch(() => {});
+    }
     CloudSqlService.deleteDocument(id).catch(() => {});
   }
 };
@@ -1012,6 +1071,9 @@ export const SuggestionService = {
     };
 
     setLocalData('suggestions', [newSug, ...list]);
+    if (newSug.projectId) {
+      ProjectService.touch(newSug.projectId).catch(() => {});
+    }
     CloudSqlService.syncSuggestion(newSug).catch(() => {});
     return newSug;
   },
@@ -1033,10 +1095,14 @@ export const SuggestionService = {
         updatedAt: new Date().toISOString()
       };
       setLocalData('suggestions', [...list, item]);
+      if (item.projectId) {
+        ProjectService.touch(item.projectId).catch(() => {});
+      }
       CloudSqlService.syncSuggestion(item).catch(() => {});
       return item;
     }
 
+    const projId = list[index].projectId;
     list[index] = {
       ...list[index],
       status,
@@ -1044,13 +1110,20 @@ export const SuggestionService = {
     };
 
     setLocalData('suggestions', list);
+    if (projId) {
+      ProjectService.touch(projId).catch(() => {});
+    }
     CloudSqlService.syncSuggestion(list[index]).catch(() => {});
     return list[index];
   },
 
   async delete(id: string): Promise<void> {
     const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
+    const sugToDelete = list.find(s => s.id === id);
     setLocalData('suggestions', list.filter(s => s.id !== id));
+    if (sugToDelete?.projectId) {
+      ProjectService.touch(sugToDelete.projectId).catch(() => {});
+    }
     CloudSqlService.deleteSuggestion(id).catch(() => {});
   }
 };
@@ -1085,6 +1158,9 @@ export const BugReportService = {
     };
 
     setLocalData('bugs', [newBug, ...list]);
+    if (newBug.projectId) {
+      ProjectService.touch(newBug.projectId).catch(() => {});
+    }
     CloudSqlService.syncBugReport(newBug).catch(() => {});
     return newBug;
   },
@@ -1107,10 +1183,14 @@ export const BugReportService = {
         updatedAt: new Date().toISOString()
       };
       setLocalData('bugs', [...list, item]);
+      if (item.projectId) {
+        ProjectService.touch(item.projectId).catch(() => {});
+      }
       CloudSqlService.syncBugReport(item).catch(() => {});
       return item;
     }
 
+    const projId = list[index].projectId;
     list[index] = {
       ...list[index],
       status,
@@ -1118,13 +1198,20 @@ export const BugReportService = {
     };
 
     setLocalData('bugs', list);
+    if (projId) {
+      ProjectService.touch(projId).catch(() => {});
+    }
     CloudSqlService.syncBugReport(list[index]).catch(() => {});
     return list[index];
   },
 
   async delete(id: string): Promise<void> {
     const list = getLocalData<BugReport>('bugs', initialBugs);
+    const bugToDelete = list.find(b => b.id === id);
     setLocalData('bugs', list.filter(b => b.id !== id));
+    if (bugToDelete?.projectId) {
+      ProjectService.touch(bugToDelete.projectId).catch(() => {});
+    }
     CloudSqlService.deleteBugReport(id).catch(() => {});
   },
 
@@ -1165,12 +1252,17 @@ export const MemberService = {
     };
 
     setLocalData('members', [...members, newMember]);
+    ProjectService.touch(projectId).catch(() => {});
     return newMember;
   },
 
   async removeMember(memberId: string): Promise<void> {
     const members = getLocalData<ProjectMember>('members', []);
+    const memberToDelete = members.find(m => m.id === memberId);
     setLocalData('members', members.filter(m => m.id !== memberId));
+    if (memberToDelete?.projectId) {
+      ProjectService.touch(memberToDelete.projectId).catch(() => {});
+    }
   }
 };
 

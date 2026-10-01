@@ -38,7 +38,8 @@ export const DashboardPage: React.FC = () => {
         ProjectService.getAll(user?.id),
         IdeaService.getAll(user?.id)
       ]);
-      setProjects(p);
+      const sortedProjects = [...p].sort((a, b) => new Date(b.updatedAt || b.createdAt || 0).getTime() - new Date(a.updatedAt || a.createdAt || 0).getTime());
+      setProjects(sortedProjects);
       setIdeas(i);
 
       if (p.length > 0) {
