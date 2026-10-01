@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { 
   ProjectService, 
@@ -34,8 +34,12 @@ import { SuggestionsTab } from '@/components/feedback/SuggestionsTab';
 import { BugsTab } from '@/components/feedback/BugsTab';
 import { MembersAndSettingsTab } from '@/components/project/MembersAndSettingsTab';
 
+const VALID_TABS = ['overview', 'kanban', 'docs', 'diagrams', 'suggestions', 'bugs', 'settings'] as const;
+type TabType = typeof VALID_TABS[number];
+
 export const ProjectDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
 
   const [project, setProject] = useState<Project | null>(null);
@@ -45,8 +49,31 @@ export const ProjectDetailPage: React.FC = () => {
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'kanban' | 'docs' | 'diagrams' | 'suggestions' | 'bugs' | 'settings'>('kanban');
+  const initialTabParam = searchParams.get('tab') as TabType | null;
+  const [activeTab, setActiveTab] = useState<TabType>(
+    initialTabParam && VALID_TABS.includes(initialTabParam) ? initialTabParam : 'kanban'
+  );
   const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    const tabParam = searchParams.get('tab') as TabType | null;
+    if (tabParam && VALID_TABS.includes(tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (tabId: TabType) => {
+    setActiveTab(tabId);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (tabId === 'kanban') {
+        next.delete('tab');
+      } else {
+        next.set('tab', tabId);
+      }
+      return next;
+    }, { replace: true });
+  };
 
   const loadProjectData = async () => {
     if (!id) return;
@@ -220,7 +247,7 @@ export const ProjectDetailPage: React.FC = () => {
           return (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => handleTabChange(tab.id as TabType)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-semibold text-xs transition-all shrink-0 border-b-2 ${
                 isActive
                   ? 'bg-slate-900 text-blue-400 border-blue-500 shadow-sm'

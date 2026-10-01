@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { ProjectService, TaskService } from '@/services/dbService';
-import { Project, Task } from '@/types';
+import { ProjectService, TaskService, SuggestionService, BugReportService } from '@/services/dbService';
+import { Project, Task, Suggestion, BugReport } from '@/types';
 import { 
   FolderKanban, 
   Plus, 
@@ -12,14 +12,49 @@ import {
   GitBranch, 
   ArrowRight, 
   Archive, 
-  Trash2
+  Trash2,
+  Bug,
+  Sparkles,
+  CheckCircle2,
+  ArrowUpDown,
+  Clock
 } from 'lucide-react';
 import { NewProjectModal } from './NewProjectModal';
+
+export type ProjectSortOption = 'recent' | 'name' | 'status' | 'pending';
+
+const STATUS_ORDER: Record<string, number> = {
+  EM_ANDAMENTO: 1,
+  PLANEJAMENTO: 2,
+  PAUSADO: 3,
+  CONCLUIDO: 4,
+  ARQUIVADO: 5
+};
+
+const formatDateRelative = (dateString?: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return '';
+  const now = new Date();
+  const diffMs = Math.max(0, now.getTime() - date.getTime());
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMin / 60);
+  const diffDays = Math.floor(diffHours / 24);
+
+  if (diffMin < 1) return 'agora';
+  if (diffMin < 60) return `há ${diffMin} min`;
+  if (diffHours < 24) return `há ${diffHours}h`;
+  if (diffDays === 1) return 'ontem';
+  if (diffDays < 30) return `há ${diffDays} dias`;
+  return `em ${date.toLocaleDateString('pt-BR')}`;
+};
 
 export const ProjectsListPage: React.FC = () => {
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [bugs, setBugs] = useState<BugReport[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Filters
@@ -27,7 +62,7 @@ export const ProjectsListPage: React.FC = () => {
   const [filterVisibility, setFilterVisibility] = useState<string>('ALL');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterTech, setFilterTech] = useState<string>('ALL');
-  const [sortBy, setSortBy] = useState<'recent' | 'name'>('recent');
+  const [sortBy, setSortBy] = useState<ProjectSortOption>('recent');
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
 
@@ -38,8 +73,18 @@ export const ProjectsListPage: React.FC = () => {
       setProjects(projs);
 
       if (projs.length > 0) {
-        const tasksArr = await Promise.all(projs.map(p => TaskService.getByProject(p.id)));
+        const [tasksArr, sugArr, bugArr] = await Promise.all([
+          Promise.all(projs.map(p => TaskService.getByProject(p.id))),
+          Promise.all(projs.map(p => SuggestionService.getByProject(p.id))),
+          Promise.all(projs.map(p => BugReportService.getByProject(p.id)))
+        ]);
         setTasks(tasksArr.flat());
+        setSuggestions(sugArr.flat());
+        setBugs(bugArr.flat());
+      } else {
+        setTasks([]);
+        setSuggestions([]);
+        setBugs([]);
       }
     } catch (err) {
       console.error('Error loading projects:', err);
@@ -55,6 +100,14 @@ export const ProjectsListPage: React.FC = () => {
   // Extract all unique technologies
   const allTechs = Array.from(new Set(projects.flatMap(p => p.technologies || [])));
 
+  const getOpenBugs = (projectId: string) => {
+    return bugs.filter(b => b.projectId === projectId && (b.status === 'ABERTO' || b.status === 'EM_ANALISE'));
+  };
+
+  const getOpenSuggestions = (projectId: string) => {
+    return suggestions.filter(s => s.projectId === projectId && (s.status === 'ABERTO' || s.status === 'EM_ANALISE'));
+  };
+
   // Filter & sort logic
   const filteredProjects = projects.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -68,8 +121,44 @@ export const ProjectsListPage: React.FC = () => {
 
     return matchSearch && matchVisibility && matchStatus && matchTech;
   }).sort((a, b) => {
-    if (sortBy === 'name') return a.name.localeCompare(b.name);
-    return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    if (sortBy === 'name') {
+      return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
+    }
+
+    if (sortBy === 'status') {
+      const orderA = STATUS_ORDER[a.status] || 99;
+      const orderB = STATUS_ORDER[b.status] || 99;
+      if (orderA !== orderB) return orderA - orderB;
+      const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return timeB - timeA;
+    }
+
+    if (sortBy === 'pending') {
+      const openBugsA = getOpenBugs(a.id).length;
+      const openSugsA = getOpenSuggestions(a.id).length;
+      const totalA = openBugsA + openSugsA;
+
+      const openBugsB = getOpenBugs(b.id).length;
+      const openSugsB = getOpenSuggestions(b.id).length;
+      const totalB = openBugsB + openSugsB;
+
+      if (totalB !== totalA) {
+        return totalB - totalA;
+      }
+      if (openBugsB !== openBugsA) {
+        return openBugsB - openBugsA;
+      }
+      const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+      const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+      return timeB - timeA;
+    }
+
+    // Default: 'recent' (do que teve a alteração mais recente para a mais antiga)
+    const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+    const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+    if (timeB !== timeA) return timeB - timeA;
+    return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
   });
 
   const handleArchive = async (id: string, e: React.MouseEvent) => {
@@ -177,14 +266,19 @@ export const ProjectsListPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-slate-400 font-medium">Ordenar:</span>
+            <span className="text-slate-400 font-medium flex items-center gap-1 shrink-0">
+              <ArrowUpDown className="w-3.5 h-3.5 text-blue-400" /> Ordenar:
+            </span>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as any)}
-              className="bg-slate-800 border border-slate-700 text-slate-200 rounded px-2 py-1 text-xs"
+              onChange={(e) => setSortBy(e.target.value as ProjectSortOption)}
+              className="bg-slate-800 border border-slate-700 text-slate-200 rounded px-2.5 py-1 text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none cursor-pointer"
+              aria-label="Ordenar projetos"
             >
-              <option value="recent">Mais Recentes</option>
-              <option value="name">Nome (A-Z)</option>
+              <option value="recent">Mais Recentes (Alteração)</option>
+              <option value="name">Ordem Alfabética (A-Z)</option>
+              <option value="status">Por Status</option>
+              <option value="pending">Por Pendências (Bugs & Melhorias)</option>
             </select>
           </div>
         </div>
@@ -206,6 +300,10 @@ export const ProjectsListPage: React.FC = () => {
             const projectTasks = tasks.filter(t => t.projectId === project.id);
             const doneTasks = projectTasks.filter(t => t.columnId.includes('done') || t.columnId.includes('concluid'));
             const progress = projectTasks.length > 0 ? Math.round((doneTasks.length / projectTasks.length) * 100) : 0;
+
+            const openBugs = getOpenBugs(project.id);
+            const openSugs = getOpenSuggestions(project.id);
+            const totalPending = openBugs.length + openSugs.length;
 
             return (
               <div
@@ -268,18 +366,80 @@ export const ProjectsListPage: React.FC = () => {
                       </a>
                     </div>
                   )}
+
+                  {/* Pendências (Bugs & Melhorias) */}
+                  <div className="mb-4 pt-3 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 mb-2">
+                      <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+                        Pendências
+                        {totalPending > 0 && (
+                          <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            {totalPending}
+                          </span>
+                        )}
+                      </span>
+                      {totalPending === 0 ? (
+                        <span className="text-[11px] text-emerald-400 flex items-center gap-1 font-medium">
+                          <CheckCircle2 className="w-3.5 h-3.5" /> Em dia
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">Clique para resolver</span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      {openBugs.length > 0 ? (
+                        <Link
+                          to={`/projects/${project.id}?tab=bugs`}
+                          title={`${openBugs.length} bug(s) pendente(s) - Clique para gerenciar`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 hover:bg-rose-500/25 hover:border-rose-500/50 hover:scale-[1.02] transition-all shadow-sm group"
+                        >
+                          <Bug className="w-3.5 h-3.5 text-rose-400 group-hover:scale-110 transition-transform" />
+                          <span>{openBugs.length} {openBugs.length === 1 ? 'bug' : 'bugs'}</span>
+                        </Link>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-slate-500 bg-slate-800/40 border border-slate-800">
+                          <Bug className="w-3 h-3 text-slate-500" />
+                          <span>0 bugs</span>
+                        </span>
+                      )}
+
+                      {openSugs.length > 0 ? (
+                        <Link
+                          to={`/projects/${project.id}?tab=suggestions`}
+                          title={`${openSugs.length} melhoria(s) pendente(s) - Clique para gerenciar`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25 hover:border-amber-500/50 hover:scale-[1.02] transition-all shadow-sm group"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-400 group-hover:rotate-12 transition-transform" />
+                          <span>{openSugs.length} {openSugs.length === 1 ? 'melhoria' : 'melhorias'}</span>
+                        </Link>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-medium text-slate-500 bg-slate-800/40 border border-slate-800">
+                          <Sparkles className="w-3 h-3 text-slate-500" />
+                          <span>0 melhorias</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
 
                 <div className="pt-4 border-t border-slate-800">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
                     <span>Progresso ({doneTasks.length}/{projectTasks.length} tarefas)</span>
                     <span className="font-semibold text-white">{progress}%</span>
                   </div>
-                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-4">
+                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-2.5">
                     <div
                       className="bg-gradient-to-r from-blue-500 to-cyan-400 h-1.5 rounded-full"
                       style={{ width: `${progress}%` }}
                     ></div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 mb-3">
+                    <span className="flex items-center gap-1" title={new Date(project.updatedAt || project.createdAt).toLocaleString('pt-BR')}>
+                      <Clock className="w-3 h-3 text-slate-500" />
+                      Alterado {formatDateRelative(project.updatedAt || project.createdAt)}
+                    </span>
                   </div>
 
                   <div className="flex items-center justify-between pt-1">

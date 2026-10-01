@@ -5,12 +5,14 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from '@/context/AuthContext';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { ApiDocsPage } from '@/pages/public/ApiDocsPage';
+import { ProjectsListPage } from '@/pages/projects/ProjectsListPage';
 import { TaskModal } from '@/components/kanban/TaskModal';
 import { ImageCropperModal } from '@/components/profile/ImageCropperModal';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SuggestionsTab } from '@/components/feedback/SuggestionsTab';
 import { BugsTab } from '@/components/feedback/BugsTab';
-import { ProjectColumn, Task, Suggestion, BugReport } from '@/types';
+import { ProjectService, TaskService, SuggestionService, BugReportService } from '@/services/dbService';
+import { Project, ProjectColumn, Task, Suggestion, BugReport } from '@/types';
 
 const mockColumns: ProjectColumn[] = [
   { id: 'col-1', projectId: 'p1', name: 'Backlog', key: 'backlog', position: 0, createdAt: '', updatedAt: '' },
@@ -250,5 +252,118 @@ describe('UI Components & Pages Tests', () => {
     });
 
     alertMock.mockRestore();
+  });
+
+  it('renders ProjectsListPage and sorts by recent, name, status, and pending with badges', async () => {
+    const mockProjects: Project[] = [
+      {
+        id: 'proj-a',
+        ownerId: 'u1',
+        name: 'Alpha Project',
+        slug: 'alpha-project',
+        description: 'Alpha description',
+        visibility: 'PUBLIC',
+        status: 'CONCLUIDO',
+        technologies: ['React'],
+        links: [],
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T10:00:00Z'
+      },
+      {
+        id: 'proj-b',
+        ownerId: 'u1',
+        name: 'Beta Project',
+        slug: 'beta-project',
+        description: 'Beta description',
+        visibility: 'PRIVATE',
+        status: 'PLANEJAMENTO',
+        technologies: ['TypeScript'],
+        links: [],
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T10:00:00Z'
+      },
+      {
+        id: 'proj-c',
+        ownerId: 'u1',
+        name: 'Gamma Project',
+        slug: 'gamma-project',
+        description: 'Gamma description',
+        visibility: 'SHARED',
+        status: 'EM_ANDAMENTO',
+        technologies: ['Node.js'],
+        links: [],
+        createdAt: '2026-02-01T00:00:00Z',
+        updatedAt: '2026-02-01T10:00:00Z'
+      }
+    ];
+
+    const mockBugs: BugReport[] = [
+      { id: 'b1', projectId: 'proj-b', title: 'Bug B1', description: '', severity: 'MEDIA', status: 'ABERTO', authorName: 'Tester', createdAt: '', updatedAt: '' },
+      { id: 'b2', projectId: 'proj-c', title: 'Bug C1', description: '', severity: 'ALTA', status: 'ABERTO', authorName: 'Tester', createdAt: '', updatedAt: '' },
+      { id: 'b3', projectId: 'proj-c', title: 'Bug C2', description: '', severity: 'CRITICA', status: 'EM_ANALISE', authorName: 'Tester', createdAt: '', updatedAt: '' },
+      { id: 'b4', projectId: 'proj-c', title: 'Bug C3', description: '', severity: 'BAIXA', status: 'ABERTO', authorName: 'Tester', createdAt: '', updatedAt: '' }
+    ];
+
+    const mockSuggestions: Suggestion[] = [
+      { id: 's1', projectId: 'proj-b', title: 'Sug B1', description: '', status: 'ABERTO', authorName: 'User', createdAt: '', updatedAt: '' },
+      { id: 's2', projectId: 'proj-c', title: 'Sug C1', description: '', status: 'ABERTO', authorName: 'User', createdAt: '', updatedAt: '' },
+      { id: 's3', projectId: 'proj-c', title: 'Sug C2', description: '', status: 'EM_ANALISE', authorName: 'User', createdAt: '', updatedAt: '' }
+    ];
+
+    vi.spyOn(ProjectService, 'getAll').mockResolvedValue(mockProjects);
+    vi.spyOn(TaskService, 'getByProject').mockResolvedValue([]);
+    vi.spyOn(BugReportService, 'getByProject').mockImplementation(async (pid) => mockBugs.filter(b => b.projectId === pid));
+    vi.spyOn(SuggestionService, 'getByProject').mockImplementation(async (pid) => mockSuggestions.filter(s => s.projectId === pid));
+
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <ProjectsListPage />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    // Wait for projects to load
+    await waitFor(() => {
+      expect(screen.getByText('Alpha Project')).toBeInTheDocument();
+      expect(screen.getByText('Beta Project')).toBeInTheDocument();
+      expect(screen.getByText('Gamma Project')).toBeInTheDocument();
+    });
+
+    // Verify badges on cards
+    expect(screen.getByText('3 bugs')).toBeInTheDocument();
+    expect(screen.getByText('2 melhorias')).toBeInTheDocument();
+    expect(screen.getByText('1 bug')).toBeInTheDocument();
+    expect(screen.getByText('1 melhoria')).toBeInTheDocument();
+    expect(screen.getByText('Em dia')).toBeInTheDocument();
+    expect(screen.getAllByText('0 bugs').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('0 melhorias').length).toBeGreaterThan(0);
+
+    // Verify links on badges
+    const bugLink = screen.getByRole('link', { name: /3 bugs/i });
+    expect(bugLink).toHaveAttribute('href', '/projects/proj-c?tab=bugs');
+
+    const sugLink = screen.getByRole('link', { name: /2 melhorias/i });
+    expect(sugLink).toHaveAttribute('href', '/projects/proj-c?tab=suggestions');
+
+    // 1. Default sort: Most recent update (Beta [Mar] -> Gamma [Feb] -> Alpha [Jan])
+    let titles = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent);
+    expect(titles).toEqual(['Beta Project', 'Gamma Project', 'Alpha Project']);
+
+    // 2. Sort by name: A-Z (Alpha -> Beta -> Gamma)
+    const sortSelect = screen.getByLabelText(/Ordenar projetos/i);
+    fireEvent.change(sortSelect, { target: { value: 'name' } });
+    titles = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent);
+    expect(titles).toEqual(['Alpha Project', 'Beta Project', 'Gamma Project']);
+
+    // 3. Sort by status: EM_ANDAMENTO (Gamma) -> PLANEJAMENTO (Beta) -> CONCLUIDO (Alpha)
+    fireEvent.change(sortSelect, { target: { value: 'status' } });
+    titles = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent);
+    expect(titles).toEqual(['Gamma Project', 'Beta Project', 'Alpha Project']);
+
+    // 4. Sort by pending: Gamma (5 pendências) -> Beta (2 pendências) -> Alpha (0 pendências)
+    fireEvent.change(sortSelect, { target: { value: 'pending' } });
+    titles = screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent);
+    expect(titles).toEqual(['Gamma Project', 'Beta Project', 'Alpha Project']);
   });
 });
