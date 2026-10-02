@@ -3,15 +3,15 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { ProjectService, TaskService, SuggestionService, BugReportService } from '@/services/dbService';
 import { Project, Task, Suggestion, BugReport } from '@/types';
-import { 
-  FolderKanban, 
-  Plus, 
-  Search, 
-  Globe, 
-  Lock, 
-  GitBranch, 
-  ArrowRight, 
-  Archive, 
+import {
+  FolderKanban,
+  Plus,
+  Search,
+  Globe,
+  Lock,
+  GitBranch,
+  ArrowRight,
+  Archive,
   Trash2,
   Bug,
   Sparkles,
@@ -158,6 +158,7 @@ export const ProjectsListPage: React.FC = () => {
     const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
     const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
     if (timeB !== timeA) return timeB - timeA;
+
     return a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' });
   });
 
@@ -246,9 +247,8 @@ export const ProjectsListPage: React.FC = () => {
             <span className="text-slate-400 shrink-0 font-medium">Stack:</span>
             <button
               onClick={() => setFilterTech('ALL')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
-                filterTech === 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
-              }`}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${filterTech === 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
             >
               Todos
             </button>
@@ -256,9 +256,8 @@ export const ProjectsListPage: React.FC = () => {
               <button
                 key={tech}
                 onClick={() => setFilterTech(tech)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
-                  filterTech === tech ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                }`}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${filterTech === tech ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
               >
                 {tech}
               </button>
@@ -298,7 +297,7 @@ export const ProjectsListPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => {
             const projectTasks = tasks.filter(t => t.projectId === project.id);
-            const doneTasks = projectTasks.filter(t => t.columnId.includes('done') || t.columnId.includes('concluid'));
+            const doneTasks = projectTasks.filter(t => t.columnId.includes('done') || t.columnId.includes('conclu')); // TODO Aplicar a lógica de concluído nos cards e não nas colunas
             const progress = projectTasks.length > 0 ? Math.round((doneTasks.length / projectTasks.length) * 100) : 0;
 
             const openBugs = getOpenBugs(project.id);
@@ -312,19 +311,17 @@ export const ProjectsListPage: React.FC = () => {
               >
                 <div>
                   <div className="flex items-start justify-between gap-2 mb-2">
-                    <span className={`badge ${
-                      project.visibility === 'PUBLIC' ? 'badge-public' : project.visibility === 'SHARED' ? 'badge-shared' : 'badge-private'
-                    }`}>
+                    <span className={`badge ${project.visibility === 'PUBLIC' ? 'badge-public' : project.visibility === 'SHARED' ? 'badge-shared' : 'badge-private'
+                      }`}>
                       {project.visibility === 'PUBLIC' ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                       {project.visibility}
                     </span>
 
                     <div className="flex items-center gap-1">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                        project.status === 'EM_ANDAMENTO' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' :
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${project.status === 'EM_ANDAMENTO' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' :
                         project.status === 'CONCLUIDO' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' :
-                        project.status === 'ARQUIVADO' ? 'bg-slate-700 text-slate-300' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      }`}>
+                          project.status === 'ARQUIVADO' ? 'bg-slate-700 text-slate-300' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        }`}>
                         {project.status.replace('_', ' ')}
                       </span>
                     </div>

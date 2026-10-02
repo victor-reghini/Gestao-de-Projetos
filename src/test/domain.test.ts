@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { 
   ProjectService, 
   ColumnService, 
@@ -7,8 +7,10 @@ import {
   DocumentService,
   SuggestionService,
   BugReportService,
+  isUserConnected,
   slugify 
 } from '@/services/dbService';
+import { CloudSqlService } from '@/services/cloudSqlService';
 
 describe('Domain & Business Rules Tests', () => {
   beforeEach(() => {
@@ -502,6 +504,98 @@ describe('Domain & Business Rules Tests', () => {
       await ProjectService.update(proj.id, { description: 'Nova descrição atualizada' });
       currentProj = await ProjectService.getById(proj.id);
       expect(new Date(currentProj!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(timeBeforeSettings).getTime());
+    });
+  });
+
+  describe('Connected User Database Authority & LocalStorage Bypass', () => {
+    it('ignores stale localStorage and returns exclusively database projects when connected', async () => {
+      // 1. Setup stale items in localStorage
+      localStorage.setItem('gestao_projetos_db_projects', JSON.stringify([
+        {
+          id: 'stale-proj-1',
+          ownerId: 'user-connected-123',
+          name: 'Projeto Antigo no LocalStorage',
+          slug: 'projeto-antigo-localstorage',
+          status: 'PLANEJAMENTO',
+          visibility: 'PUBLIC'
+        }
+      ]));
+
+      // 2. Mock CloudSqlService.fetchProjects returning fresh database data
+      const remoteProjects = [
+        {
+          id: 'db-proj-fresh',
+          ownerId: 'user-connected-123',
+          name: 'Projeto Fresco do Banco de Dados',
+          slug: 'projeto-fresco-banco',
+          status: 'EM_ANDAMENTO',
+          visibility: 'PUBLIC'
+        }
+      ];
+      const fetchSpy = vi.spyOn(CloudSqlService, 'fetchProjects').mockResolvedValue(remoteProjects as any);
+
+      // 3. Fetch as connected user
+      // Pass userId so isUserConnected recognizes the connected state
+      // (temporarily override NODE_ENV to simulate production/browser runtime)
+      const origEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        const result = await ProjectService.getAll('user-connected-123');
+
+        // Should return ONLY the fresh DB project and NOT the stale localStorage project
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('db-proj-fresh');
+        expect(result[0].name).toBe('Projeto Fresco do Banco de Dados');
+
+        // Should NOT contain the resurrected stale item
+        expect(result.some(p => p.id === 'stale-proj-1')).toBe(false);
+      } finally {
+        process.env.NODE_ENV = origEnv;
+        fetchSpy.mockRestore();
+      }
+    });
+
+    it('ignores stale localStorage and returns exclusively database tasks when connected', async () => {
+      // 1. Setup stale/deleted task in localStorage
+      localStorage.setItem('gestao_projetos_db_tasks', JSON.stringify([
+        {
+          id: 'stale-deleted-task',
+          projectId: 'proj-test-1',
+          columnId: 'col-1',
+          title: 'Tarefa que foi deletada no banco mas ficou no localStorage',
+          position: 0
+        }
+      ]));
+
+      // 2. Mock CloudSqlService.fetchTasks returning fresh tasks from database
+      const remoteTasks = [
+        {
+          id: 'fresh-db-task',
+          projectId: 'proj-test-1',
+          columnId: 'col-1',
+          title: 'Tarefa Atualizada no Banco',
+          position: 0
+        }
+      ];
+      const fetchSpy = vi.spyOn(CloudSqlService, 'fetchTasks').mockResolvedValue(remoteTasks as any);
+
+      const origEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      // Mock active session so isUserConnected returns true
+      sessionStorage.setItem('gestao_demo_user', JSON.stringify({ id: 'user-123' }));
+
+      try {
+        const result = await TaskService.getByProject('proj-test-1');
+
+        // Should return ONLY the database task
+        expect(result).toHaveLength(1);
+        expect(result[0].id).toBe('fresh-db-task');
+        expect(result.some(t => t.id === 'stale-deleted-task')).toBe(false);
+      } finally {
+        process.env.NODE_ENV = origEnv;
+        sessionStorage.removeItem('gestao_demo_user');
+        fetchSpy.mockRestore();
+      }
     });
   });
 });

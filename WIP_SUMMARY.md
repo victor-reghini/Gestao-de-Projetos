@@ -19,6 +19,11 @@
    - **Valor Padrão (Prioridade 1):** Variáveis de ambiente configuradas no sistema/host (`process.env` no runtime Node/Netlify ou `import.meta.env` no client Vite).
    - **Fallback Dinâmico (Prioridade 2):** Leitura direta dos documentos `.env` locais (`.env` e `.env.local`), carregados dinamicamente via `process.loadEnvFile` ou parser local, impedindo valores vazios sem expor credenciais fixas no código-fonte.
 
+4. **Autoridade Estrita do Banco de Dados para Usuários Conectados:**
+   - Quando o usuário estiver conectado (sessão ativa com conta real ou demo), o sistema ignora completamente o `localStorage` na leitura de entidades (projetos, colunas, atividades, ideias, documentos, sugestões e bugs).
+   - Eliminação da mesclagem com `localOnly`, impedindo a ressurreição de dados obsoletos ou deletados.
+   - O `localStorage` passa a atuar apenas como espelho passivo do banco e fallback para quando o usuário estiver offline/desconectado.
+
 ---
 
 ## 📁 Arquivos Modificados
@@ -51,7 +56,7 @@
 ## 🧪 Validação e Testes
 
 - **TypeScript:** `rtk npx tsc --noEmit` ➔ 0 erros.
-- **Suíte de Testes (Vitest):** `rtk npm test` ➔ 57 testes passando em 5 arquivos (`data-connect.test.ts`, `realtime-sync.test.ts`, `domain.test.ts`, `components.test.tsx`, `firebase-production.test.ts`).
+- **Suíte de Testes (Vitest):** `rtk npm test` ➔ 59 testes passando em 5 arquivos (`data-connect.test.ts`, `realtime-sync.test.ts`, `domain.test.ts`, `components.test.tsx`, `firebase-production.test.ts`).
 - **Build de Produção:** `rtk npm run build` (`tsc -b && vite build`) ➔ Gerado com sucesso.
 - **Git Ignore:** Confirmado que `.env` e `.env.local` não são rastreados (`git check-ignore`).
 

@@ -1,5 +1,5 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from './firebase';
+import { storage, auth } from './firebase';
 import { 
   Project, 
   ProjectColumn, 
@@ -294,8 +294,22 @@ export function slugify(text: string): string {
     .replace(/-+/g, '-');
 }
 
+export function isUserConnected(userId?: string): boolean {
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+    return false;
+  }
+  if (userId) return true;
+  try {
+    if (auth && auth.currentUser) return true;
+    if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('gestao_demo_user')) return true;
+  } catch {}
+  return false;
+}
+
 // Ensure local seed on first load
 function ensureSeedData() {
+  if (typeof localStorage === 'undefined') return;
+  if (isUserConnected()) return;
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'projects')) {
     setLocalData('projects', initialProjects);
   }
@@ -326,22 +340,26 @@ ensureSeedData();
 // --- PROJECT SERVICE ---
 export const ProjectService = {
   async getAll(userId?: string): Promise<Project[]> {
-    const local = getLocalData<Project>('projects', initialProjects);
-    try {
-      const remote = await CloudSqlService.fetchProjects();
-      if (remote && remote.length > 0) {
-        const remoteMap = new Map(remote.map(p => [p.id, p]));
-        const localOnly = local.filter(p => !remoteMap.has(p.id));
-        const merged = [...remote, ...localOnly];
-        setLocalData('projects', merged);
-        if (userId) {
-          return merged.filter(p => p.ownerId === userId || p.visibility === 'PUBLIC' || p.visibility === 'SHARED');
+    const connected = isUserConnected(userId);
+
+    // Quando o usuário estiver conectado, ignora o localStorage e consome os dados atualizados do banco
+    if (connected) {
+      try {
+        const remote = await CloudSqlService.fetchProjects();
+        if (remote !== null) {
+          setLocalData('projects', remote);
+          if (userId) {
+            return remote.filter(p => p.ownerId === userId || p.visibility === 'PUBLIC' || p.visibility === 'SHARED');
+          }
+          return remote;
         }
-        return merged;
+      } catch (err) {
+        console.warn('Falha ao buscar projetos do banco de dados:', err);
       }
-    } catch {
-      // offline fallback
     }
+
+    // Modo offline / fallback
+    const local = getLocalData<Project>('projects', initialProjects);
     if (userId) {
       return local.filter(p => p.ownerId === userId || p.visibility === 'PUBLIC' || p.visibility === 'SHARED');
     }
@@ -354,24 +372,31 @@ export const ProjectService = {
   },
 
   async getById(id: string): Promise<Project | null> {
+    const connected = isUserConnected();
+
+    // Se conectado, prioriza buscar diretamente do banco para dados mais recentes
+    if (connected) {
+      try {
+        const remote = await CloudSqlService.fetchProjectByIdOrSlug(id);
+        if (remote) {
+          const local = getLocalData<Project>('projects', initialProjects);
+          setLocalData('projects', [...local.filter(p => p.id !== remote.id), remote]);
+          return remote;
+        }
+      } catch (err) {
+        console.warn('Falha ao buscar projeto por ID do banco de dados:', err);
+      }
+    }
+
+    // Fallback offline / não conectado
     const local = getLocalData<Project>('projects', initialProjects);
     const found = local.find(p => p.id === id);
-    if (found) {
-      // Background revalidation
-      CloudSqlService.fetchProjectByIdOrSlug(id).then(remote => {
-        if (remote) {
-          const updated = [...local.filter(p => p.id !== remote.id), remote];
-          setLocalData('projects', updated);
-        }
-      }).catch(() => {});
-      return found;
-    }
+    if (found) return found;
 
     try {
       const remote = await CloudSqlService.fetchProjectByIdOrSlug(id);
       if (remote) {
-        const updated = [...local.filter(p => p.id !== remote.id), remote];
-        setLocalData('projects', updated);
+        setLocalData('projects', [...local.filter(p => p.id !== remote.id), remote]);
         return remote;
       }
     } catch (err) {
@@ -381,24 +406,31 @@ export const ProjectService = {
   },
 
   async getBySlug(slug: string): Promise<Project | null> {
+    const connected = isUserConnected();
+
+    // Se conectado, prioriza buscar diretamente do banco para dados mais recentes
+    if (connected) {
+      try {
+        const remote = await CloudSqlService.fetchProjectByIdOrSlug(slug);
+        if (remote) {
+          const local = getLocalData<Project>('projects', initialProjects);
+          setLocalData('projects', [...local.filter(p => p.id !== remote.id), remote]);
+          return remote;
+        }
+      } catch (err) {
+        console.warn('Falha ao buscar projeto por slug do banco de dados:', err);
+      }
+    }
+
+    // Fallback offline / não conectado
     const local = getLocalData<Project>('projects', initialProjects);
     const found = local.find(p => p.slug === slug || p.id === slug);
-    if (found) {
-      // Background revalidation
-      CloudSqlService.fetchProjectByIdOrSlug(slug).then(remote => {
-        if (remote) {
-          const updated = [...local.filter(p => p.id !== remote.id), remote];
-          setLocalData('projects', updated);
-        }
-      }).catch(() => {});
-      return found;
-    }
+    if (found) return found;
 
     try {
       const remote = await CloudSqlService.fetchProjectByIdOrSlug(slug);
       if (remote) {
-        const updated = [...local.filter(p => p.id !== remote.id), remote];
-        setLocalData('projects', updated);
+        setLocalData('projects', [...local.filter(p => p.id !== remote.id), remote]);
         return remote;
       }
     } catch (err) {
@@ -508,21 +540,30 @@ export function deduplicateColumns(columns: ProjectColumn[]): ProjectColumn[] {
 // --- KANBAN COLUMNS SERVICE ---
 export const ColumnService = {
   async getByProject(projectId: string): Promise<ProjectColumn[]> {
+    const connected = isUserConnected();
+
+    if (connected) {
+      try {
+        const remoteCols = await CloudSqlService.fetchColumns(projectId);
+        if (remoteCols !== null) {
+          if (remoteCols.length > 0) {
+            const finalCols = deduplicateColumns(remoteCols);
+            const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+            const otherCols = allCols.filter(c => c.projectId !== projectId);
+            setLocalData('columns', [...otherCols, ...finalCols]);
+            RealtimeSyncService.syncColumns(projectId, finalCols, 'sync_columns').catch(() => {});
+            return finalCols;
+          }
+          // Projeto novo no banco sem colunas criadas ainda
+          return await this.createDefaultColumns(projectId);
+        }
+      } catch (err) {
+        console.warn('Falha ao buscar colunas do banco de dados:', err);
+      }
+    }
+
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
     let localCols = deduplicateColumns(allCols.filter(c => c.projectId === projectId));
-
-    try {
-      const remoteCols = await CloudSqlService.fetchColumns(projectId);
-      if (remoteCols && remoteCols.length > 0) {
-        const finalCols = deduplicateColumns(remoteCols);
-        const otherCols = allCols.filter(c => c.projectId !== projectId);
-        setLocalData('columns', [...otherCols, ...finalCols]);
-        RealtimeSyncService.syncColumns(projectId, finalCols, 'sync_columns').catch(() => {});
-        return finalCols;
-      }
-    } catch (err) {
-      console.warn('Failed to fetch columns from Cloud SQL:', err);
-    }
 
     if (localCols.length === 0) {
       localCols = await this.createDefaultColumns(projectId);
@@ -707,27 +748,28 @@ export const ColumnService = {
 // --- TASKS SERVICE ---
 export const TaskService = {
   async getByProject(projectId: string): Promise<Task[]> {
-    const allTasks = getLocalData<Task>('tasks', initialTasks);
-    let localTasks = allTasks.filter(t => t.projectId === projectId).sort((a, b) => a.position - b.position);
+    const connected = isUserConnected();
 
-    try {
-      const remoteTasks = await CloudSqlService.fetchTasks(projectId);
-      if (remoteTasks && remoteTasks.length > 0) {
-        const remoteMap = new Map(remoteTasks.map(t => [t.id, t]));
-        const otherTasks = allTasks.filter(t => t.projectId !== projectId);
-        const localOnly = allTasks.filter(t => t.projectId === projectId && !remoteMap.has(t.id));
-        const mergedThisProject = [...remoteTasks, ...localOnly].sort((a, b) => a.position - b.position);
+    if (connected) {
+      try {
+        const remoteTasks = await CloudSqlService.fetchTasks(projectId);
+        if (remoteTasks !== null) {
+          const sorted = [...remoteTasks].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+          const allTasks = getLocalData<Task>('tasks', initialTasks);
+          const otherTasks = allTasks.filter(t => t.projectId !== projectId);
+          setLocalData('tasks', [...otherTasks, ...sorted]);
 
-        const finalAll = [...otherTasks, ...mergedThisProject];
-        setLocalData('tasks', finalAll);
-
-        const allCols = getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId);
-        RealtimeSyncService.syncFullProjectBoard(projectId, allCols, mergedThisProject).catch(() => {});
-        return mergedThisProject;
+          const allCols = getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId);
+          RealtimeSyncService.syncFullProjectBoard(projectId, allCols, sorted).catch(() => {});
+          return sorted;
+        }
+      } catch (err) {
+        console.warn('Falha ao buscar atividades do banco de dados:', err);
       }
-    } catch (err) {
-      console.warn('Failed to fetch tasks from Cloud SQL:', err);
     }
+
+    const allTasks = getLocalData<Task>('tasks', initialTasks);
+    const localTasks = allTasks.filter(t => t.projectId === projectId).sort((a, b) => a.position - b.position);
 
     // Cache to Realtime Database
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId);
@@ -885,20 +927,24 @@ export const TaskService = {
 // --- IDEAS SERVICE ---
 export const IdeaService = {
   async getAll(userId?: string): Promise<Idea[]> {
-    const local = getLocalData<Idea>('ideas', initialIdeas);
-    try {
-      const remote = await CloudSqlService.fetchIdeas();
-      if (remote && remote.length > 0) {
-        const remoteMap = new Map(remote.map(i => [i.id, i]));
-        const localOnly = local.filter(i => !remoteMap.has(i.id));
-        const merged = [...remote, ...localOnly];
-        setLocalData('ideas', merged);
-        if (userId) {
-          return merged.filter(i => i.ownerId === userId || i.visibility === 'PUBLIC' || i.visibility === 'SHARED');
+    const connected = isUserConnected(userId);
+
+    if (connected) {
+      try {
+        const remote = await CloudSqlService.fetchIdeas();
+        if (remote !== null) {
+          setLocalData('ideas', remote);
+          if (userId) {
+            return remote.filter(i => i.ownerId === userId || i.visibility === 'PUBLIC' || i.visibility === 'SHARED');
+          }
+          return remote;
         }
-        return merged;
+      } catch (err) {
+        console.warn('Falha ao buscar ideias do banco de dados:', err);
       }
-    } catch {}
+    }
+
+    const local = getLocalData<Idea>('ideas', initialIdeas);
     if (userId) {
       return local.filter(i => i.ownerId === userId || i.visibility === 'PUBLIC' || i.visibility === 'SHARED');
     }
@@ -906,6 +952,21 @@ export const IdeaService = {
   },
 
   async getById(id: string): Promise<Idea | null> {
+    const connected = isUserConnected();
+
+    if (connected) {
+      try {
+        const remote = await CloudSqlService.fetchIdeas();
+        if (remote !== null) {
+          const found = remote.find(i => i.id === id);
+          if (found) {
+            setLocalData('ideas', remote);
+            return found;
+          }
+        }
+      } catch {}
+    }
+
     const local = getLocalData<Idea>('ideas', initialIdeas);
     return local.find(i => i.id === id) || null;
   },
@@ -977,18 +1038,24 @@ export const IdeaService = {
 // --- PROJECT DOCUMENTS SERVICE ---
 export const DocumentService = {
   async getByProject(projectId: string): Promise<ProjectDocument[]> {
-    const docs = getLocalData<ProjectDocument>('documents', initialDocs);
-    try {
-      const remote = await CloudSqlService.fetchDocuments(projectId);
-      if (remote && remote.length > 0) {
-        const remoteMap = new Map(remote.map(d => [d.id, d]));
-        const otherDocs = docs.filter(d => d.projectId !== projectId);
-        const localOnly = docs.filter(d => d.projectId === projectId && !remoteMap.has(d.id));
-        const merged = [...remote, ...localOnly].sort((a, b) => a.position - b.position);
-        setLocalData('documents', [...otherDocs, ...merged]);
-        return merged;
+    const connected = isUserConnected();
+
+    if (connected) {
+      try {
+        const remote = await CloudSqlService.fetchDocuments(projectId);
+        if (remote !== null) {
+          const sorted = [...remote].sort((a, b) => a.position - b.position);
+          const docs = getLocalData<ProjectDocument>('documents', initialDocs);
+          const otherDocs = docs.filter(d => d.projectId !== projectId);
+          setLocalData('documents', [...otherDocs, ...sorted]);
+          return sorted;
+        }
+      } catch (err) {
+        console.warn('Falha ao buscar documentos do banco de dados:', err);
       }
-    } catch {}
+    }
+
+    const docs = getLocalData<ProjectDocument>('documents', initialDocs);
     return docs.filter(d => d.projectId === projectId).sort((a, b) => a.position - b.position);
   },
 
@@ -1044,18 +1111,24 @@ export const DocumentService = {
 // --- SUGGESTIONS SERVICE ---
 export const SuggestionService = {
   async getByProject(projectId: string): Promise<Suggestion[]> {
-    const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
-    try {
-      const remote = await CloudSqlService.fetchSuggestions(projectId);
-      if (remote && remote.length > 0) {
-        const remoteMap = new Map(remote.map(s => [s.id, s]));
-        const other = list.filter(s => s.projectId !== projectId);
-        const localOnly = list.filter(s => s.projectId === projectId && !remoteMap.has(s.id));
-        const merged = [...remote, ...localOnly];
-        setLocalData('suggestions', [...other, ...merged]);
-        return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const connected = isUserConnected();
+
+    if (connected) {
+      try {
+        const remote = await CloudSqlService.fetchSuggestions(projectId);
+        if (remote !== null) {
+          const sorted = [...remote].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
+          const other = list.filter(s => s.projectId !== projectId);
+          setLocalData('suggestions', [...other, ...sorted]);
+          return sorted;
+        }
+      } catch (err) {
+        console.warn('Falha ao buscar sugestões do banco de dados:', err);
       }
-    } catch {}
+    }
+
+    const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
     return list.filter(s => s.projectId === projectId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
@@ -1131,18 +1204,24 @@ export const SuggestionService = {
 // --- BUG REPORT SERVICE ---
 export const BugReportService = {
   async getByProject(projectId: string): Promise<BugReport[]> {
-    const list = getLocalData<BugReport>('bugs', initialBugs);
-    try {
-      const remote = await CloudSqlService.fetchBugs(projectId);
-      if (remote && remote.length > 0) {
-        const remoteMap = new Map(remote.map(b => [b.id, b]));
-        const other = list.filter(b => b.projectId !== projectId);
-        const localOnly = list.filter(b => b.projectId === projectId && !remoteMap.has(b.id));
-        const merged = [...remote, ...localOnly];
-        setLocalData('bugs', [...other, ...merged]);
-        return merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const connected = isUserConnected();
+
+    if (connected) {
+      try {
+        const remote = await CloudSqlService.fetchBugs(projectId);
+        if (remote !== null) {
+          const sorted = [...remote].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          const list = getLocalData<BugReport>('bugs', initialBugs);
+          const other = list.filter(b => b.projectId !== projectId);
+          setLocalData('bugs', [...other, ...sorted]);
+          return sorted;
+        }
+      } catch (err) {
+        console.warn('Falha ao buscar bugs do banco de dados:', err);
       }
-    } catch {}
+    }
+
+    const list = getLocalData<BugReport>('bugs', initialBugs);
     return list.filter(b => b.projectId === projectId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   },
 
@@ -1316,46 +1395,26 @@ export async function hydrateFromCloudSql(): Promise<boolean> {
     const all = await CloudSqlService.fetchAll();
     if (!all) return false;
 
-    if (all.projects && all.projects.length > 0) {
-      const local = getLocalData<Project>('projects', initialProjects);
-      const remoteMap = new Map(all.projects.map(p => [p.id, p]));
-      const localOnly = local.filter(p => !remoteMap.has(p.id));
-      setLocalData('projects', [...all.projects, ...localOnly]);
+    if (all.projects && Array.isArray(all.projects)) {
+      setLocalData('projects', all.projects);
     }
-    if (all.columns && all.columns.length > 0) {
-      const local = getLocalData<ProjectColumn>('columns', initialColumns);
-      const combined = deduplicateColumns([...all.columns, ...local]);
-      setLocalData('columns', combined);
+    if (all.columns && Array.isArray(all.columns)) {
+      setLocalData('columns', deduplicateColumns(all.columns));
     }
-    if (all.tasks && all.tasks.length > 0) {
-      const local = getLocalData<Task>('tasks', initialTasks);
-      const remoteMap = new Map(all.tasks.map(t => [t.id, t]));
-      const localOnly = local.filter(t => !remoteMap.has(t.id));
-      setLocalData('tasks', [...all.tasks, ...localOnly]);
+    if (all.tasks && Array.isArray(all.tasks)) {
+      setLocalData('tasks', all.tasks);
     }
-    if (all.ideas && all.ideas.length > 0) {
-      const local = getLocalData<Idea>('ideas', initialIdeas);
-      const remoteMap = new Map(all.ideas.map(i => [i.id, i]));
-      const localOnly = local.filter(i => !remoteMap.has(i.id));
-      setLocalData('ideas', [...all.ideas, ...localOnly]);
+    if (all.ideas && Array.isArray(all.ideas)) {
+      setLocalData('ideas', all.ideas);
     }
-    if (all.documents && all.documents.length > 0) {
-      const local = getLocalData<ProjectDocument>('documents', initialDocs);
-      const remoteMap = new Map(all.documents.map(d => [d.id, d]));
-      const localOnly = local.filter(d => !remoteMap.has(d.id));
-      setLocalData('documents', [...all.documents, ...localOnly]);
+    if (all.documents && Array.isArray(all.documents)) {
+      setLocalData('documents', all.documents);
     }
-    if (all.suggestions && all.suggestions.length > 0) {
-      const local = getLocalData<Suggestion>('suggestions', initialSuggestions);
-      const remoteMap = new Map(all.suggestions.map(s => [s.id, s]));
-      const localOnly = local.filter(s => !remoteMap.has(s.id));
-      setLocalData('suggestions', [...all.suggestions, ...localOnly]);
+    if (all.suggestions && Array.isArray(all.suggestions)) {
+      setLocalData('suggestions', all.suggestions);
     }
-    if (all.bugs && all.bugs.length > 0) {
-      const local = getLocalData<BugReport>('bugs', initialBugs);
-      const remoteMap = new Map(all.bugs.map(b => [b.id, b]));
-      const localOnly = local.filter(b => !remoteMap.has(b.id));
-      setLocalData('bugs', [...all.bugs, ...localOnly]);
+    if (all.bugs && Array.isArray(all.bugs)) {
+      setLocalData('bugs', all.bugs);
     }
     return true;
   } catch (err) {

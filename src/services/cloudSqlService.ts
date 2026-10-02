@@ -48,17 +48,17 @@ export const CloudSqlService = {
   },
 
   // Read operations from Cloud SQL
-  async fetchProjects(): Promise<Project[]> {
-    if (IS_TEST) return [];
+  async fetchProjects(): Promise<Project[] | null> {
+    if (IS_TEST) return null;
     try {
       const res = await fetch('/api/v1/cloudsql/projects');
       if (res.ok) {
         const json = await res.json();
         return json.data || [];
       }
-      return [];
+      return null;
     } catch {
-      return [];
+      return null;
     }
   },
 
@@ -76,8 +76,8 @@ export const CloudSqlService = {
     }
   },
 
-  async fetchColumns(projectId?: string): Promise<ProjectColumn[]> {
-    if (IS_TEST) return [];
+  async fetchColumns(projectId?: string): Promise<ProjectColumn[] | null> {
+    if (IS_TEST) return null;
     try {
       const url = projectId 
         ? `/api/v1/cloudsql/columns?projectId=${encodeURIComponent(projectId)}`
@@ -87,14 +87,14 @@ export const CloudSqlService = {
         const json = await res.json();
         return json.data || [];
       }
-      return [];
+      return null;
     } catch {
-      return [];
+      return null;
     }
   },
 
-  async fetchTasks(projectId?: string): Promise<Task[]> {
-    if (IS_TEST) return [];
+  async fetchTasks(projectId?: string): Promise<Task[] | null> {
+    if (IS_TEST) return null;
     try {
       const url = projectId 
         ? `/api/v1/cloudsql/tasks?projectId=${encodeURIComponent(projectId)}`
@@ -104,28 +104,28 @@ export const CloudSqlService = {
         const json = await res.json();
         return json.data || [];
       }
-      return [];
+      return null;
     } catch {
-      return [];
+      return null;
     }
   },
 
-  async fetchIdeas(): Promise<Idea[]> {
-    if (IS_TEST) return [];
+  async fetchIdeas(): Promise<Idea[] | null> {
+    if (IS_TEST) return null;
     try {
       const res = await fetch('/api/v1/cloudsql/ideas');
       if (res.ok) {
         const json = await res.json();
         return json.data || [];
       }
-      return [];
+      return null;
     } catch {
-      return [];
+      return null;
     }
   },
 
-  async fetchDocuments(projectId?: string): Promise<ProjectDocument[]> {
-    if (IS_TEST) return [];
+  async fetchDocuments(projectId?: string): Promise<ProjectDocument[] | null> {
+    if (IS_TEST) return null;
     try {
       const url = projectId 
         ? `/api/v1/cloudsql/documents?projectId=${encodeURIComponent(projectId)}`
@@ -135,14 +135,14 @@ export const CloudSqlService = {
         const json = await res.json();
         return json.data || [];
       }
-      return [];
+      return null;
     } catch {
-      return [];
+      return null;
     }
   },
 
-  async fetchSuggestions(projectId?: string): Promise<Suggestion[]> {
-    if (IS_TEST) return [];
+  async fetchSuggestions(projectId?: string): Promise<Suggestion[] | null> {
+    if (IS_TEST) return null;
     try {
       const url = projectId 
         ? `/api/v1/cloudsql/suggestions?projectId=${encodeURIComponent(projectId)}`
@@ -152,14 +152,14 @@ export const CloudSqlService = {
         const json = await res.json();
         return json.data || [];
       }
-      return [];
+      return null;
     } catch {
-      return [];
+      return null;
     }
   },
 
-  async fetchBugs(projectId?: string): Promise<BugReport[]> {
-    if (IS_TEST) return [];
+  async fetchBugs(projectId?: string): Promise<BugReport[] | null> {
+    if (IS_TEST) return null;
     try {
       const url = projectId 
         ? `/api/v1/cloudsql/bugs?projectId=${encodeURIComponent(projectId)}`
@@ -169,9 +169,9 @@ export const CloudSqlService = {
         const json = await res.json();
         return json.data || [];
       }
-      return [];
+      return null;
     } catch {
-      return [];
+      return null;
     }
   },
 
