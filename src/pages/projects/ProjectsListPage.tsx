@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { ProjectService, TaskService, SuggestionService, BugReportService } from '@/services/dbService';
-import { Project, Task, Suggestion, BugReport } from '@/types';
+import { ProjectService, TaskService, ColumnService, SuggestionService, BugReportService } from '@/services/dbService';
+import { Project, Task, ProjectColumn, Suggestion, BugReport } from '@/types';
 import {
   FolderKanban,
   Plus,
@@ -20,6 +20,7 @@ import {
   Clock
 } from 'lucide-react';
 import { NewProjectModal } from './NewProjectModal';
+import { ProjectColumnProgressBar } from '@/components/project/ProjectColumnProgressBar';
 
 export type ProjectSortOption = 'recent' | 'name' | 'status' | 'pending';
 
@@ -53,6 +54,7 @@ export const ProjectsListPage: React.FC = () => {
   const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [columns, setColumns] = useState<ProjectColumn[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [bugs, setBugs] = useState<BugReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,16 +77,19 @@ export const ProjectsListPage: React.FC = () => {
       setProjects(projs);
 
       if (projs.length > 0) {
-        const [tasksArr, sugArr, bugArr] = await Promise.all([
+        const [tasksArr, colsArr, sugArr, bugArr] = await Promise.all([
           Promise.all(projs.map(p => TaskService.getByProject(p.id))),
+          Promise.all(projs.map(p => ColumnService.getByProject(p.id).catch(() => []))),
           Promise.all(projs.map(p => SuggestionService.getByProject(p.id))),
           Promise.all(projs.map(p => BugReportService.getByProject(p.id)))
         ]);
         setTasks(tasksArr.flat());
+        setColumns(colsArr.flat());
         setSuggestions(sugArr.flat());
         setBugs(bugArr.flat());
       } else {
         setTasks([]);
+        setColumns([]);
         setSuggestions([]);
         setBugs([]);
       }
@@ -307,9 +312,6 @@ export const ProjectsListPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => {
             const projectTasks = tasks.filter(t => t.projectId === project.id);
-            const doneTasks = projectTasks.filter(t => t.concluded ?? (t.columnId.includes('done') || t.columnId.includes('conclu')));
-            const progress = projectTasks.length > 0 ? Math.round((doneTasks.length / projectTasks.length) * 100) : 0;
-
             const openBugs = getOpenBugs(project.id);
             const openSugs = getOpenSuggestions(project.id);
             const totalPending = openBugs.length + openSugs.length;
@@ -431,15 +433,12 @@ export const ProjectsListPage: React.FC = () => {
                 </div>
 
                 <div className="pt-4 border-t border-slate-800">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                    <span>Progresso ({doneTasks.length}/{projectTasks.length} tarefas)</span>
-                    <span className="font-semibold text-white">{progress}%</span>
-                  </div>
-                  <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden mb-2.5">
-                    <div
-                      className="bg-gradient-to-r from-blue-500 to-cyan-400 h-1.5 rounded-full"
-                      style={{ width: `${progress}%` }}
-                    ></div>
+                  <div className="mb-3">
+                    <ProjectColumnProgressBar
+                      projectId={project.id}
+                      tasks={projectTasks}
+                      columns={columns.filter(c => c.projectId === project.id)}
+                    />
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-slate-500 mb-3">
