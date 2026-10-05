@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ColumnService } from '@/services/dbService';
 import { ProjectColumn } from '@/types';
-import { X, Columns, Trash2 } from 'lucide-react';
+import { X, Columns, Trash2, CheckCircle2 } from 'lucide-react';
 
 interface ColumnModalProps {
   isOpen: boolean;
@@ -33,6 +33,7 @@ export const ColumnModal: React.FC<ColumnModalProps> = ({
 }) => {
   const [name, setName] = useState('');
   const [color, setColor] = useState('#6366f1');
+  const [autoComplete, setAutoComplete] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,9 +41,11 @@ export const ColumnModal: React.FC<ColumnModalProps> = ({
     if (columnToEdit) {
       setName(columnToEdit.name);
       setColor(columnToEdit.color || '#6366f1');
+      setAutoComplete(Boolean(columnToEdit.autoComplete));
     } else {
       setName('');
       setColor(PRESET_COLORS[columnsCount % PRESET_COLORS.length]);
+      setAutoComplete(false);
     }
   }, [columnToEdit, columnsCount, isOpen]);
 
@@ -57,9 +60,9 @@ export const ColumnModal: React.FC<ColumnModalProps> = ({
 
     try {
       if (columnToEdit) {
-        await ColumnService.update(columnToEdit.id, { name, color });
+        await ColumnService.update(columnToEdit.id, { name, color, autoComplete });
       } else {
-        await ColumnService.create(projectId, name, color);
+        await ColumnService.create(projectId, name, color, autoComplete);
       }
       onSaved();
       onClose();
@@ -119,6 +122,26 @@ export const ColumnModal: React.FC<ColumnModalProps> = ({
                   style={{ backgroundColor: c }}
                 />
               ))}
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 cursor-pointer" onClick={() => setAutoComplete(!autoComplete)}>
+            <input
+              id="col-autocomplete-check"
+              type="checkbox"
+              checked={autoComplete}
+              onChange={(e) => setAutoComplete(e.target.checked)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-4 h-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 bg-slate-900 border-slate-700 cursor-pointer"
+            />
+            <div className="select-none">
+              <label htmlFor="col-autocomplete-check" className="text-sm font-medium text-slate-200 cursor-pointer flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                <CheckCircle2 className={`w-4 h-4 ${autoComplete ? 'text-emerald-400' : 'text-slate-400'}`} />
+                Concluir atividades automaticamente
+              </label>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Atividades movidas para esta coluna serão marcadas como concluídas.
+              </p>
             </div>
           </div>
 

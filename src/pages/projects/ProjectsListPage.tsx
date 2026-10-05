@@ -297,7 +297,7 @@ export const ProjectsListPage: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredProjects.map((project) => {
             const projectTasks = tasks.filter(t => t.projectId === project.id);
-            const doneTasks = projectTasks.filter(t => t.columnId.includes('done') || t.columnId.includes('conclu')); // TODO Aplicar a lógica de concluído nos cards e não nas colunas
+            const doneTasks = projectTasks.filter(t => t.concluded ?? (t.columnId.includes('done') || t.columnId.includes('conclu')));
             const progress = projectTasks.length > 0 ? Math.round((doneTasks.length / projectTasks.length) * 100) : 0;
 
             const openBugs = getOpenBugs(project.id);

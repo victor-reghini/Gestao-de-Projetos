@@ -1,13 +1,13 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage, auth } from './firebase';
-import { 
-  Project, 
-  ProjectColumn, 
-  Task, 
-  Idea, 
-  ProjectMember, 
-  ProjectDocument, 
-  Suggestion, 
+import {
+  Project,
+  ProjectColumn,
+  Task,
+  Idea,
+  ProjectMember,
+  ProjectDocument,
+  Suggestion,
   BugReport,
   Visibility,
   ProjectStatus
@@ -22,7 +22,7 @@ export function sanitizeForFirestore<T>(data: T): T {
 }
 
 export function safeFirestoreWrite(promise: Promise<any>): void {
-  promise.catch(() => {});
+  promise.catch(() => { });
 }
 
 export async function safeFirestoreQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
@@ -104,14 +104,14 @@ export const initialProjects: Project[] = [
 ];
 
 export const initialColumns: ProjectColumn[] = [
-  { id: 'col-1', projectId: 'proj-1', name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'col-2', projectId: 'proj-1', name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'col-3', projectId: 'proj-1', name: 'Revisão / Testes', key: 'review', position: 2, color: '#f59e0b', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'col-4', projectId: 'proj-1', name: 'Concluído', key: 'done', position: 3, color: '#10b981', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'col-1', projectId: 'proj-1', name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', autoComplete: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'col-2', projectId: 'proj-1', name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1', autoComplete: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'col-3', projectId: 'proj-1', name: 'Revisão / Testes', key: 'review', position: 2, color: '#f59e0b', autoComplete: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'col-4', projectId: 'proj-1', name: 'Concluído', key: 'done', position: 3, color: '#10b981', autoComplete: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
 
-  { id: 'col-20', projectId: 'proj-2', name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'col-21', projectId: 'proj-2', name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
-  { id: 'col-22', projectId: 'proj-2', name: 'Concluído', key: 'done', position: 2, color: '#10b981', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  { id: 'col-20', projectId: 'proj-2', name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', autoComplete: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'col-21', projectId: 'proj-2', name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1', autoComplete: false, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+  { id: 'col-22', projectId: 'proj-2', name: 'Concluído', key: 'done', position: 2, color: '#10b981', autoComplete: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
 ];
 
 export const initialTasks: Task[] = [
@@ -123,6 +123,7 @@ export const initialTasks: Task[] = [
     description: 'Criar handlers REST em Netlify Functions com rate limiting e documentação Swagger.',
     priority: 'ALTA',
     position: 0,
+    concluded: false,
     dueDate: new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0],
     createdById: 'demo-user-123',
     createdByName: 'Victor Reghini',
@@ -137,6 +138,7 @@ export const initialTasks: Task[] = [
     description: 'Adicionar suporte dinâmico no editor de documentação para gráficos Mermaid interativos.',
     priority: 'MEDIA',
     position: 1,
+    concluded: false,
     dueDate: new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0],
     createdById: 'demo-user-123',
     createdByName: 'Victor Reghini',
@@ -151,6 +153,7 @@ export const initialTasks: Task[] = [
     description: 'Criar tokens CSS, suporte a modo escuro, glassmorphism e micro-animações.',
     priority: 'ALTA',
     position: 0,
+    concluded: true,
     dueDate: new Date().toISOString().split('T')[0],
     createdById: 'demo-user-123',
     createdByName: 'Victor Reghini',
@@ -165,6 +168,7 @@ export const initialTasks: Task[] = [
     description: 'Receber notificações automáticas de commits e pull requests.',
     priority: 'BAIXA',
     position: 0,
+    concluded: false,
     dueDate: new Date(Date.now() + 10 * 86400000).toISOString().split('T')[0],
     createdById: 'demo-user-123',
     createdByName: 'Victor Reghini',
@@ -302,7 +306,7 @@ export function isUserConnected(userId?: string): boolean {
   try {
     if (auth && auth.currentUser) return true;
     if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('gestao_demo_user')) return true;
-  } catch {}
+  } catch { }
   return false;
 }
 
@@ -442,7 +446,7 @@ export const ProjectService = {
   async create(data: Omit<Project, 'id' | 'createdAt' | 'updatedAt' | 'slug'> & { slug?: string }): Promise<Project> {
     const id = 'proj_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
     const slugBase = data.slug ? slugify(data.slug) : slugify(data.name);
-    
+
     const existing = getLocalData<Project>('projects', initialProjects);
     let finalSlug = slugBase;
     let counter = 1;
@@ -462,8 +466,8 @@ export const ProjectService = {
     setLocalData('projects', updated);
 
     // Persist to Google Cloud SQL & Data Connect
-    CloudSqlService.syncProject(newProject).catch(() => {});
-    DataConnectService.syncProject(newProject).catch(() => {});
+    CloudSqlService.syncProject(newProject).catch(() => { });
+    DataConnectService.syncProject(newProject).catch(() => { });
 
     await ColumnService.createDefaultColumns(id);
     return newProject;
@@ -484,8 +488,8 @@ export const ProjectService = {
     setLocalData('projects', list);
 
     // Persist to Google Cloud SQL & Data Connect
-    CloudSqlService.syncProject(updatedItem).catch(() => {});
-    DataConnectService.syncProject(updatedItem).catch(() => {});
+    CloudSqlService.syncProject(updatedItem).catch(() => { });
+    DataConnectService.syncProject(updatedItem).catch(() => { });
     return updatedItem;
   },
 
@@ -508,8 +512,8 @@ export const ProjectService = {
     setLocalData('projects', list);
 
     // Persist to Google Cloud SQL & Data Connect
-    CloudSqlService.syncProject(updatedItem).catch(() => {});
-    DataConnectService.syncProject(updatedItem).catch(() => {});
+    CloudSqlService.syncProject(updatedItem).catch(() => { });
+    DataConnectService.syncProject(updatedItem).catch(() => { });
     return updatedItem;
   },
 
@@ -519,8 +523,8 @@ export const ProjectService = {
     setLocalData('projects', filtered);
 
     // Persist deletion to Google Cloud SQL & Data Connect
-    CloudSqlService.deleteProject(id).catch(() => {});
-    DataConnectService.deleteProject(id).catch(() => {});
+    CloudSqlService.deleteProject(id).catch(() => { });
+    DataConnectService.deleteProject(id).catch(() => { });
   }
 };
 
@@ -551,7 +555,7 @@ export const ColumnService = {
             const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
             const otherCols = allCols.filter(c => c.projectId !== projectId);
             setLocalData('columns', [...otherCols, ...finalCols]);
-            RealtimeSyncService.syncColumns(projectId, finalCols, 'sync_columns').catch(() => {});
+            RealtimeSyncService.syncColumns(projectId, finalCols, 'sync_columns').catch(() => { });
             return finalCols;
           }
           // Projeto novo no banco sem colunas criadas ainda
@@ -570,7 +574,7 @@ export const ColumnService = {
     }
 
     // Sync with Realtime Database cache
-    RealtimeSyncService.syncColumns(projectId, localCols, 'sync_columns').catch(() => {});
+    RealtimeSyncService.syncColumns(projectId, localCols, 'sync_columns').catch(() => { });
     return localCols;
   },
 
@@ -582,9 +586,9 @@ export const ColumnService = {
     }
 
     const defaults = [
-      { name: 'Backlog', key: 'backlog', position: 0, color: '#64748b' },
-      { name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1' },
-      { name: 'Concluído', key: 'done', position: 2, color: '#10b981' }
+      { name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', autoComplete: false },
+      { name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1', autoComplete: false },
+      { name: 'Concluído', key: 'done', position: 2, color: '#10b981', autoComplete: true }
     ];
 
     const newCols: ProjectColumn[] = defaults.map((d) => ({
@@ -594,6 +598,7 @@ export const ColumnService = {
       key: d.key,
       position: d.position,
       color: d.color,
+      autoComplete: d.autoComplete,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }));
@@ -601,19 +606,19 @@ export const ColumnService = {
     setLocalData('columns', [...allCols, ...newCols]);
 
     // Sync to Realtime DB and Google Cloud SQL
-    RealtimeSyncService.syncColumns(projectId, newCols, 'col_defaults').catch(() => {});
+    RealtimeSyncService.syncColumns(projectId, newCols, 'col_defaults').catch(() => { });
     for (const c of newCols) {
-      CloudSqlService.syncColumn(c).catch(() => {});
-      DataConnectService.syncColumn(c).catch(() => {});
+      CloudSqlService.syncColumn(c).catch(() => { });
+      DataConnectService.syncColumn(c).catch(() => { });
     }
     return newCols;
   },
 
-  async create(projectId: string, name: string, color = '#6366f1'): Promise<ProjectColumn> {
+  async create(projectId: string, name: string, color = '#6366f1', autoComplete = false): Promise<ProjectColumn> {
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
     const projectCols = allCols.filter(c => c.projectId === projectId);
     const id = `col_${projectId}_${slugify(name)}_${Math.random().toString(36).substring(2, 7)}`;
-    
+
     const newCol: ProjectColumn = {
       id,
       projectId,
@@ -621,6 +626,7 @@ export const ColumnService = {
       key: slugify(name),
       position: projectCols.length,
       color,
+      autoComplete,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -628,12 +634,12 @@ export const ColumnService = {
     setLocalData('columns', [...allCols, newCol]);
 
     // Update project updatedAt
-    ProjectService.touch(projectId).catch(() => {});
+    ProjectService.touch(projectId).catch(() => { });
 
     // Sync to Realtime DB and Google Cloud SQL
-    RealtimeSyncService.syncColumns(projectId, [...projectCols, newCol], 'col_create').catch(() => {});
-    CloudSqlService.syncColumn(newCol).catch(() => {});
-    DataConnectService.syncColumn(newCol).catch(() => {});
+    RealtimeSyncService.syncColumns(projectId, [...projectCols, newCol], 'col_create').catch(() => { });
+    CloudSqlService.syncColumn(newCol).catch(() => { });
+    DataConnectService.syncColumn(newCol).catch(() => { });
     return newCol;
   },
 
@@ -652,14 +658,14 @@ export const ColumnService = {
 
     // Update project updatedAt
     if (allCols[index].projectId) {
-      ProjectService.touch(allCols[index].projectId).catch(() => {});
+      ProjectService.touch(allCols[index].projectId).catch(() => { });
     }
 
     // Sync to Realtime DB and Google Cloud SQL
     const projCols = allCols.filter(c => c.projectId === allCols[index].projectId);
-    RealtimeSyncService.syncColumns(allCols[index].projectId, projCols, 'col_update').catch(() => {});
-    CloudSqlService.syncColumn(allCols[index]).catch(() => {});
-    DataConnectService.syncColumn(allCols[index]).catch(() => {});
+    RealtimeSyncService.syncColumns(allCols[index].projectId, projCols, 'col_update').catch(() => { });
+    CloudSqlService.syncColumn(allCols[index]).catch(() => { });
+    DataConnectService.syncColumn(allCols[index]).catch(() => { });
     return allCols[index];
   },
 
@@ -680,20 +686,20 @@ export const ColumnService = {
     setLocalData('columns', finalCols);
 
     // Update project updatedAt
-    ProjectService.touch(projectId).catch(() => {});
+    ProjectService.touch(projectId).catch(() => { });
 
     // Sync to Realtime DB and Google Cloud SQL
-    RealtimeSyncService.syncColumns(projectId, reordered, 'col_reorder').catch(() => {});
+    RealtimeSyncService.syncColumns(projectId, reordered, 'col_reorder').catch(() => { });
     for (const c of reordered) {
-      CloudSqlService.syncColumn(c).catch(() => {});
-      DataConnectService.syncColumn(c).catch(() => {});
+      CloudSqlService.syncColumn(c).catch(() => { });
+      DataConnectService.syncColumn(c).catch(() => { });
     }
     return reordered;
   },
 
   async delete(columnId: string, fallbackColumnId?: string, projectId?: string): Promise<void> {
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const targetCol = allCols.find(c => c.id === columnId && (!projectId || c.projectId === projectId)) 
+    const targetCol = allCols.find(c => c.id === columnId && (!projectId || c.projectId === projectId))
       || allCols.find(c => c.id === columnId);
 
     const targetProjectId = projectId || targetCol?.projectId;
@@ -720,8 +726,8 @@ export const ColumnService = {
       const updatedTasks = allTasks.map(t => {
         if (t.columnId === columnId && (!targetProjectId || t.projectId === targetProjectId)) {
           const moved = { ...t, columnId: fallbackColumnId, position: nextPos++, updatedAt: new Date().toISOString() };
-          CloudSqlService.syncTask(moved).catch(() => {});
-          DataConnectService.syncTask(moved).catch(() => {});
+          CloudSqlService.syncTask(moved).catch(() => { });
+          DataConnectService.syncTask(moved).catch(() => { });
           return moved;
         }
         return t;
@@ -736,12 +742,12 @@ export const ColumnService = {
 
     if (targetProjectId) {
       const remainingProjectCols = remainingCols.filter(c => c.projectId === targetProjectId);
-      RealtimeSyncService.deleteColumn(targetProjectId, columnId).catch(() => {});
-      RealtimeSyncService.syncFullProjectBoard(targetProjectId, remainingProjectCols, finalProjectTasks).catch(() => {});
-      ProjectService.touch(targetProjectId).catch(() => {});
+      RealtimeSyncService.deleteColumn(targetProjectId, columnId).catch(() => { });
+      RealtimeSyncService.syncFullProjectBoard(targetProjectId, remainingProjectCols, finalProjectTasks).catch(() => { });
+      ProjectService.touch(targetProjectId).catch(() => { });
     }
-    CloudSqlService.deleteColumn(columnId, targetProjectId, fallbackColumnId).catch(() => {});
-    DataConnectService.deleteColumn(columnId).catch(() => {});
+    CloudSqlService.deleteColumn(columnId, targetProjectId, fallbackColumnId).catch(() => { });
+    DataConnectService.deleteColumn(columnId).catch(() => { });
   }
 };
 
@@ -760,7 +766,7 @@ export const TaskService = {
           setLocalData('tasks', [...otherTasks, ...sorted]);
 
           const allCols = getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId);
-          RealtimeSyncService.syncFullProjectBoard(projectId, allCols, sorted).catch(() => {});
+          RealtimeSyncService.syncFullProjectBoard(projectId, allCols, sorted).catch(() => { });
           return sorted;
         }
       } catch (err) {
@@ -773,21 +779,25 @@ export const TaskService = {
 
     // Cache to Realtime Database
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId);
-    RealtimeSyncService.syncFullProjectBoard(projectId, allCols, localTasks).catch(() => {});
+    RealtimeSyncService.syncFullProjectBoard(projectId, allCols, localTasks).catch(() => { });
     return localTasks;
   },
 
   async create(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'position'> & { position?: number }): Promise<Task> {
     const allTasks = getLocalData<Task>('tasks', initialTasks);
-    
+    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+
     let targetColId = data.columnId;
     if (!targetColId) {
-      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
       const projCols = allCols.filter(c => c.projectId === data.projectId);
       if (projCols.length > 0) {
         targetColId = projCols[0].id;
       }
     }
+
+    const targetCol = allCols.find(c => c.id === targetColId);
+    const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
+    const concluded = data.concluded !== undefined ? Boolean(data.concluded) : Boolean(shouldComplete);
 
     const columnTasks = allTasks.filter(t => t.columnId === targetColId && (!data.projectId || t.projectId === data.projectId));
     const maxPos = columnTasks.length > 0 ? Math.max(...columnTasks.map(t => t.position ?? 0)) : -1;
@@ -799,6 +809,7 @@ export const TaskService = {
       columnId: targetColId,
       id,
       position: finalPosition,
+      concluded,
       dueDate: data.dueDate || null,
       description: data.description || '',
       priority: data.priority || 'MEDIA',
@@ -810,30 +821,37 @@ export const TaskService = {
 
     // Update project updatedAt
     if (newTask.projectId) {
-      ProjectService.touch(newTask.projectId).catch(() => {});
+      ProjectService.touch(newTask.projectId).catch(() => { });
     }
 
     // Persist to Realtime Database, Google Cloud SQL, and Data Connect
-    RealtimeSyncService.syncTask(newTask, 'task_create').catch(() => {});
-    CloudSqlService.syncTask(newTask).catch(() => {});
-    DataConnectService.syncTask(newTask).catch(() => {});
+    RealtimeSyncService.syncTask(newTask, 'task_create').catch(() => { });
+    CloudSqlService.syncTask(newTask).catch(() => { });
+    DataConnectService.syncTask(newTask).catch(() => { });
     return newTask;
   },
 
   async update(id: string, updates: Partial<Task>): Promise<Task> {
     const allTasks = getLocalData<Task>('tasks', initialTasks);
+    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
     const index = allTasks.findIndex(t => t.id === id);
     let updatedItem: Task;
 
     if (index === -1) {
+      const targetColId = updates.columnId || 'col-1';
+      const targetCol = allCols.find(c => c.id === targetColId);
+      const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
+      const concluded = updates.concluded !== undefined ? Boolean(updates.concluded) : Boolean(shouldComplete);
+
       updatedItem = {
         id,
         projectId: updates.projectId || 'proj-1',
-        columnId: updates.columnId || 'col-1',
+        columnId: targetColId,
         title: updates.title || 'Nova Atividade',
         description: updates.description || '',
         priority: updates.priority || 'MEDIA',
         position: updates.position || 0,
+        concluded,
         dueDate: updates.dueDate || null,
         createdById: updates.createdById || 'demo-user-123',
         createdByName: updates.createdByName || 'Victor Reghini',
@@ -845,15 +863,23 @@ export const TaskService = {
       const currentTask = allTasks[index];
       let position = updates.position !== undefined ? updates.position : currentTask.position;
 
-      if (updates.columnId && updates.columnId !== currentTask.columnId && updates.position === undefined) {
-        const destColumnTasks = allTasks.filter(t => t.columnId === updates.columnId && t.id !== id);
-        position = destColumnTasks.length;
+      let concluded = updates.concluded !== undefined ? updates.concluded : currentTask.concluded;
+      if (updates.columnId && updates.columnId !== currentTask.columnId) {
+        if (updates.position === undefined) {
+          const destColumnTasks = allTasks.filter(t => t.columnId === updates.columnId && t.id !== id);
+          position = destColumnTasks.length;
+        }
+        const targetCol = allCols.find(c => c.id === updates.columnId);
+        if (targetCol && (targetCol.autoComplete || targetCol.key === 'done' || targetCol.name.toLowerCase().includes('conclu'))) {
+          concluded = true;
+        }
       }
 
       updatedItem = {
         ...currentTask,
         ...updates,
         position,
+        concluded: concluded ?? false,
         updatedAt: new Date().toISOString()
       };
       allTasks[index] = updatedItem;
@@ -862,13 +888,13 @@ export const TaskService = {
 
     // Update project updatedAt
     if (updatedItem.projectId) {
-      ProjectService.touch(updatedItem.projectId).catch(() => {});
+      ProjectService.touch(updatedItem.projectId).catch(() => { });
     }
 
     // Persist to Realtime Database, Google Cloud SQL, and Data Connect
-    RealtimeSyncService.syncTask(updatedItem, 'task_update').catch(() => {});
-    CloudSqlService.syncTask(updatedItem).catch(() => {});
-    DataConnectService.syncTask(updatedItem).catch(() => {});
+    RealtimeSyncService.syncTask(updatedItem, 'task_update').catch(() => { });
+    CloudSqlService.syncTask(updatedItem).catch(() => { });
+    DataConnectService.syncTask(updatedItem).catch(() => { });
     return updatedItem;
   },
 
@@ -877,11 +903,21 @@ export const TaskService = {
     const task = allTasks.find(t => t.id === taskId);
     if (!task) return;
 
+    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+    const targetCol = allCols.find(c => c.id === targetColumnId);
+    const shouldComplete = Boolean(targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu'));
+
     const otherTasksInTarget = allTasks
       .filter(t => t.columnId === targetColumnId && t.id !== taskId)
       .sort((a, b) => a.position - b.position);
 
-    const movedTask: Task = { ...task, columnId: targetColumnId, position: newPosition, updatedAt: new Date().toISOString() };
+    const movedTask: Task = {
+      ...task,
+      columnId: targetColumnId,
+      position: newPosition,
+      concluded: shouldComplete ? true : (task.concluded ?? false),
+      updatedAt: new Date().toISOString()
+    };
     otherTasksInTarget.splice(newPosition, 0, movedTask);
 
     const updatedColumnTasks = otherTasksInTarget.map((t, idx) => ({
@@ -899,14 +935,14 @@ export const TaskService = {
 
     // Update project updatedAt
     if (task.projectId) {
-      ProjectService.touch(task.projectId).catch(() => {});
+      ProjectService.touch(task.projectId).catch(() => { });
     }
 
     // Persist to Realtime Database, Google Cloud SQL, and Data Connect
-    RealtimeSyncService.syncTaskMove(task.projectId, updatedColumnTasks).catch(() => {});
+    RealtimeSyncService.syncTaskMove(task.projectId, updatedColumnTasks).catch(() => { });
     for (const t of updatedColumnTasks) {
-      CloudSqlService.syncTask(t).catch(() => {});
-      DataConnectService.syncTask(t).catch(() => {});
+      CloudSqlService.syncTask(t).catch(() => { });
+      DataConnectService.syncTask(t).catch(() => { });
     }
   },
 
@@ -916,11 +952,11 @@ export const TaskService = {
     setLocalData('tasks', allTasks.filter(t => t.id !== id));
 
     if (taskToDelete?.projectId) {
-      RealtimeSyncService.deleteTask(taskToDelete.projectId, id).catch(() => {});
-      ProjectService.touch(taskToDelete.projectId).catch(() => {});
+      RealtimeSyncService.deleteTask(taskToDelete.projectId, id).catch(() => { });
+      ProjectService.touch(taskToDelete.projectId).catch(() => { });
     }
-    CloudSqlService.deleteTask(id).catch(() => {});
-    DataConnectService.deleteTask(id).catch(() => {});
+    CloudSqlService.deleteTask(id).catch(() => { });
+    DataConnectService.deleteTask(id).catch(() => { });
   }
 };
 
@@ -964,7 +1000,7 @@ export const IdeaService = {
             return found;
           }
         }
-      } catch {}
+      } catch { }
     }
 
     const local = getLocalData<Idea>('ideas', initialIdeas);
@@ -983,7 +1019,7 @@ export const IdeaService = {
     };
 
     setLocalData('ideas', [newIdea, ...allIdeas]);
-    CloudSqlService.syncIdea(newIdea).catch(() => {});
+    CloudSqlService.syncIdea(newIdea).catch(() => { });
     return newIdea;
   },
 
@@ -999,7 +1035,7 @@ export const IdeaService = {
     };
 
     setLocalData('ideas', allIdeas);
-    CloudSqlService.syncIdea(allIdeas[index]).catch(() => {});
+    CloudSqlService.syncIdea(allIdeas[index]).catch(() => { });
     return allIdeas[index];
   },
 
@@ -1031,7 +1067,7 @@ export const IdeaService = {
   async delete(id: string): Promise<void> {
     const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
     setLocalData('ideas', allIdeas.filter(i => i.id !== id));
-    CloudSqlService.deleteIdea(id).catch(() => {});
+    CloudSqlService.deleteIdea(id).catch(() => { });
   }
 };
 
@@ -1071,9 +1107,9 @@ export const DocumentService = {
 
     setLocalData('documents', [...docs, newDoc]);
     if (newDoc.projectId) {
-      ProjectService.touch(newDoc.projectId).catch(() => {});
+      ProjectService.touch(newDoc.projectId).catch(() => { });
     }
-    CloudSqlService.syncDocument(newDoc).catch(() => {});
+    CloudSqlService.syncDocument(newDoc).catch(() => { });
     return newDoc;
   },
 
@@ -1091,9 +1127,9 @@ export const DocumentService = {
 
     setLocalData('documents', docs);
     if (projectId) {
-      ProjectService.touch(projectId).catch(() => {});
+      ProjectService.touch(projectId).catch(() => { });
     }
-    CloudSqlService.syncDocument(docs[index]).catch(() => {});
+    CloudSqlService.syncDocument(docs[index]).catch(() => { });
     return docs[index];
   },
 
@@ -1102,9 +1138,9 @@ export const DocumentService = {
     const docToDelete = docs.find(d => d.id === id);
     setLocalData('documents', docs.filter(d => d.id !== id));
     if (docToDelete?.projectId) {
-      ProjectService.touch(docToDelete.projectId).catch(() => {});
+      ProjectService.touch(docToDelete.projectId).catch(() => { });
     }
-    CloudSqlService.deleteDocument(id).catch(() => {});
+    CloudSqlService.deleteDocument(id).catch(() => { });
   }
 };
 
@@ -1145,9 +1181,9 @@ export const SuggestionService = {
 
     setLocalData('suggestions', [newSug, ...list]);
     if (newSug.projectId) {
-      ProjectService.touch(newSug.projectId).catch(() => {});
+      ProjectService.touch(newSug.projectId).catch(() => { });
     }
-    CloudSqlService.syncSuggestion(newSug).catch(() => {});
+    CloudSqlService.syncSuggestion(newSug).catch(() => { });
     return newSug;
   },
 
@@ -1169,9 +1205,9 @@ export const SuggestionService = {
       };
       setLocalData('suggestions', [...list, item]);
       if (item.projectId) {
-        ProjectService.touch(item.projectId).catch(() => {});
+        ProjectService.touch(item.projectId).catch(() => { });
       }
-      CloudSqlService.syncSuggestion(item).catch(() => {});
+      CloudSqlService.syncSuggestion(item).catch(() => { });
       return item;
     }
 
@@ -1184,9 +1220,9 @@ export const SuggestionService = {
 
     setLocalData('suggestions', list);
     if (projId) {
-      ProjectService.touch(projId).catch(() => {});
+      ProjectService.touch(projId).catch(() => { });
     }
-    CloudSqlService.syncSuggestion(list[index]).catch(() => {});
+    CloudSqlService.syncSuggestion(list[index]).catch(() => { });
     return list[index];
   },
 
@@ -1195,9 +1231,9 @@ export const SuggestionService = {
     const sugToDelete = list.find(s => s.id === id);
     setLocalData('suggestions', list.filter(s => s.id !== id));
     if (sugToDelete?.projectId) {
-      ProjectService.touch(sugToDelete.projectId).catch(() => {});
+      ProjectService.touch(sugToDelete.projectId).catch(() => { });
     }
-    CloudSqlService.deleteSuggestion(id).catch(() => {});
+    CloudSqlService.deleteSuggestion(id).catch(() => { });
   }
 };
 
@@ -1238,9 +1274,9 @@ export const BugReportService = {
 
     setLocalData('bugs', [newBug, ...list]);
     if (newBug.projectId) {
-      ProjectService.touch(newBug.projectId).catch(() => {});
+      ProjectService.touch(newBug.projectId).catch(() => { });
     }
-    CloudSqlService.syncBugReport(newBug).catch(() => {});
+    CloudSqlService.syncBugReport(newBug).catch(() => { });
     return newBug;
   },
 
@@ -1263,9 +1299,9 @@ export const BugReportService = {
       };
       setLocalData('bugs', [...list, item]);
       if (item.projectId) {
-        ProjectService.touch(item.projectId).catch(() => {});
+        ProjectService.touch(item.projectId).catch(() => { });
       }
-      CloudSqlService.syncBugReport(item).catch(() => {});
+      CloudSqlService.syncBugReport(item).catch(() => { });
       return item;
     }
 
@@ -1278,9 +1314,9 @@ export const BugReportService = {
 
     setLocalData('bugs', list);
     if (projId) {
-      ProjectService.touch(projId).catch(() => {});
+      ProjectService.touch(projId).catch(() => { });
     }
-    CloudSqlService.syncBugReport(list[index]).catch(() => {});
+    CloudSqlService.syncBugReport(list[index]).catch(() => { });
     return list[index];
   },
 
@@ -1289,9 +1325,9 @@ export const BugReportService = {
     const bugToDelete = list.find(b => b.id === id);
     setLocalData('bugs', list.filter(b => b.id !== id));
     if (bugToDelete?.projectId) {
-      ProjectService.touch(bugToDelete.projectId).catch(() => {});
+      ProjectService.touch(bugToDelete.projectId).catch(() => { });
     }
-    CloudSqlService.deleteBugReport(id).catch(() => {});
+    CloudSqlService.deleteBugReport(id).catch(() => { });
   },
 
   async uploadScreenshot(file: File): Promise<string> {
@@ -1331,7 +1367,7 @@ export const MemberService = {
     };
 
     setLocalData('members', [...members, newMember]);
-    ProjectService.touch(projectId).catch(() => {});
+    ProjectService.touch(projectId).catch(() => { });
     return newMember;
   },
 
@@ -1340,7 +1376,7 @@ export const MemberService = {
     const memberToDelete = members.find(m => m.id === memberId);
     setLocalData('members', members.filter(m => m.id !== memberId));
     if (memberToDelete?.projectId) {
-      ProjectService.touch(memberToDelete.projectId).catch(() => {});
+      ProjectService.touch(memberToDelete.projectId).catch(() => { });
     }
   }
 };

@@ -29,6 +29,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [columnId, setColumnId] = useState(defaultColumnId || columns[0]?.id || '');
   const [priority, setPriority] = useState<TaskPriority>('MEDIA');
   const [dueDate, setDueDate] = useState('');
+  const [concluded, setConcluded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,12 +43,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setColumnId(taskToEdit.columnId);
       setPriority(taskToEdit.priority);
       setDueDate(taskToEdit.dueDate || '');
+      setConcluded(Boolean(taskToEdit.concluded));
     } else {
+      const initialColId = defaultColumnId || (columns.length > 0 ? columns[0].id : '');
+      const initialCol = columns.find(c => c.id === initialColId);
       setTitle('');
       setDescription('');
-      setColumnId(defaultColumnId || (columns.length > 0 ? columns[0].id : ''));
+      setColumnId(initialColId);
       setPriority('MEDIA');
       setDueDate('');
+      setConcluded(Boolean(initialCol?.autoComplete || initialCol?.key === 'done' || initialCol?.name.toLowerCase().includes('conclu')));
     }
     setError(null);
   }, [isOpen, taskToEdit]);
@@ -58,6 +63,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setColumnId(defaultColumnId || columns[0].id);
     }
   }, [isOpen, columns, defaultColumnId, columnId]);
+
+  const handleColumnChange = (newColId: string) => {
+    setColumnId(newColId);
+    const selectedCol = columns.find(c => c.id === newColId);
+    if (selectedCol?.autoComplete || selectedCol?.key === 'done' || selectedCol?.name.toLowerCase().includes('conclu')) {
+      setConcluded(true);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -84,7 +97,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           description: description.trim(),
           columnId: targetColumnId,
           priority,
-          dueDate: dueDate || null
+          dueDate: dueDate || null,
+          concluded
         });
       } else {
         await TaskService.create({
@@ -94,6 +108,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           description: description.trim(),
           priority,
           dueDate: dueDate || null,
+          concluded,
           createdById: user?.id || 'demo-user-123',
           createdByName: user?.name || 'Victor Reghini'
         });
@@ -159,7 +174,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <label className="form-label">Coluna</label>
               <select
                 value={columnId}
-                onChange={(e) => setColumnId(e.target.value)}
+                onChange={(e) => handleColumnChange(e.target.value)}
                 className="select text-sm"
               >
                 {columns.map(col => (
@@ -181,6 +196,21 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <option value="URGENTE">🔴 Urgente</option>
               </select>
             </div>
+          </div>
+
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-800/60 border border-slate-700/60 cursor-pointer" onClick={() => setConcluded(!concluded)}>
+            <input
+              id="task-concluded-check"
+              type="checkbox"
+              checked={concluded}
+              onChange={(e) => setConcluded(e.target.checked)}
+              onClick={(e) => e.stopPropagation()}
+              className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 bg-slate-900 border-slate-700 cursor-pointer"
+            />
+            <label htmlFor="task-concluded-check" className="text-sm font-medium text-slate-200 cursor-pointer flex items-center gap-2 select-none" onClick={(e) => e.stopPropagation()}>
+              <CheckCircle2 className={`w-4 h-4 ${concluded ? 'text-emerald-400' : 'text-slate-400'}`} />
+              Atividade Concluída
+            </label>
           </div>
 
           <div className="form-group mb-0">

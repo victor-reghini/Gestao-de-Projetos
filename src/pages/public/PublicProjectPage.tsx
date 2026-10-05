@@ -1,25 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { 
-  ProjectService, 
-  DocumentService, 
-  SuggestionService, 
-  BugReportService, 
-  TaskService, 
-  ColumnService 
+import {
+  ProjectService,
+  DocumentService,
+  SuggestionService,
+  BugReportService,
+  TaskService,
+  ColumnService
 } from '@/services/dbService';
 import { Project, ProjectDocument, Suggestion, BugReport, Task, ProjectColumn } from '@/types';
-import { 
-  Layers, 
-  Globe, 
-  GitBranch, 
-  FileText, 
-  Network, 
-  MessageSquarePlus, 
-  Bug, 
-  CheckCircle2, 
-  ExternalLink, 
-  Plus, 
+import {
+  Layers,
+  Globe,
+  GitBranch,
+  FileText,
+  Network,
+  MessageSquarePlus,
+  Bug,
+  CheckCircle2,
+  ExternalLink,
+  Plus,
   AlertCircle
 } from 'lucide-react';
 import { MarkdownDocViewer } from '@/components/docs/MarkdownDocViewer';
@@ -184,11 +184,10 @@ export const PublicProjectPage: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-semibold text-xs transition-all shrink-0 border-b-2 ${
-                isActive
-                  ? 'bg-slate-900 text-blue-400 border-blue-500 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-900/40'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-semibold text-xs transition-all shrink-0 border-b-2 ${isActive
+                ? 'bg-slate-900 text-blue-400 border-blue-500 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-900/40'
+                }`}
             >
               <Icon className="w-4 h-4" />
               <span>{tab.label}</span>
@@ -269,7 +268,12 @@ export const PublicProjectPage: React.FC = () => {
                     <div className="space-y-2">
                       {colTasks.map(t => (
                         <div key={t.id} className="p-3 rounded-lg bg-slate-800 border border-slate-700 text-xs">
-                          <p className="font-semibold text-white mb-1">{t.title}</p>
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <p className={`font-semibold ${t.concluded ? 'line-through text-slate-400' : 'text-white'}`}>{t.title}</p>
+                            {t.concluded && (
+                              <span className="badge text-[9px] py-0 px-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">Concluída</span>
+                            )}
+                          </div>
                           {t.description && <p className="text-slate-300 line-clamp-2">{t.description}</p>}
                         </div>
                       ))}

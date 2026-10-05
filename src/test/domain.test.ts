@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { 
-  ProjectService, 
-  ColumnService, 
-  TaskService, 
-  IdeaService, 
+import {
+  ProjectService,
+  ColumnService,
+  TaskService,
+  IdeaService,
   DocumentService,
   SuggestionService,
   BugReportService,
   isUserConnected,
-  slugify 
+  slugify
 } from '@/services/dbService';
 import { CloudSqlService } from '@/services/cloudSqlService';
 
@@ -125,6 +125,140 @@ describe('Domain & Business Rules Tests', () => {
       const tasksAfter = await TaskService.getByProject(proj.id);
       const movedTask = tasksAfter.find(t => t.id === task.id);
       expect(movedTask?.columnId).toBe(doneCol.id);
+      expect(movedTask?.concluded).toBe(true);
+    });
+  });
+
+  describe('Task Direct Completion & Column Auto-Complete Logic', () => {
+    it('directly links completion status to the task and defaults to false in standard column', async () => {
+      const proj = await ProjectService.create({
+        ownerId: 'user-1',
+        name: 'Projeto Conclusão Direta',
+        description: 'Test',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: [],
+        links: []
+      });
+      const cols = await ColumnService.getByProject(proj.id);
+      const backlog = cols[0];
+
+      const task = await TaskService.create({
+        projectId: proj.id,
+        columnId: backlog.id,
+        title: 'Atividade Pendente',
+        description: 'Test desc',
+        priority: 'MEDIA',
+        createdById: 'user-1'
+      });
+
+      expect(task.concluded).toBe(false);
+
+      // Toggle completion directly on the task without changing column
+      const concludedTask = await TaskService.update(task.id, { concluded: true });
+      expect(concludedTask.concluded).toBe(true);
+      expect(concludedTask.columnId).toBe(backlog.id);
+
+      // Toggle back to incomplete directly on the task
+      const unconcludedTask = await TaskService.update(task.id, { concluded: false });
+      expect(unconcludedTask.concluded).toBe(false);
+      expect(unconcludedTask.columnId).toBe(backlog.id);
+    });
+
+    it('automatically marks task as concluded when moved to an auto-completing column', async () => {
+      const proj = await ProjectService.create({
+        ownerId: 'user-1',
+        name: 'Projeto Auto-Complete Coluna',
+        description: 'Test',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: [],
+        links: []
+      });
+      const cols = await ColumnService.getByProject(proj.id);
+      const backlog = cols[0];
+      const doneCol = cols.find(c => c.key === 'done')!;
+
+      expect(doneCol.autoComplete).toBe(true);
+
+      const task = await TaskService.create({
+        projectId: proj.id,
+        columnId: backlog.id,
+        title: 'Tarefa para Concluir',
+        description: 'Desc',
+        priority: 'ALTA',
+        createdById: 'user-1'
+      });
+      expect(task.concluded).toBe(false);
+
+      // Move to Done column
+      await TaskService.move(task.id, doneCol.id, 0);
+
+      const tasksAfter = await TaskService.getByProject(proj.id);
+      const movedTask = tasksAfter.find(t => t.id === task.id);
+      expect(movedTask?.columnId).toBe(doneCol.id);
+      expect(movedTask?.concluded).toBe(true);
+    });
+
+    it('allows creating custom columns with autoComplete and auto-completes tasks moved to them', async () => {
+      const proj = await ProjectService.create({
+        ownerId: 'user-1',
+        name: 'Projeto Coluna Personalizada',
+        description: 'Test',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: [],
+        links: []
+      });
+      const cols = await ColumnService.getByProject(proj.id);
+      const backlog = cols[0];
+
+      // Create a custom column "Em Produção" with autoComplete = true
+      const customDoneCol = await ColumnService.create(proj.id, 'Em Produção', '#10b981', true);
+      expect(customDoneCol.autoComplete).toBe(true);
+
+      const task = await TaskService.create({
+        projectId: proj.id,
+        columnId: backlog.id,
+        title: 'Deploy em Produção',
+        description: 'Subir build',
+        priority: 'URGENTE',
+        createdById: 'user-1'
+      });
+      expect(task.concluded).toBe(false);
+
+      // Move to custom auto-complete column
+      await TaskService.move(task.id, customDoneCol.id, 0);
+
+      const tasksAfter = await TaskService.getByProject(proj.id);
+      const movedTask = tasksAfter.find(t => t.id === task.id);
+      expect(movedTask?.columnId).toBe(customDoneCol.id);
+      expect(movedTask?.concluded).toBe(true);
+    });
+
+    it('auto-completes task on create when target column has autoComplete enabled', async () => {
+      const proj = await ProjectService.create({
+        ownerId: 'user-1',
+        name: 'Projeto Criar Direto no Done',
+        description: 'Test',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: [],
+        links: []
+      });
+      const cols = await ColumnService.getByProject(proj.id);
+      const doneCol = cols.find(c => c.key === 'done')!;
+
+      const task = await TaskService.create({
+        projectId: proj.id,
+        columnId: doneCol.id,
+        title: 'Tarefa Criada Já Concluída',
+        description: 'Desc',
+        priority: 'BAIXA',
+        createdById: 'user-1'
+      });
+
+      expect(task.concluded).toBe(true);
     });
   });
 

@@ -81,6 +81,7 @@ export interface ProjectColumn {
   key: string;
   position: number;
   color?: string;
+  autoComplete?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -93,6 +94,7 @@ export interface Task {
   description: string;
   priority: TaskPriority;
   position: number;
+  concluded?: boolean;
   dueDate?: string | null;
   createdById: string;
   createdByName?: string;

@@ -153,6 +153,7 @@ function mapColumnRow(row: any): ProjectColumn {
     key: row.key,
     position: row.position,
     color: row.color || '#6366f1',
+    autoComplete: Boolean(row.auto_complete),
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
   };
@@ -167,6 +168,7 @@ function mapTaskRow(row: any): Task {
     description: row.description || '',
     priority: row.priority || 'MEDIA',
     position: row.position,
+    concluded: Boolean(row.concluded),
     dueDate: row.due_date ? new Date(row.due_date).toISOString() : null,
     createdById: row.created_by_id || 'demo-user-123',
     createdByName: row.created_by_name || 'Usuário',
@@ -296,7 +298,7 @@ export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectC
   const p = getPool();
   if (!p) return [];
   try {
-    const query = projectId 
+    const query = projectId
       ? 'SELECT * FROM "public"."project_column" WHERE project_id = $1 ORDER BY position ASC'
       : 'SELECT * FROM "public"."project_column" ORDER BY project_id, position ASC';
     const params = projectId ? [projectId] : [];
@@ -313,7 +315,7 @@ export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[]> {
   const p = getPool();
   if (!p) return [];
   try {
-    const query = projectId 
+    const query = projectId
       ? 'SELECT * FROM "public"."task" WHERE project_id = $1 ORDER BY position ASC'
       : 'SELECT * FROM "public"."task" ORDER BY position ASC';
     const params = projectId ? [projectId] : [];
@@ -498,11 +500,27 @@ export async function touchCloudSqlProject(projectId: string): Promise<void> {
   }
 }
 
+let schemaEnsured = false;
+async function ensureSchema(p: any): Promise<void> {
+  if (schemaEnsured) return;
+  try {
+    await p.query(`
+      ALTER TABLE "public"."project_column" ADD COLUMN IF NOT EXISTS auto_complete BOOLEAN DEFAULT FALSE;
+      ALTER TABLE "public"."task" ADD COLUMN IF NOT EXISTS concluded BOOLEAN DEFAULT FALSE;
+    `);
+    schemaEnsured = true;
+  } catch {
+    // Ignore schema extension failures on restricted permissions
+  }
+}
+
 export async function persistColumn(column: ProjectColumn): Promise<void> {
   const p = getPool();
   if (!p) return;
 
   try {
+    await ensureSchema(p);
+
     // Ensure project exists to satisfy project_column_project_id_fkey
     const projCheck = await p.query('SELECT id FROM "public"."project" WHERE id = $1', [column.projectId]);
     if (projCheck.rows.length === 0) {
@@ -516,13 +534,14 @@ export async function persistColumn(column: ProjectColumn): Promise<void> {
 
     await p.query(
       `INSERT INTO "public"."project_column" 
-       (id, project_id, name, key, position, color, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (id, project_id, name, key, position, color, auto_complete, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name,
          key = EXCLUDED.key,
          position = EXCLUDED.position,
          color = EXCLUDED.color,
+         auto_complete = EXCLUDED.auto_complete,
          updated_at = NOW()`,
       [
         column.id,
@@ -531,6 +550,7 @@ export async function persistColumn(column: ProjectColumn): Promise<void> {
         column.key,
         column.position,
         column.color || '#6366f1',
+        Boolean(column.autoComplete),
         column.createdAt || new Date().toISOString(),
         column.updatedAt || new Date().toISOString()
       ]
@@ -576,6 +596,8 @@ export async function persistTask(task: Task): Promise<void> {
   if (!p) return;
 
   try {
+    await ensureSchema(p);
+
     if (task.createdById) {
       await persistUser({
         id: task.createdById,
@@ -617,8 +639,8 @@ export async function persistTask(task: Task): Promise<void> {
 
     await p.query(
       `INSERT INTO "public"."task" 
-       (id, project_id, column_id, title, description, priority, position, due_date, created_by_id, created_by_name, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       (id, project_id, column_id, title, description, priority, position, due_date, concluded, created_by_id, created_by_name, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        ON CONFLICT (id) DO UPDATE SET
          column_id = EXCLUDED.column_id,
          title = EXCLUDED.title,
@@ -626,6 +648,7 @@ export async function persistTask(task: Task): Promise<void> {
          priority = EXCLUDED.priority,
          position = EXCLUDED.position,
          due_date = EXCLUDED.due_date,
+         concluded = EXCLUDED.concluded,
          updated_at = NOW()`,
       [
         task.id,
@@ -636,6 +659,7 @@ export async function persistTask(task: Task): Promise<void> {
         task.priority || 'MEDIA',
         task.position,
         task.dueDate ? task.dueDate.split('T')[0] : null,
+        Boolean(task.concluded),
         task.createdById || null,
         task.createdByName || null,
         task.createdAt || new Date().toISOString(),
@@ -943,13 +967,14 @@ export async function syncAllToCloudSql(data: {
     for (const col of (data.columns || [])) {
       await client.query(
         `INSERT INTO "public"."project_column" 
-         (id, project_id, name, key, position, color, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         (id, project_id, name, key, position, color, auto_complete, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (id) DO UPDATE SET
            name = EXCLUDED.name,
            key = EXCLUDED.key,
            position = EXCLUDED.position,
            color = EXCLUDED.color,
+           auto_complete = EXCLUDED.auto_complete,
            updated_at = NOW()`,
         [
           col.id,
@@ -958,6 +983,7 @@ export async function syncAllToCloudSql(data: {
           col.key,
           col.position,
           col.color || '#6366f1',
+          Boolean(col.autoComplete),
           col.createdAt || new Date().toISOString(),
           col.updatedAt || new Date().toISOString()
         ]
@@ -977,8 +1003,8 @@ export async function syncAllToCloudSql(data: {
 
       await client.query(
         `INSERT INTO "public"."task" 
-         (id, project_id, column_id, title, description, priority, position, due_date, created_by_id, created_by_name, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         (id, project_id, column_id, title, description, priority, position, due_date, concluded, created_by_id, created_by_name, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          ON CONFLICT (id) DO UPDATE SET
            column_id = EXCLUDED.column_id,
            title = EXCLUDED.title,
@@ -986,6 +1012,7 @@ export async function syncAllToCloudSql(data: {
            priority = EXCLUDED.priority,
            position = EXCLUDED.position,
            due_date = EXCLUDED.due_date,
+           concluded = EXCLUDED.concluded,
            updated_at = NOW()`,
         [
           task.id,
@@ -996,6 +1023,7 @@ export async function syncAllToCloudSql(data: {
           task.priority || 'MEDIA',
           task.position,
           task.dueDate ? task.dueDate.split('T')[0] : null,
+          Boolean(task.concluded),
           task.createdById || null,
           task.createdByName || null,
           task.createdAt || new Date().toISOString(),

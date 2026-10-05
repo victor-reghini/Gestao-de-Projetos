@@ -68,26 +68,30 @@ ON CONFLICT (id) DO UPDATE SET
   updated_at = NOW();
 
 -- 3. Colunas do Kanban
+ALTER TABLE "public"."project_column" ADD COLUMN IF NOT EXISTS auto_complete BOOLEAN DEFAULT FALSE;
+ALTER TABLE "public"."task" ADD COLUMN IF NOT EXISTS concluded BOOLEAN DEFAULT FALSE;
+
 INSERT INTO "public"."project_column" (
-  id, project_id, name, key, position, color, created_at, updated_at
+  id, project_id, name, key, position, color, auto_complete, created_at, updated_at
 ) VALUES 
-('col-1', 'proj-1', 'Backlog', 'backlog', 0, '#64748b', '2026-09-23T12:00:00.000Z', NOW()),
-('col-2', 'proj-1', 'Em Execução', 'in_progress', 1, '#6366f1', '2026-09-23T12:00:00.000Z', NOW()),
-('col-3', 'proj-1', 'Revisão / Testes', 'review', 2, '#f59e0b', '2026-09-23T12:00:00.000Z', NOW()),
-('col-4', 'proj-1', 'Concluído', 'done', 3, '#10b981', '2026-09-23T12:00:00.000Z', NOW()),
-('col-20', 'proj-2', 'Backlog', 'backlog', 0, '#64748b', '2026-09-27T12:00:00.000Z', NOW()),
-('col-21', 'proj-2', 'Em Execução', 'in_progress', 1, '#6366f1', '2026-09-27T12:00:00.000Z', NOW()),
-('col-22', 'proj-2', 'Concluído', 'done', 2, '#10b981', '2026-09-27T12:00:00.000Z', NOW())
+('col-1', 'proj-1', 'Backlog', 'backlog', 0, '#64748b', FALSE, '2026-09-23T12:00:00.000Z', NOW()),
+('col-2', 'proj-1', 'Em Execução', 'in_progress', 1, '#6366f1', FALSE, '2026-09-23T12:00:00.000Z', NOW()),
+('col-3', 'proj-1', 'Revisão / Testes', 'review', 2, '#f59e0b', FALSE, '2026-09-23T12:00:00.000Z', NOW()),
+('col-4', 'proj-1', 'Concluído', 'done', 3, '#10b981', TRUE, '2026-09-23T12:00:00.000Z', NOW()),
+('col-20', 'proj-2', 'Backlog', 'backlog', 0, '#64748b', FALSE, '2026-09-27T12:00:00.000Z', NOW()),
+('col-21', 'proj-2', 'Em Execução', 'in_progress', 1, '#6366f1', FALSE, '2026-09-27T12:00:00.000Z', NOW()),
+('col-22', 'proj-2', 'Concluído', 'done', 2, '#10b981', TRUE, '2026-09-27T12:00:00.000Z', NOW())
 ON CONFLICT (id) DO UPDATE SET 
   name = EXCLUDED.name, 
   key = EXCLUDED.key, 
   position = EXCLUDED.position, 
   color = EXCLUDED.color, 
+  auto_complete = EXCLUDED.auto_complete,
   updated_at = NOW();
 
 -- 4. Atividades (Tasks)
 INSERT INTO "public"."task" (
-  id, project_id, column_id, title, description, priority, position, due_date, created_by_id, created_by_name, created_at, updated_at
+  id, project_id, column_id, title, description, priority, position, due_date, concluded, created_by_id, created_by_name, created_at, updated_at
 ) VALUES 
 (
   'task-1',
@@ -98,6 +102,7 @@ INSERT INTO "public"."task" (
   'ALTA',
   0,
   CURRENT_DATE + INTERVAL '2 days',
+  FALSE,
   'demo-user-123',
   'Victor Reghini',
   '2026-09-28T10:00:00.000Z',
@@ -112,6 +117,7 @@ INSERT INTO "public"."task" (
   'MEDIA',
   1,
   CURRENT_DATE + INTERVAL '3 days',
+  FALSE,
   'demo-user-123',
   'Victor Reghini',
   '2026-09-28T11:00:00.000Z',
@@ -126,6 +132,7 @@ INSERT INTO "public"."task" (
   'ALTA',
   0,
   CURRENT_DATE,
+  TRUE,
   'demo-user-123',
   'Victor Reghini',
   '2026-09-28T12:00:00.000Z',
@@ -140,6 +147,7 @@ INSERT INTO "public"."task" (
   'BAIXA',
   0,
   CURRENT_DATE + INTERVAL '10 days',
+  FALSE,
   'demo-user-123',
   'Victor Reghini',
   '2026-09-28T14:00:00.000Z',
@@ -153,6 +161,7 @@ ON CONFLICT (id) DO UPDATE SET
   priority = EXCLUDED.priority,
   position = EXCLUDED.position,
   due_date = EXCLUDED.due_date,
+  concluded = EXCLUDED.concluded,
   updated_at = NOW();
 
 -- 5. Ideias

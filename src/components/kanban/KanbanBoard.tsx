@@ -234,6 +234,9 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
+    const targetCol = columns.find(c => c.id === targetColumnId);
+    const shouldComplete = Boolean(targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu'));
+
     // Place at the end of the destination column
     const destinationTasks = tasks
       .filter(t => t.columnId === targetColumnId && t.id !== taskId)
@@ -242,7 +245,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
 
     const updatedTasks = tasks.map(t => {
       if (t.id === taskId) {
-        return { ...t, columnId: targetColumnId, position: newPosition, updatedAt: new Date().toISOString() };
+        return {
+          ...t,
+          columnId: targetColumnId,
+          position: newPosition,
+          concluded: shouldComplete ? true : (t.concluded ?? false),
+          updatedAt: new Date().toISOString()
+        };
       }
       return t;
     });
@@ -274,13 +283,22 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
+    const targetCol = columns.find(c => c.id === targetColumnId);
+    const shouldComplete = Boolean(targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu'));
+
     const destinationTasks = tasks
       .filter(t => t.columnId === targetColumnId && t.id !== taskId)
       .sort((a, b) => a.position - b.position);
 
     const newPosition = Math.min(Math.max(0, targetIndex), destinationTasks.length);
 
-    const movedTask = { ...task, columnId: targetColumnId, position: newPosition, updatedAt: new Date().toISOString() };
+    const movedTask = {
+      ...task,
+      columnId: targetColumnId,
+      position: newPosition,
+      concluded: shouldComplete ? true : (task.concluded ?? false),
+      updatedAt: new Date().toISOString()
+    };
     destinationTasks.splice(newPosition, 0, movedTask);
     const reindexed = destinationTasks.map((t, idx) => ({ ...t, position: idx }));
 
@@ -288,6 +306,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     setTasks([...otherTasks, ...reindexed]);
 
     await TaskService.move(taskId, targetColumnId, newPosition);
+    onProjectUpdate?.();
+  };
+
+  const handleToggleTaskConcluded = async (e: React.MouseEvent, task: Task) => {
+    e.stopPropagation();
+    if (isReadOnly) return;
+    const newConcluded = !task.concluded;
+    const updatedTasks = tasks.map(t =>
+      t.id === task.id ? { ...t, concluded: newConcluded, updatedAt: new Date().toISOString() } : t
+    );
+    setTasks(updatedTasks);
+    await TaskService.update(task.id, { concluded: newConcluded });
     onProjectUpdate?.();
   };
 
@@ -528,6 +558,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
                     style={{ backgroundColor: column.color || '#3b82f6' }}
                   />
                   <h3 className="font-bold text-sm text-white truncate max-w-[150px]" title={column.name}>{column.name}</h3>
+                  {column.autoComplete && (
+                    <span title="Esta coluna conclui atividades automaticamente" className="flex items-center text-emerald-400">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </span>
+                  )}
                   <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
                     {colTasks.length}
                   </span>
@@ -609,15 +644,38 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
                         }`}
                     >
                       <div className="flex items-start justify-between gap-2 mb-2">
-                        <span className={`badge text-[10px] py-0.5 px-2 ${getPriorityBadgeClass(task.priority)}`}>
-                          {task.priority}
-                        </span>
-                        {!isReadOnly && (
-                          <GripVertical className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-70 transition-opacity" />
-                        )}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`badge text-[10px] py-0.5 px-2 ${getPriorityBadgeClass(task.priority)}`}>
+                            {task.priority}
+                          </span>
+                          {task.concluded && (
+                            <span className="badge text-[10px] py-0.5 px-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
+                              Concluída
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {!isReadOnly && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleToggleTaskConcluded(e, task)}
+                              title={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
+                              aria-label={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
+                              className={`p-1 rounded-lg transition-all ${task.concluded
+                                ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                                : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-700/60'
+                                }`}
+                            >
+                              <CheckCircle2 className={`w-4 h-4 ${task.concluded ? 'fill-emerald-500/20 text-emerald-400' : 'text-slate-400'}`} />
+                            </button>
+                          )}
+                          {!isReadOnly && (
+                            <GripVertical className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-70 transition-opacity" />
+                          )}
+                        </div>
                       </div>
 
-                      <h4 className="text-sm font-semibold text-white group-hover:text-blue-300 transition-colors leading-snug mb-1.5">
+                      <h4 className={`text-sm font-semibold transition-colors leading-snug mb-1.5 ${task.concluded ? 'line-through text-slate-400' : 'text-white group-hover:text-blue-300'}`}>
                         {task.title}
                       </h4>
 

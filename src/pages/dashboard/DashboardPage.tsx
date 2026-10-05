@@ -68,10 +68,10 @@ export const DashboardPage: React.FC = () => {
   const activeProjects = projects.filter(p => p.status === 'EM_ANDAMENTO' || p.status === 'PLANEJAMENTO');
   const doneColumnIds = new Set(
     columns
-      .filter(c => c.key === 'done' || c.name.toLowerCase().includes('conclu'))
+      .filter(c => c.autoComplete || c.key === 'done' || c.name.toLowerCase().includes('conclu'))
       .map(c => c.id)
   );
-  const completedTasks = tasks.filter(t => doneColumnIds.has(t.columnId));
+  const concludedTasks = tasks.filter(t => t.concluded ?? doneColumnIds.has(t.columnId));
   const pendingSuggestions = suggestions.filter(s => s.status === 'ABERTO' || s.status === 'EM_ANALISE');
   const openBugs = bugs.filter(b => b.status === 'ABERTO' || b.status === 'EM_ANALISE');
 
@@ -148,7 +148,7 @@ export const DashboardPage: React.FC = () => {
             </div>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-bold text-white">{completedTasks.length}</span>
+            <span className="text-3xl font-bold text-white">{concludedTasks.length}</span>
             <span className="text-xs text-slate-400">de {tasks.length} tarefas</span>
           </div>
         </div>
@@ -183,7 +183,7 @@ export const DashboardPage: React.FC = () => {
           <div className="space-y-3">
             {projects.slice(0, 4).map((project) => {
               const projectTasks = tasks.filter(t => t.projectId === project.id);
-              const doneTasks = projectTasks.filter(t => doneColumnIds.has(t.columnId));
+              const doneTasks = projectTasks.filter(t => t.concluded ?? doneColumnIds.has(t.columnId));
               const progress = projectTasks.length > 0 ? Math.round((doneTasks.length / projectTasks.length) * 100) : 0;
 
               return (
