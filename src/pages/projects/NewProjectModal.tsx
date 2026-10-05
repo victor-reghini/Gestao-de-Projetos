@@ -2,16 +2,22 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ProjectService, slugify } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
-import { Visibility, ProjectStatus } from '@/types';
+import { Project, Visibility, ProjectStatus } from '@/types';
 import { X, Plus, Trash2, FolderPlus, GitBranch, Globe, Lock, Users, Sparkles } from 'lucide-react';
 
 interface NewProjectModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCreated?: () => void;
+  onCreated?: (project: Project) => void;
+  redirectToProject?: boolean;
 }
 
-export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClose, onCreated }) => {
+export const NewProjectModal: React.FC<NewProjectModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onCreated,
+  redirectToProject
+}) => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -102,8 +108,12 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({ isOpen, onClos
       });
 
       onClose();
-      if (onCreated) onCreated();
-      navigate(`/projects/${createdProject.id}`);
+      if (onCreated) {
+        onCreated(createdProject);
+      }
+      if (redirectToProject || (!onCreated && redirectToProject !== false)) {
+        navigate(`/projects/${createdProject.id}`);
+      }
     } catch (err: any) {
       setError(err.message || 'Erro ao criar projeto.');
     } finally {

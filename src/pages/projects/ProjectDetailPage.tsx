@@ -6,7 +6,9 @@ import {
   DocumentService, 
   SuggestionService, 
   BugReportService, 
-  MemberService 
+  MemberService,
+  getLocalData,
+  initialProjects
 } from '@/services/dbService';
 import { Project, ProjectDocument, Suggestion, BugReport, ProjectMember } from '@/types';
 import { 
@@ -42,12 +44,20 @@ export const ProjectDetailPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
 
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<Project | null>(() => {
+    if (!id) return null;
+    const all = getLocalData<Project>('projects', initialProjects);
+    return all.find(p => p.id === id || p.slug === id) || null;
+  });
   const [documents, setDocuments] = useState<ProjectDocument[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [bugs, setBugs] = useState<BugReport[]>([]);
   const [members, setMembers] = useState<ProjectMember[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(() => {
+    if (!id) return true;
+    const all = getLocalData<Project>('projects', initialProjects);
+    return !all.some(p => p.id === id || p.slug === id);
+  });
 
   const initialTabParam = searchParams.get('tab') as TabType | null;
   const [activeTab, setActiveTab] = useState<TabType>(
@@ -75,9 +85,11 @@ export const ProjectDetailPage: React.FC = () => {
     }, { replace: true });
   };
 
-  const loadProjectData = async () => {
+  const loadProjectData = async (silent = false) => {
     if (!id) return;
-    setLoading(true);
+    if (!silent && !project) {
+      setLoading(true);
+    }
     try {
       let activeProj = await ProjectService.getById(id);
       if (!activeProj) {
@@ -86,7 +98,6 @@ export const ProjectDetailPage: React.FC = () => {
 
       if (!activeProj) {
         setProject(null);
-        setLoading(false);
         return;
       }
 
@@ -109,6 +120,11 @@ export const ProjectDetailPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  const handleProjectUpdate = React.useCallback(() => {
+    // Discreet update: refresh project timestamp without resetting loading or unmounting the board
+    setProject(prev => prev ? { ...prev, updatedAt: new Date().toISOString() } : null);
+  }, []);
 
   useEffect(() => {
     loadProjectData();
@@ -271,7 +287,7 @@ export const ProjectDetailPage: React.FC = () => {
       {/* Active Tab Content */}
       <div className="min-h-[500px]">
         {activeTab === 'kanban' && (
-          <KanbanBoard projectId={project.id} isReadOnly={!canEdit} onProjectUpdate={loadProjectData} />
+          <KanbanBoard projectId={project.id} isReadOnly={!canEdit} onProjectUpdate={handleProjectUpdate} />
         )}
 
         {activeTab === 'overview' && (
@@ -331,7 +347,7 @@ export const ProjectDetailPage: React.FC = () => {
           <MarkdownDocViewer
             projectId={project.id}
             documents={documents}
-            onRefresh={loadProjectData}
+            onRefresh={() => loadProjectData(true)}
             isReadOnly={!isOwner}
           />
         )}
@@ -340,7 +356,7 @@ export const ProjectDetailPage: React.FC = () => {
           <MermaidDiagramViewer
             projectId={project.id}
             documents={documents}
-            onRefresh={loadProjectData}
+            onRefresh={() => loadProjectData(true)}
             isReadOnly={!canEdit}
           />
         )}
@@ -349,7 +365,7 @@ export const ProjectDetailPage: React.FC = () => {
           <SuggestionsTab
             projectId={project.id}
             suggestions={suggestions}
-            onRefresh={loadProjectData}
+            onRefresh={() => loadProjectData(true)}
             isReadOnly={!canEdit}
           />
         )}
@@ -358,7 +374,7 @@ export const ProjectDetailPage: React.FC = () => {
           <BugsTab
             projectId={project.id}
             bugs={bugs}
-            onRefresh={loadProjectData}
+            onRefresh={() => loadProjectData(true)}
             isReadOnly={!canEdit}
           />
         )}
@@ -367,7 +383,7 @@ export const ProjectDetailPage: React.FC = () => {
           <MembersAndSettingsTab
             project={project}
             members={members}
-            onRefresh={loadProjectData}
+            onRefresh={() => loadProjectData(true)}
             isOwner={isOwner}
           />
         )}

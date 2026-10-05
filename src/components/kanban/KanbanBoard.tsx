@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ProjectColumn, Task, TaskPriority, SyncValidationStatus } from '@/types';
-import { ColumnService, TaskService, deduplicateColumns } from '@/services/dbService';
+import { ColumnService, TaskService, deduplicateColumns, getLocalData, initialColumns, initialTasks } from '@/services/dbService';
 import { RealtimeSyncService } from '@/services/realtimeSyncService';
 import {
   Plus,
@@ -22,6 +22,299 @@ import {
 import { TaskModal } from './TaskModal';
 import { ColumnModal } from './NewColumnModal';
 
+const getPriorityBadgeClass = (priority: TaskPriority) => {
+  switch (priority) {
+    case 'URGENTE': return 'badge-priority-urgent text-rose-300';
+    case 'ALTA': return 'badge-priority-high text-amber-300';
+    case 'MEDIA': return 'badge-priority-medium text-blue-300';
+    default: return 'badge-priority-low text-slate-300';
+  }
+};
+
+interface KanbanTaskCardProps {
+  task: Task;
+  taskIndex: number;
+  columnId: string;
+  isReadOnly: boolean;
+  isDragging: boolean;
+  isDropTarget: boolean;
+  draggedTaskId: string | null;
+  onDragStart: (e: React.DragEvent, taskId: string) => void;
+  onDragOver: (e: React.DragEvent, taskId: string) => void;
+  onDragLeave: (taskId: string) => void;
+  onDropOnTask: (e: React.DragEvent, columnId: string, taskIndex: number) => void;
+  onClick: (task: Task) => void;
+  onToggleConcluded: (e: React.MouseEvent, task: Task) => void;
+}
+
+const KanbanTaskCard = React.memo<KanbanTaskCardProps>(({
+  task,
+  taskIndex,
+  columnId,
+  isReadOnly,
+  isDragging,
+  isDropTarget,
+  draggedTaskId,
+  onDragStart,
+  onDragOver,
+  onDragLeave,
+  onDropOnTask,
+  onClick,
+  onToggleConcluded
+}) => {
+  return (
+    <div
+      draggable={!isReadOnly}
+      onDragStart={(e) => onDragStart(e, task.id)}
+      onDragOver={(e) => {
+        if (draggedTaskId && draggedTaskId !== task.id) {
+          e.preventDefault();
+          e.stopPropagation();
+          onDragOver(e, task.id);
+        }
+      }}
+      onDragLeave={() => onDragLeave(task.id)}
+      onDrop={(e) => onDropOnTask(e, columnId, taskIndex)}
+      onClick={() => onClick(task)}
+      className={`group p-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border shadow-sm transition-all cursor-grab active:cursor-grabbing ${
+        isDragging
+          ? 'opacity-100 scale-[0.98] border-dashed border-blue-500/40 bg-slate-700/80 ring-1 ring-blue-500/20'
+          : isDropTarget
+          ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-750'
+          : 'border-slate-700/80 hover:-translate-y-0.5 hover:border-blue-500/50 hover:shadow-md'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className={`badge text-[10px] py-0.5 px-2 ${getPriorityBadgeClass(task.priority)}`}>
+            {task.priority}
+          </span>
+          {task.concluded && (
+            <span className="badge text-[10px] py-0.5 px-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
+              Concluída
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {!isReadOnly && (
+            <button
+              type="button"
+              onClick={(e) => onToggleConcluded(e, task)}
+              title={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
+              aria-label={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
+              className={`p-1 rounded-lg transition-all ${
+                task.concluded
+                  ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                  : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-700/60'
+              }`}
+            >
+              <CheckCircle2 className={`w-4 h-4 ${task.concluded ? 'fill-emerald-500/20 text-emerald-400' : 'text-slate-400'}`} />
+            </button>
+          )}
+          {!isReadOnly && (
+            <GripVertical className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-70 transition-opacity" />
+          )}
+        </div>
+      </div>
+
+      <h4 className={`text-sm font-semibold transition-colors leading-snug mb-1.5 ${task.concluded ? 'line-through text-slate-400' : 'text-white group-hover:text-blue-300'}`}>
+        {task.title}
+      </h4>
+
+      {task.description && (
+        <p className="text-xs text-slate-300 line-clamp-2 mb-3">
+          {task.description}
+        </p>
+      )}
+
+      <div className="flex items-center justify-between pt-2 border-t border-slate-700/50 text-[11px] text-slate-400">
+        {task.dueDate ? (
+          <span className="flex items-center gap-1 text-blue-300 font-medium">
+            <Calendar className="w-3 h-3" />
+            {new Date(task.dueDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
+          </span>
+        ) : (
+          <span></span>
+        )}
+        <span className="text-[10px] text-slate-400">
+          {task.createdByName ? task.createdByName.split(' ')[0] : 'Autor'}
+        </span>
+      </div>
+    </div>
+  );
+});
+
+interface KanbanColumnProps {
+  column: ProjectColumn;
+  tasks: Task[];
+  colIndex: number;
+  totalColumns: number;
+  isReadOnly: boolean;
+  isEditingColumns: boolean;
+  isOver: boolean;
+  draggedTaskId: string | null;
+  dragOverTaskId: string | null;
+  onDragOver: (e: React.DragEvent, columnId: string) => void;
+  onDragLeave: (columnId: string) => void;
+  onDrop: (e: React.DragEvent, columnId: string) => void;
+  onColumnDragStart: (e: React.DragEvent, columnId: string) => void;
+  onMoveColumn: (columnId: string, direction: 'left' | 'right') => void;
+  onEditColumn: (column: ProjectColumn) => void;
+  onDeleteColumn: (columnId: string) => void;
+  onAddTask: (columnId: string) => void;
+  onTaskDragStart: (e: React.DragEvent, taskId: string) => void;
+  onTaskDragOver: (e: React.DragEvent, taskId: string) => void;
+  onTaskDragLeave: (taskId: string) => void;
+  onDropOnTask: (e: React.DragEvent, columnId: string, targetIndex: number) => void;
+  onTaskClick: (task: Task) => void;
+  onToggleTaskConcluded: (e: React.MouseEvent, task: Task) => void;
+}
+
+const KanbanColumn = React.memo<KanbanColumnProps>(({
+  column,
+  tasks,
+  colIndex,
+  totalColumns,
+  isReadOnly,
+  isEditingColumns,
+  isOver,
+  draggedTaskId,
+  dragOverTaskId,
+  onDragOver,
+  onDragLeave,
+  onDrop,
+  onColumnDragStart,
+  onMoveColumn,
+  onEditColumn,
+  onDeleteColumn,
+  onAddTask,
+  onTaskDragStart,
+  onTaskDragOver,
+  onTaskDragLeave,
+  onDropOnTask,
+  onTaskClick,
+  onToggleTaskConcluded
+}) => {
+  return (
+    <div
+      onDragOver={(e) => onDragOver(e, column.id)}
+      onDragLeave={() => onDragLeave(column.id)}
+      onDrop={(e) => onDrop(e, column.id)}
+      className={`w-80 shrink-0 flex flex-col rounded-2xl bg-slate-900 border transition-all duration-150 ${
+        isOver ? 'border-blue-500 bg-slate-800/90 ring-2 ring-blue-500/20' : 'border-slate-800'
+      }`}
+    >
+      {/* Column Header */}
+      <div className="p-3.5 border-b border-slate-800 flex items-center justify-between gap-1 min-h-[52px]">
+        <div className="flex items-center gap-1.5 min-w-0">
+          {!isReadOnly && isEditingColumns && (
+            <div
+              draggable
+              onDragStart={(e) => onColumnDragStart(e, column.id)}
+              title="Arrastar para reordenar coluna"
+              className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-blue-400 hover:scale-110 transition-all p-0.5"
+            >
+              <GripVertical className="w-4 h-4" />
+            </div>
+          )}
+          <div
+            className="w-3 h-3 rounded-full shrink-0"
+            style={{ backgroundColor: column.color || '#3b82f6' }}
+          />
+          <h3 className="font-bold text-sm text-white truncate max-w-[150px]" title={column.name}>{column.name}</h3>
+          {column.autoComplete && (
+            <span title="Esta coluna conclui atividades automaticamente" className="flex items-center text-emerald-400">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </span>
+          )}
+          <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
+            {tasks.length}
+          </span>
+        </div>
+
+        {!isReadOnly && isEditingColumns && (
+          <div className="flex items-center gap-2 shrink-0 animate-fade-in text-slate-400">
+            <button
+              onClick={() => onMoveColumn(column.id, 'left')}
+              disabled={colIndex === 0}
+              title="Mover coluna para a esquerda"
+              aria-label="Mover coluna para a esquerda"
+              className="text-slate-400 hover:text-white hover:scale-125 active:scale-95 transition-all disabled:opacity-20 disabled:hover:scale-100 disabled:hover:text-slate-400 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onMoveColumn(column.id, 'right')}
+              disabled={colIndex === totalColumns - 1}
+              title="Mover coluna para a direita"
+              aria-label="Mover coluna para a direita"
+              className="text-slate-400 hover:text-white hover:scale-125 active:scale-95 transition-all disabled:opacity-20 disabled:hover:scale-100 disabled:hover:text-slate-400 disabled:cursor-not-allowed"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onEditColumn(column)}
+              title="Editar Coluna"
+              aria-label="Editar Coluna"
+              className="text-slate-400 hover:text-blue-400 hover:scale-125 active:scale-95 transition-all"
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => onDeleteColumn(column.id)}
+              title="Excluir Coluna"
+              aria-label="Excluir Coluna"
+              className="text-slate-400 hover:text-rose-400 hover:scale-125 active:scale-95 transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Tasks Cards List */}
+      <div className="p-3 flex-1 space-y-2.5 min-h-[140px] overflow-y-auto max-h-[calc(100vh-320px)]">
+        {tasks.map((task, taskIndex) => (
+          <KanbanTaskCard
+            key={task.id}
+            task={task}
+            taskIndex={taskIndex}
+            columnId={column.id}
+            isReadOnly={isReadOnly}
+            isDragging={draggedTaskId === task.id}
+            isDropTarget={dragOverTaskId === task.id}
+            draggedTaskId={draggedTaskId}
+            onDragStart={onTaskDragStart}
+            onDragOver={onTaskDragOver}
+            onDragLeave={onTaskDragLeave}
+            onDropOnTask={onDropOnTask}
+            onClick={onTaskClick}
+            onToggleConcluded={onToggleTaskConcluded}
+          />
+        ))}
+
+        {tasks.length === 0 && (
+          <div className="p-6 border border-dashed border-slate-800 rounded-xl text-center text-xs text-slate-400">
+            Nenhuma atividade nesta coluna
+          </div>
+        )}
+      </div>
+
+      {/* Add Task footer button */}
+      {!isReadOnly && (
+        <div className="p-2 border-t border-slate-800">
+          <button
+            onClick={() => onAddTask(column.id)}
+            className="w-full py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center gap-1 transition-colors"
+          >
+            <Plus className="w-3.5 h-3.5" /> Adicionar card
+          </button>
+        </div>
+      )}
+    </div>
+  );
+});
+
 interface KanbanBoardProps {
   projectId: string;
   isReadOnly?: boolean;
@@ -29,9 +322,19 @@ interface KanbanBoardProps {
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly = false, onProjectUpdate }) => {
-  const [columns, setColumns] = useState<ProjectColumn[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [columns, setColumns] = useState<ProjectColumn[]>(() => {
+    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+    const projCols = allCols.filter(c => c.projectId === projectId);
+    return projCols.length > 0 ? deduplicateColumns(projCols) : [];
+  });
+  const [tasks, setTasks] = useState<Task[]>(() => {
+    const allTasks = getLocalData<Task>('tasks', initialTasks);
+    return allTasks.filter(t => t.projectId === projectId).sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  });
+  const [loading, setLoading] = useState<boolean>(() => {
+    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+    return !allCols.some(c => c.projectId === projectId);
+  });
 
   // Column edit mode & menu state
   const [isEditingColumns, setIsEditingColumns] = useState(false);
@@ -353,14 +656,69 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     return matchSearch && matchPriority;
   });
 
-  const getPriorityBadgeClass = (priority: TaskPriority) => {
-    switch (priority) {
-      case 'URGENTE': return 'badge-priority-urgent text-rose-300';
-      case 'ALTA': return 'badge-priority-high text-amber-300';
-      case 'MEDIA': return 'badge-priority-medium text-blue-300';
-      default: return 'badge-priority-low text-slate-300';
+  const tasksByColumnId = React.useMemo(() => {
+    const map: Record<string, Task[]> = {};
+    for (const col of columns) {
+      map[col.id] = [];
     }
+    for (const task of filteredTasks) {
+      if (map[task.columnId]) {
+        map[task.columnId].push(task);
+      } else {
+        map[task.columnId] = [task];
+      }
+    }
+    for (const colId in map) {
+      map[colId].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    }
+    return map;
+  }, [columns, filteredTasks]);
+
+  const handleTaskSaved = (savedTask?: Task, isEdit?: boolean) => {
+    if (savedTask) {
+      setTasks(prev => {
+        if (isEdit) {
+          return prev.map(t => t.id === savedTask.id ? savedTask : t);
+        }
+        return [...prev, savedTask];
+      });
+    }
+    onProjectUpdate?.();
+    loadKanban();
   };
+
+  const handleTaskDeleted = (taskId: string) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+    onProjectUpdate?.();
+    loadKanban();
+  };
+
+  const handleTaskClick = React.useCallback((task: Task) => {
+    if (!isReadOnly) {
+      setTaskToEdit(task);
+      setSelectedColumnId(task.columnId);
+      setIsTaskModalOpen(true);
+    }
+  }, [isReadOnly]);
+
+  const handleAddTask = React.useCallback((colId: string) => {
+    setTaskToEdit(null);
+    setSelectedColumnId(colId);
+    setIsTaskModalOpen(true);
+  }, []);
+
+  const handleEditColumn = React.useCallback((col: ProjectColumn) => {
+    setColToEdit(col);
+    setIsColModalOpen(true);
+  }, []);
+
+  const handleTaskDragOver = React.useCallback((e: React.DragEvent, taskId: string) => {
+    setDragOverTaskId(taskId);
+  }, []);
+
+  const handleTaskDragLeave = React.useCallback((taskId: string) => {
+    setDragOverTaskId(prev => (prev === taskId ? null : prev));
+  }, []);
 
   if (loading) {
     return (
@@ -528,203 +886,36 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
       {/* Columns Horizontal Board */}
       <div className="flex gap-4 overflow-x-auto pb-6 pt-1 items-start min-h-[560px]">
         {[...columns].sort((a, b) => a.position - b.position).map((column, colIndex, sortedColumns) => {
-          const colTasks = filteredTasks.filter(t => t.columnId === column.id).sort((a, b) => a.position - b.position);
+          const colTasks = tasksByColumnId[column.id] || [];
           const isOver = dragOverColumnId === column.id || dragOverColumnTargetId === column.id;
 
           return (
-            <div
+            <KanbanColumn
               key={column.id}
-              onDragOver={(e) => handleDragOver(e, column.id)}
-              onDragLeave={() => handleDragLeave(column.id)}
-              onDrop={(e) => handleDrop(e, column.id)}
-              className={`w-80 shrink-0 flex flex-col rounded-2xl bg-slate-900 border transition-all duration-150 ${isOver ? 'border-blue-500 bg-slate-800/90 ring-2 ring-blue-500/20' : 'border-slate-800'
-                }`}
-            >
-              {/* Column Header */}
-              <div className="p-3.5 border-b border-slate-800 flex items-center justify-between gap-1 min-h-[52px]">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  {!isReadOnly && isEditingColumns && (
-                    <div
-                      draggable
-                      onDragStart={(e) => handleColumnDragStart(e, column.id)}
-                      title="Arrastar para reordenar coluna"
-                      className="cursor-grab active:cursor-grabbing text-slate-400 hover:text-blue-400 hover:scale-110 transition-all p-0.5"
-                    >
-                      <GripVertical className="w-4 h-4" />
-                    </div>
-                  )}
-                  <div
-                    className="w-3 h-3 rounded-full shrink-0"
-                    style={{ backgroundColor: column.color || '#3b82f6' }}
-                  />
-                  <h3 className="font-bold text-sm text-white truncate max-w-[150px]" title={column.name}>{column.name}</h3>
-                  {column.autoComplete && (
-                    <span title="Esta coluna conclui atividades automaticamente" className="flex items-center text-emerald-400">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                    </span>
-                  )}
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-300 border border-slate-700 shrink-0">
-                    {colTasks.length}
-                  </span>
-                </div>
-
-                {!isReadOnly && isEditingColumns && (
-                  <div className="flex items-center gap-2 shrink-0 animate-fade-in text-slate-400">
-                    <button
-                      onClick={() => handleMoveColumn(column.id, 'left')}
-                      disabled={colIndex === 0}
-                      title="Mover coluna para a esquerda"
-                      aria-label="Mover coluna para a esquerda"
-                      className="text-slate-400 hover:text-white hover:scale-125 active:scale-95 transition-all disabled:opacity-20 disabled:hover:scale-100 disabled:hover:text-slate-400 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleMoveColumn(column.id, 'right')}
-                      disabled={colIndex === sortedColumns.length - 1}
-                      title="Mover coluna para a direita"
-                      aria-label="Mover coluna para a direita"
-                      className="text-slate-400 hover:text-white hover:scale-125 active:scale-95 transition-all disabled:opacity-20 disabled:hover:scale-100 disabled:hover:text-slate-400 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setColToEdit(column);
-                        setIsColModalOpen(true);
-                      }}
-                      title="Editar Coluna"
-                      aria-label="Editar Coluna"
-                      className="text-slate-400 hover:text-blue-400 hover:scale-125 active:scale-95 transition-all"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteColumn(column.id)}
-                      title="Excluir Coluna"
-                      aria-label="Excluir Coluna"
-                      className="text-slate-400 hover:text-rose-400 hover:scale-125 active:scale-95 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Tasks Cards List */}
-              <div className="p-3 flex-1 space-y-2.5 min-h-[140px] overflow-y-auto max-h-[calc(100vh-320px)]">
-                {colTasks.map((task, taskIndex) => {
-                  const isTaskDropTarget = dragOverTaskId === task.id;
-                  return (
-                    <div
-                      key={task.id}
-                      draggable={!isReadOnly}
-                      onDragStart={(e) => handleDragStart(e, task.id)}
-                      onDragOver={(e) => {
-                        if (draggedTaskId && draggedTaskId !== task.id) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setDragOverTaskId(task.id);
-                        }
-                      }}
-                      onDragLeave={() => {
-                        if (dragOverTaskId === task.id) setDragOverTaskId(null);
-                      }}
-                      onDrop={(e) => handleDropOnTask(e, column.id, taskIndex)}
-                      onClick={() => {
-                        if (!isReadOnly) {
-                          setTaskToEdit(task);
-                          setSelectedColumnId(task.columnId);
-                          setIsTaskModalOpen(true);
-                        }
-                      }}
-                      className={`group p-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border shadow-sm transition-all cursor-grab active:cursor-grabbing ${draggedTaskId === task.id ? 'opacity-100 scale-[0.98] border-dashed border-blue-500/40 bg-slate-700/80 ring-1 ring-blue-500/20' :
-                        isTaskDropTarget ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-750' :
-                          'border-slate-700/80 hover:-translate-y-0.5 hover:border-blue-500/50 hover:shadow-md'
-                        }`}
-                    >
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className={`badge text-[10px] py-0.5 px-2 ${getPriorityBadgeClass(task.priority)}`}>
-                            {task.priority}
-                          </span>
-                          {task.concluded && (
-                            <span className="badge text-[10px] py-0.5 px-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
-                              Concluída
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {!isReadOnly && (
-                            <button
-                              type="button"
-                              onClick={(e) => handleToggleTaskConcluded(e, task)}
-                              title={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
-                              aria-label={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
-                              className={`p-1 rounded-lg transition-all ${task.concluded
-                                ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
-                                : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-700/60'
-                                }`}
-                            >
-                              <CheckCircle2 className={`w-4 h-4 ${task.concluded ? 'fill-emerald-500/20 text-emerald-400' : 'text-slate-400'}`} />
-                            </button>
-                          )}
-                          {!isReadOnly && (
-                            <GripVertical className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-70 transition-opacity" />
-                          )}
-                        </div>
-                      </div>
-
-                      <h4 className={`text-sm font-semibold transition-colors leading-snug mb-1.5 ${task.concluded ? 'line-through text-slate-400' : 'text-white group-hover:text-blue-300'}`}>
-                        {task.title}
-                      </h4>
-
-                      {task.description && (
-                        <p className="text-xs text-slate-300 line-clamp-2 mb-3">
-                          {task.description}
-                        </p>
-                      )}
-
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-700/50 text-[11px] text-slate-400">
-                        {task.dueDate ? (
-                          <span className="flex items-center gap-1 text-blue-300 font-medium">
-                            <Calendar className="w-3 h-3" />
-                            {new Date(task.dueDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })}
-                          </span>
-                        ) : (
-                          <span></span>
-                        )}
-                        <span className="text-[10px] text-slate-400">
-                          {task.createdByName ? task.createdByName.split(' ')[0] : 'Autor'}
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {colTasks.length === 0 && (
-                  <div className="p-6 border border-dashed border-slate-800 rounded-xl text-center text-xs text-slate-400">
-                    Nenhuma atividade nesta coluna
-                  </div>
-                )}
-              </div>
-
-              {/* Add Task footer button */}
-              {!isReadOnly && (
-                <div className="p-2 border-t border-slate-800">
-                  <button
-                    onClick={() => {
-                      setTaskToEdit(null);
-                      setSelectedColumnId(column.id);
-                      setIsTaskModalOpen(true);
-                    }}
-                    className="w-full py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center gap-1 transition-colors"
-                  >
-                    <Plus className="w-3.5 h-3.5" /> Adicionar card
-                  </button>
-                </div>
-              )}
-            </div>
+              column={column}
+              tasks={colTasks}
+              colIndex={colIndex}
+              totalColumns={sortedColumns.length}
+              isReadOnly={isReadOnly}
+              isEditingColumns={isEditingColumns}
+              isOver={isOver}
+              draggedTaskId={draggedTaskId}
+              dragOverTaskId={dragOverTaskId}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onColumnDragStart={handleColumnDragStart}
+              onMoveColumn={handleMoveColumn}
+              onEditColumn={handleEditColumn}
+              onDeleteColumn={handleDeleteColumn}
+              onAddTask={handleAddTask}
+              onTaskDragStart={handleDragStart}
+              onTaskDragOver={handleTaskDragOver}
+              onTaskDragLeave={handleTaskDragLeave}
+              onDropOnTask={handleDropOnTask}
+              onTaskClick={handleTaskClick}
+              onToggleTaskConcluded={handleToggleTaskConcluded}
+            />
           );
         })}
       </div>
@@ -738,10 +929,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
           columns={columns}
           defaultColumnId={selectedColumnId}
           taskToEdit={taskToEdit}
-          onSaved={() => {
-            loadKanban();
-            onProjectUpdate?.();
-          }}
+          onSaved={handleTaskSaved}
+          onDelete={handleTaskDeleted}
         />
       )}
 

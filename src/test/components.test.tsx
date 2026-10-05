@@ -8,6 +8,7 @@ import { ApiDocsPage } from '@/pages/public/ApiDocsPage';
 import { ProjectsListPage } from '@/pages/projects/ProjectsListPage';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { TaskModal } from '@/components/kanban/TaskModal';
+import { NewProjectModal } from '@/pages/projects/NewProjectModal';
 import { ImageCropperModal } from '@/components/profile/ImageCropperModal';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SuggestionsTab } from '@/components/feedback/SuggestionsTab';
@@ -413,5 +414,77 @@ describe('UI Components & Pages Tests', () => {
 
     // Commands are hidden again
     expect(screen.queryByLabelText('Mover coluna para a esquerda')).not.toBeInTheDocument();
+  });
+
+  it('discreetly creates project and invokes onCreated with created project data', async () => {
+    const onCreated = vi.fn();
+    const onClose = vi.fn();
+
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <NewProjectModal
+            isOpen={true}
+            onClose={onClose}
+            onCreated={onCreated}
+          />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    const nameInput = screen.getByLabelText(/Nome do Projeto/i);
+    fireEvent.change(nameInput, { target: { value: 'Projeto Atualização Discreta' } });
+
+    const submitBtn = screen.getByRole('button', { name: /Criar Projeto/i });
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(onCreated).toHaveBeenCalled();
+      expect(onClose).toHaveBeenCalled();
+    });
+
+    const createdArg = onCreated.mock.calls[0][0];
+    expect(createdArg).toBeDefined();
+    expect(createdArg.name).toBe('Projeto Atualização Discreta');
+  });
+
+  it('discreetly updates task concluded state without crashing or reloading board', async () => {
+    const onProjectUpdate = vi.fn();
+    const testTask: Task = {
+      id: 'task-disc-1',
+      projectId: 'p1',
+      columnId: 'col-1',
+      title: 'Tarefa para conclusão discreta',
+      description: 'Testando conclui',
+      priority: 'MEDIA',
+      concluded: false,
+      position: 0,
+      createdById: 'user-test',
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    vi.spyOn(ColumnService, 'getByProject').mockResolvedValue(mockColumns);
+    vi.spyOn(TaskService, 'getByProject').mockResolvedValue([testTask]);
+
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <KanbanBoard projectId="p1" isReadOnly={false} onProjectUpdate={onProjectUpdate} />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Tarefa para conclusão discreta')).toBeInTheDocument();
+    });
+
+    const concludeBtn = screen.getByRole('button', { name: /Marcar como concluída/i });
+    fireEvent.click(concludeBtn);
+
+    await waitFor(() => {
+      expect(onProjectUpdate).toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: /Marcar como pendente/i })).toBeInTheDocument();
+    });
   });
 });

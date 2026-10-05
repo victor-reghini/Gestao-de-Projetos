@@ -11,7 +11,8 @@ interface TaskModalProps {
   columns: ProjectColumn[];
   defaultColumnId?: string;
   taskToEdit?: Task | null;
-  onSaved: () => void;
+  onSaved: (task?: Task, isEdit?: boolean) => void;
+  onDelete?: (taskId: string) => void;
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -21,7 +22,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   columns,
   defaultColumnId,
   taskToEdit,
-  onSaved
+  onSaved,
+  onDelete
 }) => {
   const { user } = useAuth();
   const [title, setTitle] = useState('');
@@ -92,7 +94,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
     try {
       if (taskToEdit) {
-        await TaskService.update(taskToEdit.id, {
+        const updated = await TaskService.update(taskToEdit.id, {
           title: title.trim(),
           description: description.trim(),
           columnId: targetColumnId,
@@ -100,8 +102,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           dueDate: dueDate || null,
           concluded
         });
+        onSaved(updated, true);
       } else {
-        await TaskService.create({
+        const created = await TaskService.create({
           projectId,
           columnId: targetColumnId,
           title: title.trim(),
@@ -112,9 +115,9 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           createdById: user?.id || 'demo-user-123',
           createdByName: user?.name || 'Victor Reghini'
         });
+        onSaved(created, false);
       }
 
-      onSaved();
       onClose();
     } catch (err: any) {
       setError(err.message || 'Erro ao salvar atividade.');
@@ -127,7 +130,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     if (!taskToEdit) return;
     if (confirm('Deseja excluir esta atividade permanentemente?')) {
       await TaskService.delete(taskToEdit.id);
-      onSaved();
+      if (onDelete) {
+        onDelete(taskToEdit.id);
+      } else {
+        onSaved();
+      }
       onClose();
     }
   };

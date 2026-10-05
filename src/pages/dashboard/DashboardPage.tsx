@@ -31,8 +31,10 @@ export const DashboardPage: React.FC = () => {
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [isNewIdeaOpen, setIsNewIdeaOpen] = useState(false);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const [p, i] = await Promise.all([
         ProjectService.getAll(user?.id),
@@ -59,6 +61,14 @@ export const DashboardPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleProjectCreated = (newProject: Project) => {
+    setProjects(prev => {
+      if (prev.some(p => p.id === newProject.id)) return prev;
+      return [newProject, ...prev];
+    });
+    loadData(true);
   };
 
   useEffect(() => {
@@ -312,7 +322,7 @@ export const DashboardPage: React.FC = () => {
       <NewProjectModal
         isOpen={isNewProjectOpen}
         onClose={() => setIsNewProjectOpen(false)}
-        onCreated={loadData}
+        onCreated={handleProjectCreated}
       />
       <IdeaModal
         isOpen={isNewIdeaOpen}
