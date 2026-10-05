@@ -610,4 +610,33 @@ describe('UI Components & Pages Tests', () => {
     expect(screen.getByText('0 tarefas')).toBeInTheDocument();
     expect(screen.getByText('Nenhuma atividade no projeto')).toBeInTheDocument();
   });
+
+  it('renders ProjectColumnProgressBar independently by fetching tasks and columns when not passed as props', async () => {
+    const fetchedCols: ProjectColumn[] = [
+      { id: 'c1', projectId: 'p-auto', name: 'A Fazer', key: 'backlog', position: 0, color: '#f97316', createdAt: '', updatedAt: '' },
+      { id: 'c2', projectId: 'p-auto', name: 'Pronto', key: 'done', position: 1, color: '#10b981', autoComplete: true, createdAt: '', updatedAt: '' }
+    ];
+    const fetchedTasks: Task[] = [
+      { id: 't1', projectId: 'p-auto', columnId: 'c1', title: 'Task 1', description: '', priority: 'MEDIA', position: 0, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't2', projectId: 'p-auto', columnId: 'c2', title: 'Task 2', description: '', priority: 'MEDIA', position: 0, concluded: true, createdById: 'u1', createdAt: '', updatedAt: '' }
+    ];
+
+    vi.spyOn(ColumnService, 'getByProject').mockResolvedValue(fetchedCols);
+    vi.spyOn(TaskService, 'getByProject').mockResolvedValue(fetchedTasks);
+
+    render(
+      <ProjectColumnProgressBar
+        projectId="p-auto"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('Tarefas no Fluxo')).toBeInTheDocument();
+      expect(screen.getByText('2')).toBeInTheDocument();
+      expect(screen.getByText('50% concluído')).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId('segment-backlog')).toBeInTheDocument();
+    expect(screen.getByTestId('segment-done')).toBeInTheDocument();
+  });
 });

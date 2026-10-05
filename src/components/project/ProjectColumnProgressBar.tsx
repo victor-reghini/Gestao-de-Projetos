@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ProjectColumn, Task } from '@/types';
+import { TaskService, ColumnService } from '@/services/dbService';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export interface ProjectColumnProgressBarProps {
   projectId: string;
-  tasks: Task[];
+  tasks?: Task[];
   columns?: ProjectColumn[];
   className?: string;
   showTitle?: boolean;
+  refreshTrigger?: any;
 }
 
 export const getColumnColor = (column: Partial<ProjectColumn>, index = 0): string => {
@@ -28,15 +30,70 @@ export const getColumnColor = (column: Partial<ProjectColumn>, index = 0): strin
 
 export const ProjectColumnProgressBar: React.FC<ProjectColumnProgressBarProps> = ({
   projectId,
-  tasks = [],
-  columns = [],
+  tasks: propsTasks,
+  columns: propsColumns,
   className = '',
   showTitle = true,
+  refreshTrigger,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [hoveredColumnId, setHoveredColumnId] = useState<string | null>(null);
+
+  // Internal state when fetching data autonomously
+  const [internalTasks, setInternalTasks] = useState<Task[] | null>(null);
+  const [internalColumns, setInternalColumns] = useState<ProjectColumn[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // Fetch data independently if tasks or columns are not supplied via props
+  useEffect(() => {
+    if (propsTasks !== undefined && propsColumns !== undefined) {
+      return;
+    }
+
+    let isMounted = true;
+    const fetchData = async () => {
+      if (!projectId) return;
+      setLoading(true);
+      try {
+        const [fetchedTasks, fetchedCols] = await Promise.all([
+          propsTasks !== undefined ? Promise.resolve(propsTasks) : TaskService.getByProject(projectId).catch(() => []),
+          propsColumns !== undefined ? Promise.resolve(propsColumns) : ColumnService.getByProject(projectId).catch(() => [])
+        ]);
+
+        if (isMounted) {
+          if (propsTasks === undefined) setInternalTasks(fetchedTasks);
+          if (propsColumns === undefined) setInternalColumns(fetchedCols);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados no ProjectColumnProgressBar:', err);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchData();
+
+    // Listen to task updates triggered anywhere in the application
+    const handleCustomUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<{ projectId?: string }>;
+      if (!customEvent.detail || !customEvent.detail.projectId || customEvent.detail.projectId === projectId) {
+        fetchData();
+      }
+    };
+    window.addEventListener('gestao:project-tasks-updated', handleCustomUpdate);
+
+    return () => {
+      isMounted = false;
+      window.removeEventListener('gestao:project-tasks-updated', handleCustomUpdate);
+    };
+  }, [projectId, propsTasks, propsColumns, refreshTrigger]);
+
+  const tasks = propsTasks !== undefined ? propsTasks : (internalTasks || []);
+  const columns = propsColumns !== undefined ? propsColumns : (internalColumns || []);
 
   // Measure container width to dynamically adapt legend when space is constrained
   useEffect(() => {
@@ -184,6 +241,20 @@ export const ProjectColumnProgressBar: React.FC<ProjectColumnProgressBarProps> =
       hasMore: remainingCount > 0
     };
   }, [columnStats, totalTasks, isSmallSpace, isExpanded, projectCols.length]);
+
+  // Loading skeleton when self-fetching initial data
+  if (loading && !internalTasks && propsTasks === undefined) {
+    return (
+      <div ref={containerRef} className={`w-full animate-pulse ${className}`}>
+        {showTitle && (
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-1.5">
+            <span>Carregando distribuição de tarefas...</span>
+          </div>
+        )}
+        <div className="w-full bg-slate-800/60 rounded-full h-2 overflow-hidden" />
+      </div>
+    );
+  }
 
   return (
     <div ref={containerRef} className={`w-full ${className}`}>
