@@ -1,29 +1,29 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { 
-  ProjectService, 
-  DocumentService, 
-  SuggestionService, 
-  BugReportService, 
+import {
+  ProjectService,
+  DocumentService,
+  SuggestionService,
+  BugReportService,
   MemberService,
   getLocalData,
   initialProjects
 } from '@/services/dbService';
 import { Project, ProjectDocument, Suggestion, BugReport, ProjectMember } from '@/types';
-import { 
-  FolderKanban, 
-  LayoutDashboard, 
-  FileText, 
-  Network, 
-  MessageSquarePlus, 
-  Bug, 
-  Settings, 
-  GitBranch, 
-  Globe, 
-  Lock, 
-  ExternalLink, 
-  ChevronRight, 
+import {
+  FolderKanban,
+  LayoutDashboard,
+  FileText,
+  Network,
+  MessageSquarePlus,
+  Bug,
+  Settings,
+  GitBranch,
+  Globe,
+  Lock,
+  ExternalLink,
+  ChevronRight,
   ArrowLeft,
   Copy,
   Check
@@ -125,8 +125,7 @@ export const ProjectDetailPage: React.FC = () => {
   const handleProjectUpdate = React.useCallback(() => {
     // Discreet update: refresh project timestamp without resetting loading or unmounting the board
     setProject(prev => prev ? { ...prev, updatedAt: new Date().toISOString() } : null);
-    window.dispatchEvent(new CustomEvent('gestao:project-tasks-updated', { detail: { projectId: id } }));
-  }, [id]);
+  }, []);
 
   useEffect(() => {
     loadProjectData();
@@ -215,16 +214,14 @@ export const ProjectDetailPage: React.FC = () => {
           <div className="space-y-1.5 max-w-3xl">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">{project.name}</h1>
-              <span className={`badge ${
-                project.visibility === 'PUBLIC' ? 'badge-public' : project.visibility === 'SHARED' ? 'badge-shared' : 'badge-private'
-              }`}>
+              <span className={`badge ${project.visibility === 'PUBLIC' ? 'badge-public' : project.visibility === 'SHARED' ? 'badge-shared' : 'badge-private'
+                }`}>
                 {project.visibility === 'PUBLIC' ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
                 {project.visibility}
               </span>
-              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                project.status === 'EM_ANDAMENTO' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' :
+              <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${project.status === 'EM_ANDAMENTO' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' :
                 project.status === 'CONCLUIDO' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-              }`}>
+                }`}>
                 {project.status.replace('_', ' ')}
               </span>
             </div>
@@ -257,7 +254,7 @@ export const ProjectDetailPage: React.FC = () => {
         </div>
 
         {/* Progress Bar */}
-        <div className="mt-4 pt-3 border-t border-slate-800/80">
+        <div className="mt-4 pt-3 border-t border-slate-800">
           <ProjectColumnProgressBar
             projectId={project.id}
             refreshTrigger={project.updatedAt}
@@ -274,18 +271,16 @@ export const ProjectDetailPage: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => handleTabChange(tab.id as TabType)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-semibold text-xs transition-all shrink-0 border-b-2 ${
-                isActive
-                  ? 'bg-slate-900 text-blue-400 border-blue-500 shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-900/50'
-              }`}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-xl font-semibold text-xs transition-all shrink-0 border-b-2 ${isActive
+                ? 'bg-slate-900 text-blue-400 border-blue-500 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200 border-transparent hover:bg-slate-900/50'
+                }`}
             >
               <Icon className="w-4 h-4" />
               <span>{tab.label}</span>
               {tab.count !== undefined && tab.count > 0 && (
-                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                  tab.id === 'bugs' ? 'bg-rose-500/20 text-rose-300' : 'bg-blue-500/20 text-blue-300'
-                }`}>
+                <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${tab.id === 'bugs' ? 'bg-rose-500/20 text-rose-300' : 'bg-blue-500/20 text-blue-300'
+                  }`}>
                   {tab.count}
                 </span>
               )}

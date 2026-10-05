@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { MarkdownDocViewer } from '@/components/docs/MarkdownDocViewer';
 import { MermaidDiagramViewer } from '@/components/docs/MermaidDiagramViewer';
+import { ProjectColumnProgressBar } from '@/components/project/ProjectColumnProgressBar';
 
 export const PublicProjectPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -252,6 +253,13 @@ export const PublicProjectPage: React.FC = () => {
         {activeTab === 'roadmap' && (
           <div className="glass-panel p-6 space-y-6">
             <h3 className="text-lg font-bold text-white">Status das Atividades em Andamento</h3>
+            <div className="mt-4 pt-3 border-t border-slate-800">
+              <ProjectColumnProgressBar
+                projectId={project.id}
+                refreshTrigger={project.updatedAt}
+              />
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {columns.map(col => {
                 const colTasks = tasks.filter(t => t.columnId === col.id);
