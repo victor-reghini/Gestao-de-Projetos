@@ -9,7 +9,7 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { login, loginWithGoogle, loginDemo } = useAuth();
+  const { login, loginWithGoogle, loginDemo, loginWithTestUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || '/dashboard';
@@ -41,8 +41,8 @@ export const LoginPage: React.FC = () => {
     }
   };
 
-  const handleDemoLogin = () => {
-    loginDemo();
+  const handleDemoLogin = async () => {
+    await loginWithTestUser();
     navigate(from, { replace: true });
   };
 

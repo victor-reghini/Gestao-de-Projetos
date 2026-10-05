@@ -254,15 +254,15 @@ function mapBugReportRow(row: any): BugReport {
 // QUERY FUNCTIONS (READ FROM CLOUD SQL)
 // ==========================================================
 
-export async function fetchCloudSqlProjects(): Promise<Project[]> {
+export async function fetchCloudSqlProjects(): Promise<Project[] | null> {
   const p = getPool();
-  if (!p) return [];
+  if (!p) return null;
   try {
     const res = await p.query('SELECT * FROM "public"."project" ORDER BY created_at DESC');
     return res.rows.map(mapProjectRow);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlProjects error:', err);
-    return [];
+    return null;
   }
 }
 
@@ -294,9 +294,9 @@ function deduplicateColumnsByKey(columns: ProjectColumn[]): ProjectColumn[] {
   return Array.from(map.values()).sort((a, b) => a.position - b.position);
 }
 
-export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectColumn[]> {
+export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectColumn[] | null> {
   const p = getPool();
-  if (!p) return [];
+  if (!p) return null;
   try {
     const query = projectId
       ? 'SELECT * FROM "public"."project_column" WHERE project_id = $1 ORDER BY position ASC'
@@ -307,13 +307,13 @@ export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectC
     return deduplicateColumnsByKey(mapped);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlColumns error:', err);
-    return [];
+    return null;
   }
 }
 
-export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[]> {
+export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | null> {
   const p = getPool();
-  if (!p) return [];
+  if (!p) return null;
   try {
     const query = projectId
       ? 'SELECT * FROM "public"."task" WHERE project_id = $1 ORDER BY position ASC'
@@ -323,25 +323,25 @@ export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[]> {
     return res.rows.map(mapTaskRow);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlTasks error:', err);
-    return [];
+    return null;
   }
 }
 
-export async function fetchCloudSqlIdeas(): Promise<Idea[]> {
+export async function fetchCloudSqlIdeas(): Promise<Idea[] | null> {
   const p = getPool();
-  if (!p) return [];
+  if (!p) return null;
   try {
     const res = await p.query('SELECT * FROM "public"."idea" ORDER BY created_at DESC');
     return res.rows.map(mapIdeaRow);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlIdeas error:', err);
-    return [];
+    return null;
   }
 }
 
-export async function fetchCloudSqlDocuments(projectId?: string): Promise<ProjectDocument[]> {
+export async function fetchCloudSqlDocuments(projectId?: string): Promise<ProjectDocument[] | null> {
   const p = getPool();
-  if (!p) return [];
+  if (!p) return null;
   try {
     const query = projectId
       ? 'SELECT * FROM "public"."project_document" WHERE project_id = $1 ORDER BY position ASC'
@@ -351,13 +351,13 @@ export async function fetchCloudSqlDocuments(projectId?: string): Promise<Projec
     return res.rows.map(mapDocumentRow);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlDocuments error:', err);
-    return [];
+    return null;
   }
 }
 
-export async function fetchCloudSqlSuggestions(projectId?: string): Promise<Suggestion[]> {
+export async function fetchCloudSqlSuggestions(projectId?: string): Promise<Suggestion[] | null> {
   const p = getPool();
-  if (!p) return [];
+  if (!p) return null;
   try {
     const query = projectId
       ? 'SELECT * FROM "public"."suggestion" WHERE project_id = $1 ORDER BY created_at DESC'
@@ -367,13 +367,13 @@ export async function fetchCloudSqlSuggestions(projectId?: string): Promise<Sugg
     return res.rows.map(mapSuggestionRow);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlSuggestions error:', err);
-    return [];
+    return null;
   }
 }
 
-export async function fetchCloudSqlBugs(projectId?: string): Promise<BugReport[]> {
+export async function fetchCloudSqlBugs(projectId?: string): Promise<BugReport[] | null> {
   const p = getPool();
-  if (!p) return [];
+  if (!p) return null;
   try {
     const query = projectId
       ? 'SELECT * FROM "public"."bug_report" WHERE project_id = $1 ORDER BY created_at DESC'
@@ -383,7 +383,7 @@ export async function fetchCloudSqlBugs(projectId?: string): Promise<BugReport[]
     return res.rows.map(mapBugReportRow);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlBugs error:', err);
-    return [];
+    return null;
   }
 }
 
@@ -395,18 +395,37 @@ export async function fetchCloudSqlAll(): Promise<{
   documents: ProjectDocument[];
   suggestions: Suggestion[];
   bugs: BugReport[];
-}> {
-  const [projects, columns, tasks, ideas, documents, suggestions, bugs] = await Promise.all([
-    fetchCloudSqlProjects(),
-    fetchCloudSqlColumns(),
-    fetchCloudSqlTasks(),
-    fetchCloudSqlIdeas(),
-    fetchCloudSqlDocuments(),
-    fetchCloudSqlSuggestions(),
-    fetchCloudSqlBugs()
-  ]);
+} | null> {
+  const p = getPool();
+  if (!p) return null;
+  try {
+    const [projects, columns, tasks, ideas, documents, suggestions, bugs] = await Promise.all([
+      fetchCloudSqlProjects(),
+      fetchCloudSqlColumns(),
+      fetchCloudSqlTasks(),
+      fetchCloudSqlIdeas(),
+      fetchCloudSqlDocuments(),
+      fetchCloudSqlSuggestions(),
+      fetchCloudSqlBugs()
+    ]);
 
-  return { projects, columns, tasks, ideas, documents, suggestions, bugs };
+    if (projects === null || columns === null || tasks === null) {
+      return null;
+    }
+
+    return {
+      projects,
+      columns,
+      tasks,
+      ideas: ideas || [],
+      documents: documents || [],
+      suggestions: suggestions || [],
+      bugs: bugs || []
+    };
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlAll error:', err);
+    return null;
+  }
 }
 
 // ==========================================================

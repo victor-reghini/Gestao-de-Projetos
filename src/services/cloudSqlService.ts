@@ -54,7 +54,8 @@ export const CloudSqlService = {
       const res = await fetch('/api/v1/cloudsql/projects');
       if (res.ok) {
         const json = await res.json();
-        return json.data || [];
+        if (json.success === false || json.data === null || json.data === undefined) return null;
+        return json.data;
       }
       return null;
     } catch {
@@ -68,7 +69,8 @@ export const CloudSqlService = {
       const res = await fetch(`/api/v1/cloudsql/projects?id=${encodeURIComponent(idOrSlug)}`);
       if (res.ok) {
         const json = await res.json();
-        return json.data || null;
+        if (json.success === false || json.data === null || json.data === undefined) return null;
+        return json.data;
       }
       return null;
     } catch {
@@ -85,7 +87,8 @@ export const CloudSqlService = {
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
-        return json.data || [];
+        if (json.success === false || json.data === null || json.data === undefined) return null;
+        return json.data;
       }
       return null;
     } catch {
@@ -102,7 +105,8 @@ export const CloudSqlService = {
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
-        return json.data || [];
+        if (json.success === false || json.data === null || json.data === undefined) return null;
+        return json.data;
       }
       return null;
     } catch {
@@ -116,7 +120,8 @@ export const CloudSqlService = {
       const res = await fetch('/api/v1/cloudsql/ideas');
       if (res.ok) {
         const json = await res.json();
-        return json.data || [];
+        if (json.success === false || json.data === null || json.data === undefined) return null;
+        return json.data;
       }
       return null;
     } catch {
@@ -133,7 +138,8 @@ export const CloudSqlService = {
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
-        return json.data || [];
+        if (json.success === false || json.data === null || json.data === undefined) return null;
+        return json.data;
       }
       return null;
     } catch {
@@ -150,7 +156,8 @@ export const CloudSqlService = {
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
-        return json.data || [];
+        if (json.success === false || json.data === null || json.data === undefined) return null;
+        return json.data;
       }
       return null;
     } catch {
@@ -167,7 +174,8 @@ export const CloudSqlService = {
       const res = await fetch(url);
       if (res.ok) {
         const json = await res.json();
-        return json.data || [];
+        if (json.success === false || json.data === null || json.data === undefined) return null;
+        return json.data;
       }
       return null;
     } catch {
@@ -189,7 +197,8 @@ export const CloudSqlService = {
       const res = await fetch('/api/v1/cloudsql/all');
       if (res.ok) {
         const json = await res.json();
-        return json.data || null;
+        if (json.success === false || json.data === null || json.data === undefined) return null;
+        return json.data;
       }
       return null;
     } catch {

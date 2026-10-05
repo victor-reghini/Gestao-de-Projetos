@@ -731,5 +731,40 @@ describe('Domain & Business Rules Tests', () => {
         fetchSpy.mockRestore();
       }
     });
+
+    it('falls back cleanly to localStorage and preserves newly created projects when Cloud SQL fails/returns null', async () => {
+      // 1. Mock Cloud SQL fetch returning null (simulating database connection error)
+      const fetchSpy = vi.spyOn(CloudSqlService, 'fetchProjects').mockResolvedValue(null);
+
+      const origEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      sessionStorage.setItem('gestao_demo_user', JSON.stringify({ id: 'demo-user-123' }));
+
+      try {
+        // 2. Create project locally
+        const created = await ProjectService.create({
+          ownerId: 'demo-user-123',
+          ownerName: 'Victor Reghini',
+          name: 'Projeto Criado Localmente',
+          description: 'Teste de persistência local',
+          visibility: 'PUBLIC',
+          status: 'EM_ANDAMENTO',
+          technologies: ['React', 'TypeScript'],
+          links: []
+        });
+
+        expect(created.id).toBeDefined();
+
+        // 3. Fetch all projects as connected user
+        const result = await ProjectService.getAll('demo-user-123');
+
+        // Should NOT be wiped; should return the created local project
+        expect(result.some(p => p.id === created.id)).toBe(true);
+      } finally {
+        process.env.NODE_ENV = origEnv;
+        sessionStorage.removeItem('gestao_demo_user');
+        fetchSpy.mockRestore();
+      }
+    });
   });
 });

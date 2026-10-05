@@ -236,49 +236,76 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
         const idOrSlug = segments[2] || event.queryStringParameters?.id;
         if (idOrSlug) {
           const project = await fetchCloudSqlProjectByIdOrSlug(idOrSlug);
+          if (!project) {
+            return { statusCode: 404, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Projeto não encontrado' }) };
+          }
           return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: project }) };
         }
         const projects = await fetchCloudSqlProjects();
+        if (projects === null) {
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+        }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: projects }) };
       }
 
       if (action === 'columns' && event.httpMethod === 'GET') {
         const projectId = event.queryStringParameters?.projectId || segments[2];
         const cols = await fetchCloudSqlColumns(projectId);
+        if (cols === null) {
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+        }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: cols }) };
       }
 
       if (action === 'tasks' && event.httpMethod === 'GET') {
         const projectId = event.queryStringParameters?.projectId || segments[2];
         const tasks = await fetchCloudSqlTasks(projectId);
+        if (tasks === null) {
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+        }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: tasks }) };
       }
 
       if (action === 'ideas' && event.httpMethod === 'GET') {
         const ideas = await fetchCloudSqlIdeas();
+        if (ideas === null) {
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+        }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: ideas }) };
       }
 
       if (action === 'documents' && event.httpMethod === 'GET') {
         const projectId = event.queryStringParameters?.projectId || segments[2];
         const docs = await fetchCloudSqlDocuments(projectId);
+        if (docs === null) {
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+        }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: docs }) };
       }
 
       if (action === 'suggestions' && event.httpMethod === 'GET') {
         const projectId = event.queryStringParameters?.projectId || segments[2];
         const sugs = await fetchCloudSqlSuggestions(projectId);
+        if (sugs === null) {
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+        }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: sugs }) };
       }
 
       if (action === 'bugs' && event.httpMethod === 'GET') {
         const projectId = event.queryStringParameters?.projectId || segments[2];
         const bugs = await fetchCloudSqlBugs(projectId);
+        if (bugs === null) {
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+        }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: bugs }) };
       }
 
       if (action === 'all' && event.httpMethod === 'GET') {
         const allData = await fetchCloudSqlAll();
+        if (allData === null) {
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+        }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: allData }) };
       }
     }

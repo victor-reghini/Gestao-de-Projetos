@@ -9,7 +9,7 @@ import {
   sendPasswordResetEmail,
   updateProfile
 } from 'firebase/auth';
-import { auth, googleProvider } from '@/services/firebase';
+import { auth, googleProvider, getEnvVar } from '@/services/firebase';
 import { User } from '@/types';
 
 interface AuthContextType {
@@ -21,6 +21,7 @@ interface AuthContextType {
   register: (name: string, email: string, pass: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginDemo: () => void;
+  loginWithTestUser: () => Promise<void>;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   updateUser: (name: string, avatarUrl?: string) => Promise<void>;
@@ -28,10 +29,10 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const DEMO_USER: User = {
-  id: 'demo-user-123',
-  name: 'Victor Reghini',
-  email: 'victor.reghini@exemplo.com',
+export const PROD_TEST_USER: User = {
+  id: getEnvVar('VITE_TEST_USER_ID', 'demo-user-123'),
+  name: getEnvVar('VITE_TEST_USER_NAME', 'Victor Reghini'),
+  email: getEnvVar('VITE_TEST_USER_EMAIL', 'contato@victorreghini.com.br'),
   avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString()
@@ -48,6 +49,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const savedDemo = sessionStorage.getItem('gestao_demo_user');
     if (savedDemo) {
       setUser(JSON.parse(savedDemo));
+      setIsDemo(true);
+      setLoading(false);
+      return;
+    }
+
+    // Ambiente de desenvolvimento local: inicia automaticamente com o usuário de testes se não houve logout manual
+    const isTestRuntime = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    const manualLogout = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('gestao_manual_logout');
+    if (!manualLogout && !isTestRuntime && (import.meta as any).env?.DEV) {
+      sessionStorage.setItem('gestao_demo_user', JSON.stringify(PROD_TEST_USER));
+      setUser(PROD_TEST_USER);
       setIsDemo(true);
       setLoading(false);
       return;
@@ -138,12 +150,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginDemo = () => {
-    sessionStorage.setItem('gestao_demo_user', JSON.stringify(DEMO_USER));
-    setUser(DEMO_USER);
+    sessionStorage.removeItem('gestao_manual_logout');
+    sessionStorage.setItem('gestao_demo_user', JSON.stringify(PROD_TEST_USER));
+    setUser(PROD_TEST_USER);
     setIsDemo(true);
   };
 
+  const loginWithTestUser = async () => {
+    sessionStorage.removeItem('gestao_manual_logout');
+    const testEmail = getEnvVar('VITE_TEST_USER_EMAIL', 'contato@victorreghini.com.br');
+    const testPass = getEnvVar('VITE_TEST_USER_PASSWORD', '');
+    if (testEmail && testPass) {
+      try {
+        await login(testEmail, testPass);
+        return;
+      } catch (err) {
+        console.warn('Login com credenciais de teste em produção falhou, utilizando sessão de teste local:', err);
+      }
+    }
+    loginDemo();
+  };
+
   const logout = async () => {
+    sessionStorage.setItem('gestao_manual_logout', 'true');
     sessionStorage.removeItem('gestao_demo_user');
     setIsDemo(false);
     setUser(null);
@@ -185,6 +214,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       register,
       loginWithGoogle,
       loginDemo,
+      loginWithTestUser,
       logout,
       resetPassword,
       updateUser
