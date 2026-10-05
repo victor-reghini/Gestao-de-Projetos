@@ -76,13 +76,12 @@ const KanbanTaskCard = React.memo<KanbanTaskCardProps>(({
       onDragLeave={() => onDragLeave(task.id)}
       onDrop={(e) => onDropOnTask(e, columnId, taskIndex)}
       onClick={() => onClick(task)}
-      className={`group p-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border shadow-sm transition-all cursor-grab active:cursor-grabbing ${
-        isDragging
+      className={`group p-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border shadow-sm transition-all cursor-grab active:cursor-grabbing ${isDragging
           ? 'opacity-100 scale-[0.98] border-dashed border-blue-500/40 bg-slate-700/80 ring-1 ring-blue-500/20'
           : isDropTarget
-          ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-750'
-          : 'border-slate-700/80 hover:-translate-y-0.5 hover:border-blue-500/50 hover:shadow-md'
-      }`}
+            ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-750'
+            : 'border-slate-700/80 hover:-translate-y-0.5 hover:border-blue-500/50 hover:shadow-md'
+        }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -102,11 +101,10 @@ const KanbanTaskCard = React.memo<KanbanTaskCardProps>(({
               onClick={(e) => onToggleConcluded(e, task)}
               title={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
               aria-label={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
-              className={`p-1 rounded-lg transition-all ${
-                task.concluded
+              className={`rounded-lg transition-all bg-transparent ${task.concluded
                   ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
                   : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-700/60'
-              }`}
+                }`}
             >
               <CheckCircle2 className={`w-4 h-4 ${task.concluded ? 'fill-emerald-500/20 text-emerald-400' : 'text-slate-400'}`} />
             </button>
@@ -200,9 +198,8 @@ const KanbanColumn = React.memo<KanbanColumnProps>(({
       onDragOver={(e) => onDragOver(e, column.id)}
       onDragLeave={() => onDragLeave(column.id)}
       onDrop={(e) => onDrop(e, column.id)}
-      className={`w-80 shrink-0 flex flex-col rounded-2xl bg-slate-900 border transition-all duration-150 ${
-        isOver ? 'border-blue-500 bg-slate-800/90 ring-2 ring-blue-500/20' : 'border-slate-800'
-      }`}
+      className={`w-80 shrink-0 flex flex-col rounded-2xl bg-slate-900 border transition-all duration-150 ${isOver ? 'border-blue-500 bg-slate-800/90 ring-2 ring-blue-500/20' : 'border-slate-800'
+        }`}
     >
       {/* Column Header */}
       <div className="p-3.5 border-b border-slate-800 flex items-center justify-between gap-1 min-h-[52px]">
@@ -305,7 +302,7 @@ const KanbanColumn = React.memo<KanbanColumnProps>(({
         <div className="p-2 border-t border-slate-800">
           <button
             onClick={() => onAddTask(column.id)}
-            className="w-full py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center gap-1 transition-colors"
+            className="w-full py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center gap-1 transition-colors bg-gray-30"
           >
             <Plus className="w-3.5 h-3.5" /> Adicionar card
           </button>
