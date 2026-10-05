@@ -66,8 +66,10 @@ export const ProjectsListPage: React.FC = () => {
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
 
-  const loadProjects = async () => {
-    setLoading(true);
+  const loadProjects = async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const projs = await ProjectService.getAll(user?.id);
       setProjects(projs);
@@ -91,6 +93,14 @@ export const ProjectsListPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleProjectCreated = (newProject: Project) => {
+    setProjects(prev => {
+      if (prev.some(p => p.id === newProject.id)) return prev;
+      return [newProject, ...prev];
+    });
+    loadProjects(true);
   };
 
   useEffect(() => {
@@ -484,7 +494,7 @@ export const ProjectsListPage: React.FC = () => {
       <NewProjectModal
         isOpen={isNewModalOpen}
         onClose={() => setIsNewModalOpen(false)}
-        onCreated={loadProjects}
+        onCreated={handleProjectCreated}
       />
     </div>
   );

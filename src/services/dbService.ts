@@ -31,7 +31,7 @@ export async function safeFirestoreQuery<T>(fn: () => Promise<T>, fallback: T): 
 
 const LOCAL_STORAGE_KEY_PREFIX = 'gestao_projetos_db_';
 
-function getLocalData<T>(key: string, defaultValue: T[]): T[] {
+export function getLocalData<T>(key: string, defaultValue: T[]): T[] {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + key);
     if (!raw) return defaultValue;
