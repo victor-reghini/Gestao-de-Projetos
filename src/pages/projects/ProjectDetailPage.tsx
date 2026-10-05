@@ -35,6 +35,7 @@ import { MermaidDiagramViewer } from '@/components/docs/MermaidDiagramViewer';
 import { SuggestionsTab } from '@/components/feedback/SuggestionsTab';
 import { BugsTab } from '@/components/feedback/BugsTab';
 import { MembersAndSettingsTab } from '@/components/project/MembersAndSettingsTab';
+import { ProjectColumnProgressBar } from '@/components/project/ProjectColumnProgressBar';
 
 const VALID_TABS = ['overview', 'kanban', 'docs', 'diagrams', 'suggestions', 'bugs', 'settings'] as const;
 type TabType = typeof VALID_TABS[number];
@@ -124,7 +125,8 @@ export const ProjectDetailPage: React.FC = () => {
   const handleProjectUpdate = React.useCallback(() => {
     // Discreet update: refresh project timestamp without resetting loading or unmounting the board
     setProject(prev => prev ? { ...prev, updatedAt: new Date().toISOString() } : null);
-  }, []);
+    window.dispatchEvent(new CustomEvent('gestao:project-tasks-updated', { detail: { projectId: id } }));
+  }, [id]);
 
   useEffect(() => {
     loadProjectData();
@@ -252,6 +254,14 @@ export const ProjectDetailPage: React.FC = () => {
               {tech}
             </span>
           ))}
+        </div>
+
+        {/* Progress Bar */}
+        <div className="mt-4 pt-3 border-t border-slate-800/80">
+          <ProjectColumnProgressBar
+            projectId={project.id}
+            refreshTrigger={project.updatedAt}
+          />
         </div>
       </div>
 
