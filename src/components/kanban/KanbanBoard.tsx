@@ -661,7 +661,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
                               onClick={(e) => handleToggleTaskConcluded(e, task)}
                               title={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
                               aria-label={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
-                              className={`p-1 rounded-lg transition-all ${task.concluded
+                              className={`rounded-lg transition-all bg-transparent ${task.concluded
                                 ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
                                 : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-700/60'
                                 }`}
