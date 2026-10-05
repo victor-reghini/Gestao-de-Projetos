@@ -31,3 +31,11 @@ Command output is condensed to save 60-90% LLM context window tokens while prese
 - Inspect git changes using compact single-line diffs: `rtk git diff -U1` instead of wide multi-line context.
 - When exploring codebases, inspect function signatures / AST outlines (/rtk-outline) before reading entire files into context.
 
+## Git Branch & Activity Workflow Rule (Comando: "Nova atividade")
+- **Isolamento de Branches:** NUNCA comitar ou fazer push diretamente na branch `main`. Todas as novas alterações devem ser organizadas em branches dedicadas (`feature/*`, `fix/*`, `task/*`).
+- **Gatilho de Nova Atividade:** Sempre que o usuário iniciar uma nova tarefa ou enviar o comando `Nova atividade` (ex.: "Nova atividade", "Nova atividade: <nome>", `/nova-atividade`):
+  1. Identificar ou derivar o nome descritivo da branch (`feature/<slug>` ou `task/<slug>`).
+  2. Executar imediatamente: `rtk git checkout -b <nome-da-branch>`.
+  3. Confirmar a mudança de branch antes de implementar qualquer código ou editar arquivos.
+  4. Realizar commits e pushes exclusivamente na branch de trabalho criada.
+
