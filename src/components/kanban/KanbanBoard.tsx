@@ -718,7 +718,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
                       setSelectedColumnId(column.id);
                       setIsTaskModalOpen(true);
                     }}
-                    className="w-full py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center gap-1 transition-colors"
+                    className="w-full py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-slate-800 flex items-center justify-center gap-1 transition-colors bg-gray-30"
                   >
                     <Plus className="w-3.5 h-3.5" /> Adicionar card
                   </button>

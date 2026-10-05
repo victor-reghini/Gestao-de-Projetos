@@ -138,6 +138,10 @@ a:hover {
 }
 
 /* Buttons */
+button {
+  cursor: pointer;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -1470,6 +1474,10 @@ a:hover {
 
 .bg-transparent {
   background: transparent;
+}
+
+.bg-gray-30 {
+  background-color: rgba(172, 172, 172, 0.185);
 }
 
 /* Gradients */
