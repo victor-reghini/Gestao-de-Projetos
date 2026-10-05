@@ -254,21 +254,19 @@ export const ProjectColumnProgressBar: React.FC<ProjectColumnProgressBarProps> =
                 <div
                   key={stat.column.id}
                   data-testid={`legend-${stat.column.key || stat.column.id}`}
-                  className={`flex items-center gap-1.5 transition-colors cursor-pointer select-none ${
-                    isHovered
-                      ? 'text-white font-semibold'
-                      : isZero
+                  className={`flex items-center gap-1 space-x-r-4 transition-colors cursor-pointer select-none ${isHovered
+                    ? 'text-white font-semibold'
+                    : isZero
                       ? 'text-slate-500 opacity-60 hover:opacity-100 hover:text-slate-300'
                       : 'text-slate-300 hover:text-white'
-                  }`}
+                    }`}
                   title={`${stat.column.name}: ${stat.count} ${stat.count === 1 ? 'tarefa' : 'tarefas'} (${stat.roundedPercentage}%)`}
                   onMouseEnter={() => setHoveredColumnId(stat.column.id)}
                   onMouseLeave={() => setHoveredColumnId(null)}
                 >
                   <span
-                    className={`w-2 h-2 rounded-full flex-shrink-0 transition-transform ${
-                      isHovered ? 'scale-125 ring-2 ring-white/50' : ''
-                    }`}
+                    className={`w-2 h-2 rounded-full flex-shrink-0 transition-transform ${isHovered ? 'scale-125 ring-2 ring-white/50' : ''
+                      }`}
                     style={{ backgroundColor: stat.color }}
                   />
                   <span className="truncate max-w-[110px]">{stat.column.name}</span>

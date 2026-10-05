@@ -608,6 +608,10 @@ button {
   margin-left: 1rem;
 }
 
+.space-x-r-4 {
+  margin-right: 4px;
+}
+
 /* Padding */
 .p-0 {
   padding: 0;
