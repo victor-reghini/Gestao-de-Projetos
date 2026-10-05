@@ -6,15 +6,15 @@ const { Pool } = pg;
 let pool: pg.Pool | null = null;
 
 export function getCloudSqlConfig() {
-  const connectionString = process.env.DATABASE_URL || process.env.VITE_DATABASE_URL;
-  const host = process.env.PGHOST || process.env.VITE_PGHOST;
+  const host = process.env.PGHOST || process.env.VITE_PGHOST || '34.181.161.180';
   const user = process.env.PGUSER || process.env.VITE_PGUSER || 'postgres';
-  const password = process.env.PGPASSWORD || process.env.VITE_PGPASSWORD;
+  const password = process.env.PGPASSWORD || process.env.VITE_PGPASSWORD || 'SenhaPostgres1234GestaoDeProjetos';
   const database = process.env.PGDATABASE || process.env.VITE_PGDATABASE || 'gestao-projetos-ea44c-database';
   const port = parseInt(process.env.PGPORT || process.env.VITE_PGPORT || '5432', 10);
   const ssl = process.env.PGSSL === 'false' ? false : { rejectUnauthorized: false };
+  const connectionString = process.env.DATABASE_URL || process.env.VITE_DATABASE_URL;
 
-  const isConfigured = Boolean(connectionString || (host && password));
+  const isConfigured = Boolean((host && password) || connectionString);
 
   return {
     isConfigured,
@@ -35,14 +35,8 @@ export function getPool(): pg.Pool | null {
   }
 
   if (!pool) {
-    if (config.connectionString) {
-      pool = new Pool({
-        connectionString: config.connectionString,
-        ssl: config.ssl,
-        connectionTimeoutMillis: 8000,
-        idleTimeoutMillis: 30000
-      });
-    } else {
+    // Prioritize explicit discrete parameters (host, user, password) to avoid malformed URL strings
+    if (config.host && config.password) {
       pool = new Pool({
         host: config.host,
         port: config.port,
@@ -53,15 +47,23 @@ export function getPool(): pg.Pool | null {
         connectionTimeoutMillis: 8000,
         idleTimeoutMillis: 30000
       });
+    } else if (config.connectionString) {
+      pool = new Pool({
+        connectionString: config.connectionString,
+        ssl: config.ssl,
+        connectionTimeoutMillis: 8000,
+        idleTimeoutMillis: 30000
+      });
     }
 
-    pool.on('error', (err) => {
+    pool?.on('error', (err) => {
       console.warn('[CloudSQL] Pool Warning:', err.message);
     });
   }
 
   return pool;
 }
+
 
 export async function testCloudSqlConnection(): Promise<{
   connected: boolean;
