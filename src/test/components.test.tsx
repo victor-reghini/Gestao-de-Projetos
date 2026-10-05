@@ -13,6 +13,7 @@ import { ImageCropperModal } from '@/components/profile/ImageCropperModal';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { SuggestionsTab } from '@/components/feedback/SuggestionsTab';
 import { BugsTab } from '@/components/feedback/BugsTab';
+import { ProjectColumnProgressBar } from '@/components/project/ProjectColumnProgressBar';
 import { ColumnService, ProjectService, TaskService, SuggestionService, BugReportService } from '@/services/dbService';
 import { Project, ProjectColumn, Task, Suggestion, BugReport } from '@/types';
 
@@ -486,5 +487,127 @@ describe('UI Components & Pages Tests', () => {
       expect(onProjectUpdate).toHaveBeenCalled();
       expect(screen.getByRole('button', { name: /Marcar como pendente/i })).toBeInTheDocument();
     });
+  });
+
+  it('renders ProjectColumnProgressBar with half orange and half green for 2 backlog and 2 done tasks, strictly respecting order and colors', () => {
+    const customColumns: ProjectColumn[] = [
+      { id: 'col-backlog', projectId: 'p-test', name: 'Backlog', key: 'backlog', position: 0, color: '#f97316', createdAt: '', updatedAt: '' },
+      { id: 'col-progress', projectId: 'p-test', name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1', createdAt: '', updatedAt: '' },
+      { id: 'col-done', projectId: 'p-test', name: 'Concluído', key: 'done', position: 2, color: '#10b981', autoComplete: true, createdAt: '', updatedAt: '' }
+    ];
+
+    const fourTasks: Task[] = [
+      { id: 't1', projectId: 'p-test', columnId: 'col-backlog', title: 'Task 1', description: '', priority: 'MEDIA', position: 0, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't2', projectId: 'p-test', columnId: 'col-backlog', title: 'Task 2', description: '', priority: 'MEDIA', position: 1, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't3', projectId: 'p-test', columnId: 'col-done', title: 'Task 3', description: '', priority: 'MEDIA', position: 0, concluded: true, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't4', projectId: 'p-test', columnId: 'col-done', title: 'Task 4', description: '', priority: 'MEDIA', position: 1, concluded: true, createdById: 'u1', createdAt: '', updatedAt: '' },
+    ];
+
+    render(
+      <ProjectColumnProgressBar
+        projectId="p-test"
+        tasks={fourTasks}
+        columns={customColumns}
+      />
+    );
+
+    // Title / Header verification
+    expect(screen.getByText('Tarefas no Fluxo')).toBeInTheDocument();
+    expect(screen.getByText('4')).toBeInTheDocument();
+    expect(screen.getByText('50% concluído')).toBeInTheDocument();
+
+    // Segments verification
+    const backlogSegment = screen.getByTestId('segment-backlog');
+    const doneSegment = screen.getByTestId('segment-done');
+    expect(screen.queryByTestId('segment-in_progress')).not.toBeInTheDocument(); // 0 tasks, so not rendered in bar
+
+    // Widths are 50% each
+    expect(backlogSegment).toHaveStyle({ width: '50%', backgroundColor: '#f97316' });
+    expect(doneSegment).toHaveStyle({ width: '50%', backgroundColor: '#10b981' });
+
+    // Order verification: backlog segment precedes done segment in DOM
+    expect(backlogSegment.compareDocumentPosition(doneSegment)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+    // Legend verification: Backlog 50% and Concluído 50%
+    expect(screen.getByTestId('legend-backlog')).toHaveTextContent('Backlog');
+    expect(screen.getByTestId('legend-backlog')).toHaveTextContent('50%');
+    expect(screen.getByTestId('legend-done')).toHaveTextContent('Concluído');
+    expect(screen.getByTestId('legend-done')).toHaveTextContent('50%');
+  });
+
+  it('renders adaptive legend with top percentages in small space and toggles expansion to show all columns', () => {
+    const multiColumns: ProjectColumn[] = [
+      { id: 'col-1', projectId: 'p-multi', name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', createdAt: '', updatedAt: '' },
+      { id: 'col-2', projectId: 'p-multi', name: 'Em Análise', key: 'analysis', position: 1, color: '#06b6d4', createdAt: '', updatedAt: '' },
+      { id: 'col-3', projectId: 'p-multi', name: 'Em Execução', key: 'in_progress', position: 2, color: '#6366f1', createdAt: '', updatedAt: '' },
+      { id: 'col-4', projectId: 'p-multi', name: 'Revisão', key: 'review', position: 3, color: '#f59e0b', createdAt: '', updatedAt: '' },
+      { id: 'col-5', projectId: 'p-multi', name: 'Concluído', key: 'done', position: 4, color: '#10b981', autoComplete: true, createdAt: '', updatedAt: '' },
+    ];
+
+    const tasks: Task[] = [
+      // 4 in Backlog (40%)
+      { id: 't1', projectId: 'p-multi', columnId: 'col-1', title: 'T1', description: '', priority: 'MEDIA', position: 0, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't2', projectId: 'p-multi', columnId: 'col-1', title: 'T2', description: '', priority: 'MEDIA', position: 1, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't3', projectId: 'p-multi', columnId: 'col-1', title: 'T3', description: '', priority: 'MEDIA', position: 2, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't4', projectId: 'p-multi', columnId: 'col-1', title: 'T4', description: '', priority: 'MEDIA', position: 3, createdById: 'u1', createdAt: '', updatedAt: '' },
+      // 3 in Em Execução (30%)
+      { id: 't5', projectId: 'p-multi', columnId: 'col-3', title: 'T5', description: '', priority: 'MEDIA', position: 0, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't6', projectId: 'p-multi', columnId: 'col-3', title: 'T6', description: '', priority: 'MEDIA', position: 1, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't7', projectId: 'p-multi', columnId: 'col-3', title: 'T7', description: '', priority: 'MEDIA', position: 2, createdById: 'u1', createdAt: '', updatedAt: '' },
+      // 2 in Concluído (20%)
+      { id: 't8', projectId: 'p-multi', columnId: 'col-5', title: 'T8', description: '', priority: 'MEDIA', position: 0, createdById: 'u1', createdAt: '', updatedAt: '' },
+      { id: 't9', projectId: 'p-multi', columnId: 'col-5', title: 'T9', description: '', priority: 'MEDIA', position: 1, createdById: 'u1', createdAt: '', updatedAt: '' },
+      // 1 in Revisão (10%)
+      { id: 't10', projectId: 'p-multi', columnId: 'col-4', title: 'T10', description: '', priority: 'MEDIA', position: 0, createdById: 'u1', createdAt: '', updatedAt: '' },
+    ];
+
+    render(
+      <ProjectColumnProgressBar
+        projectId="p-multi"
+        tasks={tasks}
+        columns={multiColumns}
+      />
+    );
+
+    // Total tasks = 10
+    expect(screen.getByText('10')).toBeInTheDocument();
+
+    // Since there are 5 columns (> 3 columns heuristic in test environment), it is in small space
+    // Top 2 percentages are Backlog (40%) and Em Execução (30%)
+    expect(screen.getByTestId('legend-backlog')).toBeInTheDocument();
+    expect(screen.getByTestId('legend-backlog')).toHaveTextContent('40%');
+    expect(screen.getByTestId('legend-in_progress')).toBeInTheDocument();
+    expect(screen.getByTestId('legend-in_progress')).toHaveTextContent('30%');
+
+    // Button to expand remaining columns (+3 mais)
+    const toggleBtn = screen.getByTestId('toggle-more-columns');
+    expect(toggleBtn).toBeInTheDocument();
+    expect(toggleBtn).toHaveTextContent('+3 mais');
+
+    // Click to expand and view ALL column names and colors
+    fireEvent.click(toggleBtn);
+
+    // Now all 5 columns should be visible in the legend
+    expect(screen.getByTestId('legend-backlog')).toBeInTheDocument();
+    expect(screen.getByTestId('legend-analysis')).toBeInTheDocument();
+    expect(screen.getByTestId('legend-in_progress')).toBeInTheDocument();
+    expect(screen.getByTestId('legend-review')).toBeInTheDocument();
+    expect(screen.getByTestId('legend-done')).toBeInTheDocument();
+
+    // Toggle button now says "Menos"
+    expect(toggleBtn).toHaveTextContent('Menos');
+  });
+
+  it('renders ProjectColumnProgressBar with 0 tasks showing empty state', () => {
+    render(
+      <ProjectColumnProgressBar
+        projectId="p-empty"
+        tasks={[]}
+        columns={mockColumns}
+      />
+    );
+
+    expect(screen.getByText('0 tarefas')).toBeInTheDocument();
+    expect(screen.getByText('Nenhuma atividade no projeto')).toBeInTheDocument();
   });
 });
