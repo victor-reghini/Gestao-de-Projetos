@@ -111,8 +111,9 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     };
   }
 
-  // Parse path: /api/v1/projects/:slug/...
-  const path = event.path.replace(/^\/\.netlify\/functions\/api/, '').replace(/^\/api\/v1/, '');
+  // Parse path: /api/v1/... or /.netlify/functions/api/v1/...
+  const rawPath = event.path.replace(/^\/\.netlify\/functions\/api/, '');
+  const path = rawPath.replace(/^\/?(api\/)?v1/, '');
   const segments = path.split('/').filter(Boolean);
 
   try {
