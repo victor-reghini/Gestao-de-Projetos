@@ -24,7 +24,11 @@ import {
   fetchCloudSqlDocuments,
   fetchCloudSqlSuggestions,
   fetchCloudSqlBugs,
-  fetchCloudSqlAll
+  fetchCloudSqlAll,
+  fetchCloudSqlSystemSettings,
+  persistCloudSqlSystemSettings,
+  checkCloudSqlSuperUser,
+  syncUserToCloudSql
 } from '../../src/services/server/cloudSqlDb';
 
 const defaultFallbackProjects = [
@@ -308,6 +312,32 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
         }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: allData }) };
+      }
+
+      if (action === 'system-settings' && event.httpMethod === 'GET') {
+        const settings = await fetchCloudSqlSystemSettings();
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: settings }) };
+      }
+
+      if (action === 'system-settings' && event.httpMethod === 'POST') {
+        try {
+          const updated = await persistCloudSqlSystemSettings(body.settings || {}, { id: body.userId, email: body.email });
+          return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: updated }) };
+        } catch (err: any) {
+          return { statusCode: 403, headers: corsHeaders, body: JSON.stringify({ success: false, error: err.message }) };
+        }
+      }
+
+      if (action === 'user-status' && event.httpMethod === 'GET') {
+        const userId = event.queryStringParameters?.userId;
+        const email = event.queryStringParameters?.email;
+        const isSuperUser = await checkCloudSqlSuperUser(userId, email);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, isSuperUser }) };
+      }
+
+      if (action === 'sync-user' && event.httpMethod === 'POST') {
+        const result = await syncUserToCloudSql(body);
+        return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, ...result }) };
       }
     }
 

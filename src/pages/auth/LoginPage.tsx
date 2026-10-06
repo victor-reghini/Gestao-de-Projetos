@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { useSystemSettings } from '@/context/SystemSettingsContext';
 import { Layers, Mail, Lock, LogIn, ArrowRight, Sparkles, AlertCircle } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -10,6 +11,7 @@ export const LoginPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   const { login, loginWithGoogle, loginDemo, loginWithTestUser } = useAuth();
+  const { settings } = useSystemSettings();
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as any)?.from?.pathname || '/dashboard';
@@ -171,12 +173,18 @@ export const LoginPage: React.FC = () => {
           </button>
 
           <div className="mt-6 text-center">
-            <p className="text-sm text-slate-400">
-              Não tem uma conta?{' '}
-              <Link to="/register" className="text-blue-400 font-semibold hover:underline">
-                Criar conta gratuita
-              </Link>
-            </p>
+            {settings.allowRegistration !== false ? (
+              <p className="text-sm text-slate-400">
+                Não tem uma conta?{' '}
+                <Link to="/register" className="text-blue-400 font-semibold hover:underline">
+                  Criar conta gratuita
+                </Link>
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500 italic">
+                Criação de novas contas temporariamente suspensa pelo administrador.
+              </p>
+            )}
           </div>
         </div>
 

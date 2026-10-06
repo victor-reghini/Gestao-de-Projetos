@@ -15,14 +15,17 @@ import {
   Sparkles,
   ExternalLink,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  ShieldCheck
 } from 'lucide-react';
 import { NewProjectModal } from '@/pages/projects/NewProjectModal';
 import { IdeaModal } from '@/pages/ideas/IdeaModal';
 import { SyncStatusIndicator } from '@/components/sync/SyncStatusIndicator';
+import { useSystemSettings } from '@/context/SystemSettingsContext';
 
 export const AppLayout: React.FC = () => {
   const { user, isDemo, logout } = useAuth();
+  const { isSuperUser } = useSystemSettings();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [isNewIdeaOpen, setIsNewIdeaOpen] = useState(false);
@@ -56,6 +59,7 @@ export const AppLayout: React.FC = () => {
     { to: '/ideas', label: 'Ideias & Backlog', icon: Lightbulb },
     { to: '/docs/api', label: 'API Pública REST', icon: Code2 },
     { to: '/profile', label: 'Meu Perfil', icon: UserIcon },
+    ...(isSuperUser ? [{ to: '/admin/configuracoes', label: 'Super Usuário', icon: ShieldCheck }] : [])
   ];
 
   return (
