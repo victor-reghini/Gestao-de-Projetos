@@ -158,15 +158,7 @@ export const ProjectDetailPage: React.FC = () => {
   // User has edit permissions if they are not explicitly restricted as a 'viewer'
   const isExplicitViewer = members.some(m => m.userId === user?.id && m.role === 'viewer');
   const canEdit = !isExplicitViewer;
-  const isOwner = Boolean(
-    !project.ownerId ||
-    project.ownerId === 'demo-user-123' ||
-    user?.id === project.ownerId ||
-    user?.id === 'demo-user-123' ||
-    user?.email === project.ownerName ||
-    members.some(m => m.userId === user?.id && m.role === 'owner') ||
-    members.length === 0
-  );
+  const isOwner = Boolean(user?.id && project.ownerId && user.id === project.ownerId);
   const publicUrl = `${window.location.origin}/p/${project.slug}`;
 
   const copyPublicUrl = () => {
@@ -239,7 +231,7 @@ export const ProjectDetailPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 flex-wrap self-start md:self-center">
-            {canEdit && (
+            {isOwner && (
               <button
                 onClick={() => handleTabChange('settings')}
                 className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5 border-slate-700 hover:border-blue-500/50"
@@ -326,7 +318,7 @@ export const ProjectDetailPage: React.FC = () => {
               <div className="pt-4 border-t border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Links do Projeto</h4>
-                  {canEdit && (
+                  {isOwner && (
                     <button
                       onClick={() => handleTabChange('settings')}
                       className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 font-medium transition-colors"
