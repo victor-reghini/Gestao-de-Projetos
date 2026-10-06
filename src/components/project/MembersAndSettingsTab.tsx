@@ -55,9 +55,11 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
   const [links, setLinks] = useState<ProjectLink[]>(project.links || []);
   const [newLinkTitle, setNewLinkTitle] = useState('');
   const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [newLinkIsPrivate, setNewLinkIsPrivate] = useState(false);
   const [editingLinkIndex, setEditingLinkIndex] = useState<number | null>(null);
   const [editingLinkTitle, setEditingLinkTitle] = useState('');
   const [editingLinkUrl, setEditingLinkUrl] = useState('');
+  const [editingLinkIsPrivate, setEditingLinkIsPrivate] = useState(false);
 
   // Sync state when project changes
   useEffect(() => {
@@ -97,9 +99,17 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
 
   const handleAddLink = () => {
     if (newLinkTitle.trim() && newLinkUrl.trim()) {
-      setLinks([...links, { title: newLinkTitle.trim(), url: newLinkUrl.trim() }]);
+      setLinks([
+        ...links,
+        {
+          title: newLinkTitle.trim(),
+          url: newLinkUrl.trim(),
+          isPrivate: newLinkIsPrivate
+        }
+      ]);
       setNewLinkTitle('');
       setNewLinkUrl('');
+      setNewLinkIsPrivate(false);
     }
   };
 
@@ -107,6 +117,7 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
     setEditingLinkIndex(index);
     setEditingLinkTitle(links[index].title);
     setEditingLinkUrl(links[index].url);
+    setEditingLinkIsPrivate(Boolean(links[index].isPrivate));
   };
 
   const handleSaveEditLink = () => {
@@ -115,11 +126,21 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
       const nextLinks = [...links];
       nextLinks[editingLinkIndex] = {
         title: editingLinkTitle.trim(),
-        url: editingLinkUrl.trim()
+        url: editingLinkUrl.trim(),
+        isPrivate: editingLinkIsPrivate
       };
       setLinks(nextLinks);
       setEditingLinkIndex(null);
     }
+  };
+
+  const handleToggleLinkPrivacy = (index: number) => {
+    const nextLinks = [...links];
+    nextLinks[index] = {
+      ...nextLinks[index],
+      isPrivate: !nextLinks[index].isPrivate
+    };
+    setLinks(nextLinks);
   };
 
   const handleCancelEditLink = () => {
@@ -331,32 +352,73 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
               <label className="text-xs font-semibold text-white flex items-center gap-1.5">
                 <Globe className="w-3.5 h-3.5 text-indigo-400" /> Links Úteis & Recursos ({links.length})
               </label>
+              <span className="text-[11px] text-slate-400">
+                Links privados são visíveis <strong className="text-amber-300">apenas pelo owner</strong>
+              </span>
             </div>
 
             {/* Adicionar novo link */}
-            <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
-              <input
-                type="text"
-                placeholder="Título (ex: Figma, API Docs)"
-                value={newLinkTitle}
-                onChange={(e) => setNewLinkTitle(e.target.value)}
-                className="input text-xs sm:col-span-2"
-              />
-              <input
-                type="url"
-                placeholder="https://exemplo.com"
-                value={newLinkUrl}
-                onChange={(e) => setNewLinkUrl(e.target.value)}
-                className="input text-xs sm:col-span-2"
-              />
-              <button
-                type="button"
-                onClick={handleAddLink}
-                disabled={!newLinkTitle.trim() || !newLinkUrl.trim()}
-                className="btn btn-secondary btn-sm text-xs flex items-center justify-center gap-1 shrink-0"
-              >
-                <Plus className="w-3.5 h-3.5" /> Adicionar Link
-              </button>
+            <div className="space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                <input
+                  type="text"
+                  placeholder="Título (ex: Figma, Staging, Docs)"
+                  value={newLinkTitle}
+                  onChange={(e) => setNewLinkTitle(e.target.value)}
+                  className="input text-xs sm:col-span-5"
+                />
+                <input
+                  type="url"
+                  placeholder="https://exemplo.com"
+                  value={newLinkUrl}
+                  onChange={(e) => setNewLinkUrl(e.target.value)}
+                  className="input text-xs sm:col-span-4"
+                />
+                <button
+                  type="button"
+                  onClick={() => setNewLinkIsPrivate(!newLinkIsPrivate)}
+                  className={`btn btn-xs sm:col-span-3 text-xs flex items-center justify-center gap-1.5 transition-all h-9 ${
+                    newLinkIsPrivate
+                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                  }`}
+                  title={newLinkIsPrivate ? 'Link Privado (visível apenas para o proprietário)' : 'Link Público (visível nas visões públicas)'}
+                >
+                  {newLinkIsPrivate ? (
+                    <>
+                      <Lock className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Privado</span>
+                    </>
+                  ) : (
+                    <>
+                      <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Público</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                  {newLinkIsPrivate ? (
+                    <span className="text-amber-400 flex items-center gap-1 font-medium">
+                      <Lock className="w-3 h-3" /> Privado: Não será exibido na página pública ou API REST.
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 flex items-center gap-1">
+                      <Globe className="w-3 h-3 text-slate-400" /> Público: Visível na página pública e endpoints externos do projeto.
+                    </span>
+                  )}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleAddLink}
+                  disabled={!newLinkTitle.trim() || !newLinkUrl.trim()}
+                  className="btn btn-secondary btn-sm text-xs flex items-center gap-1 shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Adicionar Link
+                </button>
+              </div>
             </div>
 
             {/* Lista de links com edição inline */}
@@ -366,39 +428,66 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
                   const isEditingThis = editingLinkIndex === idx;
                   if (isEditingThis) {
                     return (
-                      <div key={idx} className="p-2.5 rounded-lg bg-slate-900 border border-indigo-500/40 space-y-2">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div key={idx} className="p-3 rounded-lg bg-slate-900 border border-indigo-500/40 space-y-2.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
                           <input
                             type="text"
                             value={editingLinkTitle}
                             onChange={(e) => setEditingLinkTitle(e.target.value)}
                             placeholder="Título do Link"
-                            className="input text-xs"
+                            className="input text-xs sm:col-span-5"
                           />
                           <input
                             type="url"
                             value={editingLinkUrl}
                             onChange={(e) => setEditingLinkUrl(e.target.value)}
                             placeholder="https://..."
-                            className="input text-xs"
+                            className="input text-xs sm:col-span-4"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setEditingLinkIsPrivate(!editingLinkIsPrivate)}
+                            className={`btn btn-xs sm:col-span-3 text-xs flex items-center justify-center gap-1.5 transition-all h-9 ${
+                              editingLinkIsPrivate
+                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                            }`}
+                            title={editingLinkIsPrivate ? 'Link Privado (apenas owner)' : 'Link Público'}
+                          >
+                            {editingLinkIsPrivate ? (
+                              <>
+                                <Lock className="w-3.5 h-3.5 text-amber-400" />
+                                <span>Privado</span>
+                              </>
+                            ) : (
+                              <>
+                                <Globe className="w-3.5 h-3.5 text-emerald-400" />
+                                <span>Público</span>
+                              </>
+                            )}
+                          </button>
                         </div>
-                        <div className="flex justify-end gap-2">
-                          <button
-                            type="button"
-                            onClick={handleCancelEditLink}
-                            className="btn btn-ghost btn-xs text-xs"
-                          >
-                            Cancelar
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleSaveEditLink}
-                            disabled={!editingLinkTitle.trim() || !editingLinkUrl.trim()}
-                            className="btn btn-primary btn-xs text-xs flex items-center gap-1"
-                          >
-                            <Check className="w-3 h-3" /> Salvar Link
-                          </button>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-slate-400">
+                            {editingLinkIsPrivate ? 'Apenas o owner do projeto terá acesso.' : 'Visível nas visões públicas do projeto.'}
+                          </span>
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={handleCancelEditLink}
+                              className="btn btn-ghost btn-xs text-xs"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleSaveEditLink}
+                              disabled={!editingLinkTitle.trim() || !editingLinkUrl.trim()}
+                              className="btn btn-primary btn-xs text-xs flex items-center gap-1"
+                            >
+                              <Check className="w-3 h-3" /> Salvar Link
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
@@ -410,7 +499,29 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
                       className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 transition-colors"
                     >
                       <div className="flex items-center gap-2 truncate pr-2">
-                        <span className="font-semibold text-white">{link.title}:</span>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLinkPrivacy(idx)}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors shrink-0 ${
+                            link.isPrivate
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30'
+                              : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20'
+                          }`}
+                          title={`Clique para alternar para ${link.isPrivate ? 'Público' : 'Privado'}`}
+                        >
+                          {link.isPrivate ? (
+                            <>
+                              <Lock className="w-2.5 h-2.5 text-amber-400" />
+                              <span>Privado</span>
+                            </>
+                          ) : (
+                            <>
+                              <Globe className="w-2.5 h-2.5 text-emerald-400" />
+                              <span>Público</span>
+                            </>
+                          )}
+                        </button>
+                        <span className="font-semibold text-white truncate">{link.title}:</span>
                         <a
                           href={link.url}
                           target="_blank"
@@ -422,6 +533,14 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
                         </a>
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLinkPrivacy(idx)}
+                          className="p-1.5 rounded text-slate-400 hover:text-amber-300 hover:bg-slate-800 transition-colors"
+                          title={link.isPrivate ? 'Tornar público' : 'Tornar privado (apenas owner)'}
+                        >
+                          {link.isPrivate ? <Globe className="w-3.5 h-3.5 text-emerald-400" /> : <Lock className="w-3.5 h-3.5 text-amber-400" />}
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleStartEditLink(idx)}

@@ -328,24 +328,38 @@ export const ProjectDetailPage: React.FC = () => {
                     </button>
                   )}
                 </div>
-                {project.links && project.links.length > 0 ? (
-                  <div className="flex flex-wrap gap-2">
-                    {project.links.map((link, idx) => (
-                      <a
-                        key={idx}
-                        href={link.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
-                        <span>{link.title}</span>
-                      </a>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500 italic">Nenhum link útil cadastrado no momento.</p>
-                )}
+                {(() => {
+                  const visibleLinks = (project.links || []).filter(link => !link.isPrivate || isOwner);
+                  return visibleLinks.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {visibleLinks.map((link, idx) => (
+                        <a
+                          key={idx}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`btn btn-secondary btn-sm text-xs flex items-center gap-1.5 ${
+                            link.isPrivate ? 'border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50' : ''
+                          }`}
+                        >
+                          {link.isPrivate ? (
+                            <Lock className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                          ) : (
+                            <ExternalLink className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                          )}
+                          <span>{link.title}</span>
+                          {link.isPrivate && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 font-semibold border border-amber-500/30">
+                              Privado
+                            </span>
+                          )}
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500 italic">Nenhum link útil cadastrado no momento.</p>
+                  );
+                })()}
               </div>
             </div>
 

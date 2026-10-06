@@ -44,6 +44,7 @@ export interface Repository {
 export interface ProjectLink {
   title: string;
   url: string;
+  isPrivate?: boolean;
 }
 
 export interface Project {

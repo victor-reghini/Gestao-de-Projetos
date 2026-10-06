@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { IdeaService } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
 import { Idea, Visibility, IdeaStatus } from '@/types';
-import { X, Lightbulb, Plus, Trash2, Globe, Sparkles, Edit2, Check } from 'lucide-react';
+import { X, Lightbulb, Plus, Trash2, Globe, Sparkles, Edit2, Check, Lock } from 'lucide-react';
 
 interface IdeaModalProps {
   isOpen: boolean;
@@ -19,12 +19,14 @@ export const IdeaModal: React.FC<IdeaModalProps> = ({ isOpen, onClose, ideaToEdi
   const [status, setStatus] = useState<IdeaStatus>('NOVA');
   const [techInput, setTechInput] = useState('');
   const [technologies, setTechnologies] = useState<string[]>([]);
-  const [links, setLinks] = useState<{ title: string; url: string }[]>([]);
+  const [links, setLinks] = useState<{ title: string; url: string; isPrivate?: boolean }[]>([]);
   const [linkTitle, setLinkTitle] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+  const [linkIsPrivate, setLinkIsPrivate] = useState(false);
   const [editingLinkIndex, setEditingLinkIndex] = useState<number | null>(null);
   const [editingLinkTitle, setEditingLinkTitle] = useState('');
   const [editingLinkUrl, setEditingLinkUrl] = useState('');
+  const [editingLinkIsPrivate, setEditingLinkIsPrivate] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,9 +65,10 @@ export const IdeaModal: React.FC<IdeaModalProps> = ({ isOpen, onClose, ideaToEdi
 
   const handleAddLink = () => {
     if (linkTitle.trim() && linkUrl.trim()) {
-      setLinks([...links, { title: linkTitle.trim(), url: linkUrl.trim() }]);
+      setLinks([...links, { title: linkTitle.trim(), url: linkUrl.trim(), isPrivate: linkIsPrivate }]);
       setLinkTitle('');
       setLinkUrl('');
+      setLinkIsPrivate(false);
     }
   };
 
@@ -73,6 +76,7 @@ export const IdeaModal: React.FC<IdeaModalProps> = ({ isOpen, onClose, ideaToEdi
     setEditingLinkIndex(index);
     setEditingLinkTitle(links[index].title);
     setEditingLinkUrl(links[index].url);
+    setEditingLinkIsPrivate(Boolean(links[index].isPrivate));
   };
 
   const handleSaveEditLink = () => {
@@ -81,11 +85,21 @@ export const IdeaModal: React.FC<IdeaModalProps> = ({ isOpen, onClose, ideaToEdi
       const next = [...links];
       next[editingLinkIndex] = {
         title: editingLinkTitle.trim(),
-        url: editingLinkUrl.trim()
+        url: editingLinkUrl.trim(),
+        isPrivate: editingLinkIsPrivate
       };
       setLinks(next);
       setEditingLinkIndex(null);
     }
+  };
+
+  const handleToggleLinkPrivacy = (index: number) => {
+    const next = [...links];
+    next[index] = {
+      ...next[index],
+      isPrivate: !next[index].isPrivate
+    };
+    setLinks(next);
   };
 
   const handleCancelEditLink = () => {
@@ -254,54 +268,83 @@ export const IdeaModal: React.FC<IdeaModalProps> = ({ isOpen, onClose, ideaToEdi
 
           {/* Links */}
           <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
-            <label className="text-xs font-semibold text-white flex items-center gap-1.5">
-              <Globe className="w-3.5 h-3.5 text-amber-400" /> Referências & Links
-            </label>
-            <div className="flex gap-2">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-amber-400" /> Referências & Links ({links.length})
+              </label>
+              <span className="text-[11px] text-slate-400">
+                Links privados visíveis apenas pelo autor
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
               <input
                 type="text"
                 placeholder="Título"
                 value={linkTitle}
                 onChange={(e) => setLinkTitle(e.target.value)}
-                className="input text-xs w-1/3"
+                className="input text-xs sm:col-span-4"
               />
               <input
                 type="url"
                 placeholder="https://..."
                 value={linkUrl}
                 onChange={(e) => setLinkUrl(e.target.value)}
-                className="input text-xs flex-1"
+                className="input text-xs sm:col-span-5"
               />
               <button
                 type="button"
-                onClick={handleAddLink}
-                className="btn btn-secondary btn-sm"
+                onClick={() => setLinkIsPrivate(!linkIsPrivate)}
+                className={`btn btn-xs sm:col-span-3 text-xs flex items-center justify-center gap-1 ${
+                  linkIsPrivate ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-slate-800 text-slate-300'
+                }`}
+                title={linkIsPrivate ? 'Privado: visível apenas pelo autor' : 'Público'}
               >
-                + Link
+                {linkIsPrivate ? <Lock className="w-3 h-3 text-amber-400" /> : <Globe className="w-3 h-3 text-emerald-400" />}
+                <span>{linkIsPrivate ? 'Privado' : 'Público'}</span>
+              </button>
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={handleAddLink}
+                disabled={!linkTitle.trim() || !linkUrl.trim()}
+                className="btn btn-secondary btn-xs text-xs"
+              >
+                + Adicionar Link
               </button>
             </div>
             {links.length > 0 && (
-              <div className="space-y-1 mt-1">
+              <div className="space-y-1.5 mt-2">
                 {links.map((link, idx) => {
                   const isEditingThis = editingLinkIndex === idx;
                   if (isEditingThis) {
                     return (
-                      <div key={idx} className="p-2 rounded bg-slate-900 border border-amber-500/40 space-y-1.5">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      <div key={idx} className="p-2.5 rounded bg-slate-900 border border-amber-500/40 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
                           <input
                             type="text"
                             value={editingLinkTitle}
                             onChange={(e) => setEditingLinkTitle(e.target.value)}
                             placeholder="Título"
-                            className="input text-xs"
+                            className="input text-xs sm:col-span-5"
                           />
                           <input
                             type="url"
                             value={editingLinkUrl}
                             onChange={(e) => setEditingLinkUrl(e.target.value)}
                             placeholder="https://..."
-                            className="input text-xs"
+                            className="input text-xs sm:col-span-4"
                           />
+                          <button
+                            type="button"
+                            onClick={() => setEditingLinkIsPrivate(!editingLinkIsPrivate)}
+                            className={`btn btn-xs sm:col-span-3 text-xs flex items-center justify-center gap-1 ${
+                              editingLinkIsPrivate ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-slate-800 text-slate-300'
+                            }`}
+                          >
+                            {editingLinkIsPrivate ? <Lock className="w-3 h-3 text-amber-400" /> : <Globe className="w-3 h-3 text-emerald-400" />}
+                            <span>{editingLinkIsPrivate ? 'Privado' : 'Público'}</span>
+                          </button>
                         </div>
                         <div className="flex justify-end gap-1.5">
                           <button
@@ -325,11 +368,32 @@ export const IdeaModal: React.FC<IdeaModalProps> = ({ isOpen, onClose, ideaToEdi
                   }
 
                   return (
-                    <div key={idx} className="flex items-center justify-between text-xs p-1.5 rounded bg-slate-800/60 text-slate-300">
-                      <span className="font-medium text-white truncate max-w-[80%]">
-                        {link.title}: <span className="font-mono text-indigo-400">{link.url}</span>
-                      </span>
+                    <div key={idx} className="flex items-center justify-between text-xs p-2 rounded bg-slate-800/60 text-slate-300">
+                      <div className="flex items-center gap-2 truncate max-w-[80%]">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLinkPrivacy(idx)}
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold shrink-0 ${
+                            link.isPrivate ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                          }`}
+                          title="Clique para alternar privacidade"
+                        >
+                          {link.isPrivate ? <Lock className="w-2.5 h-2.5" /> : <Globe className="w-2.5 h-2.5" />}
+                          {link.isPrivate ? 'Privado' : 'Público'}
+                        </button>
+                        <span className="font-medium text-white truncate">
+                          {link.title}: <span className="font-mono text-indigo-400">{link.url}</span>
+                        </span>
+                      </div>
                       <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleLinkPrivacy(idx)}
+                          className="p-1 rounded text-slate-400 hover:text-amber-300 transition-colors"
+                          title={link.isPrivate ? 'Tornar público' : 'Tornar privado'}
+                        >
+                          {link.isPrivate ? <Globe className="w-3 h-3 text-emerald-400" /> : <Lock className="w-3 h-3 text-amber-400" />}
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleStartEditLink(idx)}

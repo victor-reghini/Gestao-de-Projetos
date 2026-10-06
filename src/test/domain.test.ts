@@ -813,6 +813,51 @@ describe('Domain & Business Rules Tests', () => {
       expect(current!.links).toHaveLength(0);
     });
 
+    it('respects link privacy levels by hiding private links from public views and exposing them only to the owner', async () => {
+      const proj = await ProjectService.create({
+        ownerId: 'owner-123',
+        ownerName: 'Project Owner',
+        name: 'Projeto com Links Sensíveis',
+        description: 'Projeto para validar nível de privacidade de links',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: ['React', 'TypeScript'],
+        links: [
+          { title: 'Website Público', url: 'https://exemplo.com', isPrivate: false },
+          { title: 'Credenciais Staging', url: 'https://staging.internal.net', isPrivate: true },
+          { title: 'Repositório GitHub', url: 'https://github.com/exemplo', isPrivate: undefined }
+        ]
+      });
+
+      // 1. Owner view sees all links (including private)
+      const projectData = await ProjectService.getById(proj.id);
+      expect(projectData).not.toBeNull();
+      expect(projectData!.links).toHaveLength(3);
+
+      const isOwner = true;
+      const ownerVisibleLinks = (projectData!.links || []).filter(l => !l.isPrivate || isOwner);
+      expect(ownerVisibleLinks).toHaveLength(3);
+      expect(ownerVisibleLinks.some(l => l.title === 'Credenciais Staging')).toBe(true);
+
+      // 2. Non-owner / public view filters out private links
+      const isVisitor = false;
+      const visitorVisibleLinks = (projectData!.links || []).filter(l => !l.isPrivate || isVisitor);
+      expect(visitorVisibleLinks).toHaveLength(2);
+      expect(visitorVisibleLinks.some(l => l.title === 'Credenciais Staging')).toBe(false);
+      expect(visitorVisibleLinks.map(l => l.title)).toEqual(['Website Público', 'Repositório GitHub']);
+
+      // 3. Toggle privacy level
+      const updatedLinks = projectData!.links.map(l => 
+        l.title === 'Credenciais Staging' ? { ...l, isPrivate: false } : l
+      );
+      await ProjectService.update(proj.id, { links: updatedLinks });
+
+      const updatedProject = await ProjectService.getById(proj.id);
+      const newPublicLinks = (updatedProject!.links || []).filter(l => !l.isPrivate);
+      expect(newPublicLinks).toHaveLength(3);
+      expect(newPublicLinks.some(l => l.title === 'Credenciais Staging')).toBe(true);
+    });
+
     it('allows creating, editing, and deleting markdown and mermaid documents', async () => {
       const proj = await ProjectService.create({
         ownerId: 'demo-user-123',
