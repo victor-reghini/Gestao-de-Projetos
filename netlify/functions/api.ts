@@ -327,12 +327,16 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       if (!resource && event.httpMethod === 'GET') {
         const proj = (await fetchCloudSqlProjectByIdOrSlug(slug)) || defaultFallbackProjects.find(p => p.slug === slug || p.id === slug);
         if (proj) {
+          const publicProj = {
+            ...proj,
+            links: (proj.links || []).filter((l: any) => !l.isPrivate)
+          };
           return {
             statusCode: 200,
             headers: corsHeaders,
             body: JSON.stringify({
               success: true,
-              data: proj
+              data: publicProj
             })
           };
         }

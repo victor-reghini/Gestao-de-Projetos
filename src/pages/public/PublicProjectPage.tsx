@@ -212,11 +212,13 @@ export const PublicProjectPage: React.FC = () => {
                 {project.description}
               </p>
 
-              {project.links && project.links.length > 0 && (
+              {project.links && project.links.filter(link => !link.isPrivate).length > 0 && (
                 <div className="pt-4 border-t border-slate-800 space-y-3">
                   <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Links e Recursos Oficiais</h4>
                   <div className="flex flex-wrap gap-2">
-                    {project.links.map((link, idx) => (
+                    {project.links
+                      .filter(link => !link.isPrivate)
+                      .map((link, idx) => (
                       <a
                         key={idx}
                         href={link.url}
