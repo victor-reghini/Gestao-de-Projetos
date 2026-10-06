@@ -683,13 +683,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
       });
     }
     onProjectUpdate?.();
-    loadKanban();
   };
 
   const handleTaskDeleted = (taskId: string) => {
     setTasks(prev => prev.filter(t => t.id !== taskId));
     onProjectUpdate?.();
-    loadKanban();
   };
 
   const handleTaskClick = React.useCallback((task: Task) => {

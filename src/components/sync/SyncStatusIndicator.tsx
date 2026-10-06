@@ -73,6 +73,10 @@ export const SyncStatusIndicator: React.FC<SyncStatusIndicatorProps> = ({
       : 'Sincronizando com o banco de dados...';
   }
 
+  useEffect(() => {
+    RealtimeSyncService.updateFavicon(statusType);
+  }, [statusType]);
+
   const colorStyles = {
     green: {
       dot: 'bg-emerald-400',

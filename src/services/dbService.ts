@@ -462,15 +462,22 @@ export const ProjectService = {
       updatedAt: new Date().toISOString()
     };
 
-    const updated = [newProject, ...existing];
-    setLocalData('projects', updated);
+    RealtimeSyncService.beginSync();
+    try {
+      const updated = [newProject, ...existing];
+      setLocalData('projects', updated);
 
-    // Persist to Google Cloud SQL & Data Connect
-    CloudSqlService.syncProject(newProject).catch(() => { });
-    DataConnectService.syncProject(newProject).catch(() => { });
+      // Persist to Google Cloud SQL & Data Connect
+      await CloudSqlService.syncProject(newProject);
+      DataConnectService.syncProject(newProject).catch(() => { });
 
-    await ColumnService.createDefaultColumns(id);
-    return newProject;
+      await ColumnService.createDefaultColumns(id);
+      RealtimeSyncService.endSync();
+      return newProject;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
+    }
   },
 
   async update(id: string, updates: Partial<Project>): Promise<Project> {
@@ -484,13 +491,20 @@ export const ProjectService = {
       updatedAt: new Date().toISOString()
     };
 
-    list[index] = updatedItem;
-    setLocalData('projects', list);
+    RealtimeSyncService.beginSync();
+    try {
+      list[index] = updatedItem;
+      setLocalData('projects', list);
 
-    // Persist to Google Cloud SQL & Data Connect
-    CloudSqlService.syncProject(updatedItem).catch(() => { });
-    DataConnectService.syncProject(updatedItem).catch(() => { });
-    return updatedItem;
+      // Persist to Google Cloud SQL & Data Connect
+      await CloudSqlService.syncProject(updatedItem);
+      DataConnectService.syncProject(updatedItem).catch(() => { });
+      RealtimeSyncService.endSync();
+      return updatedItem;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
+    }
   },
 
   async archive(id: string): Promise<Project> {
@@ -518,13 +532,20 @@ export const ProjectService = {
   },
 
   async delete(id: string): Promise<void> {
-    const list = getLocalData<Project>('projects', initialProjects);
-    const filtered = list.filter(p => p.id !== id);
-    setLocalData('projects', filtered);
+    RealtimeSyncService.beginSync();
+    try {
+      const list = getLocalData<Project>('projects', initialProjects);
+      const filtered = list.filter(p => p.id !== id);
+      setLocalData('projects', filtered);
 
-    // Persist deletion to Google Cloud SQL & Data Connect
-    CloudSqlService.deleteProject(id).catch(() => { });
-    DataConnectService.deleteProject(id).catch(() => { });
+      // Persist deletion to Google Cloud SQL & Data Connect
+      await CloudSqlService.deleteProject(id);
+      DataConnectService.deleteProject(id).catch(() => { });
+      RealtimeSyncService.endSync();
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
+    }
   }
 };
 
@@ -606,148 +627,182 @@ export const ColumnService = {
     setLocalData('columns', [...allCols, ...newCols]);
 
     // Sync to Realtime DB and Google Cloud SQL
-    RealtimeSyncService.syncColumns(projectId, newCols, 'col_defaults').catch(() => { });
-    for (const c of newCols) {
-      CloudSqlService.syncColumn(c).catch(() => { });
-      DataConnectService.syncColumn(c).catch(() => { });
+    RealtimeSyncService.beginSync();
+    try {
+      await Promise.all(newCols.map(c => CloudSqlService.syncColumn(c)));
+      await RealtimeSyncService.syncColumns(projectId, newCols, 'col_defaults');
+      for (const c of newCols) {
+        DataConnectService.syncColumn(c).catch(() => { });
+      }
+      RealtimeSyncService.endSync();
+    } catch {
+      RealtimeSyncService.endSync(true);
     }
     return newCols;
   },
 
   async create(projectId: string, name: string, color = '#6366f1', autoComplete = false): Promise<ProjectColumn> {
-    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const projectCols = allCols.filter(c => c.projectId === projectId);
-    const id = `col_${projectId}_${slugify(name)}_${Math.random().toString(36).substring(2, 7)}`;
+    RealtimeSyncService.beginSync();
+    try {
+      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+      const projectCols = allCols.filter(c => c.projectId === projectId);
+      const id = `col_${projectId}_${slugify(name)}_${Math.random().toString(36).substring(2, 7)}`;
 
-    const newCol: ProjectColumn = {
-      id,
-      projectId,
-      name,
-      key: slugify(name),
-      position: projectCols.length,
-      color,
-      autoComplete,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+      const newCol: ProjectColumn = {
+        id,
+        projectId,
+        name,
+        key: slugify(name),
+        position: projectCols.length,
+        color,
+        autoComplete,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
 
-    setLocalData('columns', [...allCols, newCol]);
+      setLocalData('columns', [...allCols, newCol]);
 
-    // Update project updatedAt
-    ProjectService.touch(projectId).catch(() => { });
+      // Update project updatedAt
+      ProjectService.touch(projectId).catch(() => { });
 
-    // Sync to Realtime DB and Google Cloud SQL
-    RealtimeSyncService.syncColumns(projectId, [...projectCols, newCol], 'col_create').catch(() => { });
-    CloudSqlService.syncColumn(newCol).catch(() => { });
-    DataConnectService.syncColumn(newCol).catch(() => { });
-    return newCol;
+      // Sync to Realtime DB and Google Cloud SQL
+      await CloudSqlService.syncColumn(newCol);
+      await RealtimeSyncService.syncColumns(projectId, [...projectCols, newCol], 'col_create');
+      DataConnectService.syncColumn(newCol).catch(() => { });
+      RealtimeSyncService.endSync();
+      return newCol;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
+    }
   },
 
   async update(id: string, updates: Partial<ProjectColumn>): Promise<ProjectColumn> {
-    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const index = allCols.findIndex(c => c.id === id);
-    if (index === -1) throw new Error('Coluna não encontrada');
+    RealtimeSyncService.beginSync();
+    try {
+      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+      const index = allCols.findIndex(c => c.id === id);
+      if (index === -1) throw new Error('Coluna não encontrada');
 
-    allCols[index] = {
-      ...allCols[index],
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
+      allCols[index] = {
+        ...allCols[index],
+        ...updates,
+        updatedAt: new Date().toISOString()
+      };
 
-    setLocalData('columns', allCols);
+      setLocalData('columns', allCols);
 
-    // Update project updatedAt
-    if (allCols[index].projectId) {
-      ProjectService.touch(allCols[index].projectId).catch(() => { });
+      // Update project updatedAt
+      if (allCols[index].projectId) {
+        ProjectService.touch(allCols[index].projectId).catch(() => { });
+      }
+
+      // Sync to Realtime DB and Google Cloud SQL
+      const projCols = allCols.filter(c => c.projectId === allCols[index].projectId);
+      await CloudSqlService.syncColumn(allCols[index]);
+      await RealtimeSyncService.syncColumns(allCols[index].projectId, projCols, 'col_update');
+      DataConnectService.syncColumn(allCols[index]).catch(() => { });
+      RealtimeSyncService.endSync();
+      return allCols[index];
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-
-    // Sync to Realtime DB and Google Cloud SQL
-    const projCols = allCols.filter(c => c.projectId === allCols[index].projectId);
-    RealtimeSyncService.syncColumns(allCols[index].projectId, projCols, 'col_update').catch(() => { });
-    CloudSqlService.syncColumn(allCols[index]).catch(() => { });
-    DataConnectService.syncColumn(allCols[index]).catch(() => { });
-    return allCols[index];
   },
 
   async reorder(projectId: string, columnIds: string[]): Promise<ProjectColumn[]> {
-    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const projectCols = allCols.filter(c => c.projectId === projectId);
-    const otherCols = allCols.filter(c => c.projectId !== projectId);
+    RealtimeSyncService.beginSync();
+    try {
+      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+      const projectCols = allCols.filter(c => c.projectId === projectId);
+      const otherCols = allCols.filter(c => c.projectId !== projectId);
 
-    const reordered: ProjectColumn[] = [];
-    columnIds.forEach((id, index) => {
-      const col = projectCols.find(c => c.id === id);
-      if (col) {
-        reordered.push({ ...col, position: index, updatedAt: new Date().toISOString() });
+      const reordered: ProjectColumn[] = [];
+      columnIds.forEach((id, index) => {
+        const col = projectCols.find(c => c.id === id);
+        if (col) {
+          reordered.push({ ...col, position: index, updatedAt: new Date().toISOString() });
+        }
+      });
+
+      const finalCols = [...otherCols, ...reordered];
+      setLocalData('columns', finalCols);
+
+      // Update project updatedAt
+      ProjectService.touch(projectId).catch(() => { });
+
+      // Sync to Realtime DB and Google Cloud SQL
+      await Promise.all(reordered.map(c => CloudSqlService.syncColumn(c)));
+      await RealtimeSyncService.syncColumns(projectId, reordered, 'col_reorder');
+      for (const c of reordered) {
+        DataConnectService.syncColumn(c).catch(() => { });
       }
-    });
-
-    const finalCols = [...otherCols, ...reordered];
-    setLocalData('columns', finalCols);
-
-    // Update project updatedAt
-    ProjectService.touch(projectId).catch(() => { });
-
-    // Sync to Realtime DB and Google Cloud SQL
-    RealtimeSyncService.syncColumns(projectId, reordered, 'col_reorder').catch(() => { });
-    for (const c of reordered) {
-      CloudSqlService.syncColumn(c).catch(() => { });
-      DataConnectService.syncColumn(c).catch(() => { });
+      RealtimeSyncService.endSync();
+      return reordered;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    return reordered;
   },
 
   async delete(columnId: string, fallbackColumnId?: string, projectId?: string): Promise<void> {
-    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const targetCol = allCols.find(c => c.id === columnId && (!projectId || c.projectId === projectId))
-      || allCols.find(c => c.id === columnId);
+    RealtimeSyncService.beginSync();
+    try {
+      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+      const targetCol = allCols.find(c => c.id === columnId && (!projectId || c.projectId === projectId))
+        || allCols.find(c => c.id === columnId);
 
-    const targetProjectId = projectId || targetCol?.projectId;
+      const targetProjectId = projectId || targetCol?.projectId;
 
-    // Filter out only the column belonging to this project
-    const remainingCols = allCols.filter(c => {
-      if (c.id === columnId) {
-        if (targetProjectId) {
-          return c.projectId !== targetProjectId;
+      // Filter out only the column belonging to this project
+      const remainingCols = allCols.filter(c => {
+        if (c.id === columnId) {
+          if (targetProjectId) {
+            return c.projectId !== targetProjectId;
+          }
+          return false;
         }
-        return false;
-      }
-      return true;
-    });
-    setLocalData('columns', remainingCols);
-
-    // Handle tasks in this column: move to fallbackColumnId or delete ONLY for this project
-    const allTasks = getLocalData<Task>('tasks', initialTasks);
-    let finalProjectTasks: Task[] = [];
-
-    if (fallbackColumnId) {
-      const fallbackTasks = allTasks.filter(t => t.columnId === fallbackColumnId && (!targetProjectId || t.projectId === targetProjectId));
-      let nextPos = fallbackTasks.length;
-      const updatedTasks = allTasks.map(t => {
-        if (t.columnId === columnId && (!targetProjectId || t.projectId === targetProjectId)) {
-          const moved = { ...t, columnId: fallbackColumnId, position: nextPos++, updatedAt: new Date().toISOString() };
-          CloudSqlService.syncTask(moved).catch(() => { });
-          DataConnectService.syncTask(moved).catch(() => { });
-          return moved;
-        }
-        return t;
+        return true;
       });
-      setLocalData('tasks', updatedTasks);
-      finalProjectTasks = targetProjectId ? updatedTasks.filter(t => t.projectId === targetProjectId) : [];
-    } else {
-      const remainingTasks = allTasks.filter(t => !(t.columnId === columnId && (!targetProjectId || t.projectId === targetProjectId)));
-      setLocalData('tasks', remainingTasks);
-      finalProjectTasks = targetProjectId ? remainingTasks.filter(t => t.projectId === targetProjectId) : [];
-    }
+      setLocalData('columns', remainingCols);
 
-    if (targetProjectId) {
-      const remainingProjectCols = remainingCols.filter(c => c.projectId === targetProjectId);
-      RealtimeSyncService.deleteColumn(targetProjectId, columnId).catch(() => { });
-      RealtimeSyncService.syncFullProjectBoard(targetProjectId, remainingProjectCols, finalProjectTasks).catch(() => { });
-      ProjectService.touch(targetProjectId).catch(() => { });
+      // Handle tasks in this column: move to fallbackColumnId or delete ONLY for this project
+      const allTasks = getLocalData<Task>('tasks', initialTasks);
+      let finalProjectTasks: Task[] = [];
+
+      if (fallbackColumnId) {
+        const fallbackTasks = allTasks.filter(t => t.columnId === fallbackColumnId && (!targetProjectId || t.projectId === targetProjectId));
+        let nextPos = fallbackTasks.length;
+        const updatedTasks = allTasks.map(t => {
+          if (t.columnId === columnId && (!targetProjectId || t.projectId === targetProjectId)) {
+            const moved = { ...t, columnId: fallbackColumnId, position: nextPos++, updatedAt: new Date().toISOString() };
+            CloudSqlService.syncTask(moved).catch(() => { });
+            DataConnectService.syncTask(moved).catch(() => { });
+            return moved;
+          }
+          return t;
+        });
+        setLocalData('tasks', updatedTasks);
+        finalProjectTasks = targetProjectId ? updatedTasks.filter(t => t.projectId === targetProjectId) : [];
+      } else {
+        const remainingTasks = allTasks.filter(t => !(t.columnId === columnId && (!targetProjectId || t.projectId === targetProjectId)));
+        setLocalData('tasks', remainingTasks);
+        finalProjectTasks = targetProjectId ? remainingTasks.filter(t => t.projectId === targetProjectId) : [];
+      }
+
+      if (targetProjectId) {
+        const remainingProjectCols = remainingCols.filter(c => c.projectId === targetProjectId);
+        await RealtimeSyncService.deleteColumn(targetProjectId, columnId);
+        await RealtimeSyncService.syncFullProjectBoard(targetProjectId, remainingProjectCols, finalProjectTasks);
+        ProjectService.touch(targetProjectId).catch(() => { });
+      }
+      await CloudSqlService.deleteColumn(columnId, targetProjectId, fallbackColumnId);
+      DataConnectService.deleteColumn(columnId).catch(() => { });
+      RealtimeSyncService.endSync();
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    CloudSqlService.deleteColumn(columnId, targetProjectId, fallbackColumnId).catch(() => { });
-    DataConnectService.deleteColumn(columnId).catch(() => { });
   }
 };
 
@@ -764,9 +819,6 @@ export const TaskService = {
           const allTasks = getLocalData<Task>('tasks', initialTasks);
           const otherTasks = allTasks.filter(t => t.projectId !== projectId);
           setLocalData('tasks', [...otherTasks, ...sorted]);
-
-          const allCols = getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId);
-          RealtimeSyncService.syncFullProjectBoard(projectId, allCols, sorted).catch(() => { });
           return sorted;
         }
       } catch (err) {
@@ -776,187 +828,219 @@ export const TaskService = {
 
     const allTasks = getLocalData<Task>('tasks', initialTasks);
     const localTasks = allTasks.filter(t => t.projectId === projectId).sort((a, b) => a.position - b.position);
-
-    // Cache to Realtime Database
-    const allCols = getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId);
-    RealtimeSyncService.syncFullProjectBoard(projectId, allCols, localTasks).catch(() => { });
     return localTasks;
   },
 
   async create(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'position'> & { position?: number }): Promise<Task> {
-    const allTasks = getLocalData<Task>('tasks', initialTasks);
-    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+    RealtimeSyncService.beginSync();
+    try {
+      const allTasks = getLocalData<Task>('tasks', initialTasks);
+      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
 
-    let targetColId = data.columnId;
-    if (!targetColId) {
-      const projCols = allCols.filter(c => c.projectId === data.projectId);
-      if (projCols.length > 0) {
-        targetColId = projCols[0].id;
+      let targetColId = data.columnId;
+      if (!targetColId) {
+        const projCols = allCols.filter(c => c.projectId === data.projectId);
+        if (projCols.length > 0) {
+          targetColId = projCols[0].id;
+        }
       }
+
+      const targetCol = allCols.find(c => c.id === targetColId);
+      const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
+      const concluded = data.concluded !== undefined ? Boolean(data.concluded) : Boolean(shouldComplete);
+
+      const columnTasks = allTasks.filter(t => t.columnId === targetColId && (!data.projectId || t.projectId === data.projectId));
+      const maxPos = columnTasks.length > 0 ? Math.max(...columnTasks.map(t => t.position ?? 0)) : -1;
+      const finalPosition = data.position !== undefined ? data.position : maxPos + 1;
+      const id = `task_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+
+      const newTask: Task = {
+        ...data,
+        columnId: targetColId,
+        id,
+        position: finalPosition,
+        concluded,
+        dueDate: data.dueDate || null,
+        description: data.description || '',
+        priority: data.priority || 'MEDIA',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      setLocalData('tasks', [...allTasks, newTask]);
+
+      // Update project updatedAt
+      if (newTask.projectId) {
+        ProjectService.touch(newTask.projectId).catch(() => { });
+      }
+
+      // Persist to Cloud SQL and Realtime Database
+      const success = await CloudSqlService.syncTask(newTask);
+      await RealtimeSyncService.syncTask(newTask, 'task_create');
+      DataConnectService.syncTask(newTask).catch(() => { });
+
+      RealtimeSyncService.endSync(!success && isUserConnected());
+      return newTask;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-
-    const targetCol = allCols.find(c => c.id === targetColId);
-    const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
-    const concluded = data.concluded !== undefined ? Boolean(data.concluded) : Boolean(shouldComplete);
-
-    const columnTasks = allTasks.filter(t => t.columnId === targetColId && (!data.projectId || t.projectId === data.projectId));
-    const maxPos = columnTasks.length > 0 ? Math.max(...columnTasks.map(t => t.position ?? 0)) : -1;
-    const finalPosition = data.position !== undefined ? data.position : maxPos + 1;
-    const id = `task_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
-
-    const newTask: Task = {
-      ...data,
-      columnId: targetColId,
-      id,
-      position: finalPosition,
-      concluded,
-      dueDate: data.dueDate || null,
-      description: data.description || '',
-      priority: data.priority || 'MEDIA',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    setLocalData('tasks', [...allTasks, newTask]);
-
-    // Update project updatedAt
-    if (newTask.projectId) {
-      ProjectService.touch(newTask.projectId).catch(() => { });
-    }
-
-    // Persist to Realtime Database, Google Cloud SQL, and Data Connect
-    RealtimeSyncService.syncTask(newTask, 'task_create').catch(() => { });
-    CloudSqlService.syncTask(newTask).catch(() => { });
-    DataConnectService.syncTask(newTask).catch(() => { });
-    return newTask;
   },
 
   async update(id: string, updates: Partial<Task>): Promise<Task> {
-    const allTasks = getLocalData<Task>('tasks', initialTasks);
-    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const index = allTasks.findIndex(t => t.id === id);
-    let updatedItem: Task;
+    RealtimeSyncService.beginSync();
+    try {
+      const allTasks = getLocalData<Task>('tasks', initialTasks);
+      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+      const index = allTasks.findIndex(t => t.id === id);
+      let updatedItem: Task;
 
-    if (index === -1) {
-      const targetColId = updates.columnId || 'col-1';
-      const targetCol = allCols.find(c => c.id === targetColId);
-      const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
-      const concluded = updates.concluded !== undefined ? Boolean(updates.concluded) : Boolean(shouldComplete);
+      if (index === -1) {
+        const targetColId = updates.columnId || 'col-1';
+        const targetCol = allCols.find(c => c.id === targetColId);
+        const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
+        const concluded = updates.concluded !== undefined ? Boolean(updates.concluded) : Boolean(shouldComplete);
 
-      updatedItem = {
-        id,
-        projectId: updates.projectId || 'proj-1',
-        columnId: targetColId,
-        title: updates.title || 'Nova Atividade',
-        description: updates.description || '',
-        priority: updates.priority || 'MEDIA',
-        position: updates.position || 0,
-        concluded,
-        dueDate: updates.dueDate || null,
-        createdById: updates.createdById || 'demo-user-123',
-        createdByName: updates.createdByName || 'Victor Reghini',
-        createdAt: updates.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      };
-      setLocalData('tasks', [...allTasks, updatedItem]);
-    } else {
-      const currentTask = allTasks[index];
-      let position = updates.position !== undefined ? updates.position : currentTask.position;
+        updatedItem = {
+          id,
+          projectId: updates.projectId || 'proj-1',
+          columnId: targetColId,
+          title: updates.title || 'Nova Atividade',
+          description: updates.description || '',
+          priority: updates.priority || 'MEDIA',
+          position: updates.position || 0,
+          concluded,
+          dueDate: updates.dueDate || null,
+          createdById: updates.createdById || 'demo-user-123',
+          createdByName: updates.createdByName || 'Victor Reghini',
+          createdAt: updates.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        setLocalData('tasks', [...allTasks, updatedItem]);
+      } else {
+        const currentTask = allTasks[index];
+        let position = updates.position !== undefined ? updates.position : currentTask.position;
 
-      let concluded = updates.concluded !== undefined ? updates.concluded : currentTask.concluded;
-      if (updates.columnId && updates.columnId !== currentTask.columnId) {
-        if (updates.position === undefined) {
-          const destColumnTasks = allTasks.filter(t => t.columnId === updates.columnId && t.id !== id);
-          position = destColumnTasks.length;
+        let concluded = updates.concluded !== undefined ? updates.concluded : currentTask.concluded;
+        if (updates.columnId && updates.columnId !== currentTask.columnId) {
+          if (updates.position === undefined) {
+            const destColumnTasks = allTasks.filter(t => t.columnId === updates.columnId && t.id !== id);
+            position = destColumnTasks.length;
+          }
+          const targetCol = allCols.find(c => c.id === updates.columnId);
+          if (targetCol && (targetCol.autoComplete || targetCol.key === 'done' || targetCol.name.toLowerCase().includes('conclu'))) {
+            concluded = true;
+          }
         }
-        const targetCol = allCols.find(c => c.id === updates.columnId);
-        if (targetCol && (targetCol.autoComplete || targetCol.key === 'done' || targetCol.name.toLowerCase().includes('conclu'))) {
-          concluded = true;
-        }
+
+        updatedItem = {
+          ...currentTask,
+          ...updates,
+          position,
+          concluded: concluded ?? false,
+          updatedAt: new Date().toISOString()
+        };
+        allTasks[index] = updatedItem;
+        setLocalData('tasks', allTasks);
       }
 
-      updatedItem = {
-        ...currentTask,
-        ...updates,
-        position,
-        concluded: concluded ?? false,
-        updatedAt: new Date().toISOString()
-      };
-      allTasks[index] = updatedItem;
-      setLocalData('tasks', allTasks);
-    }
+      // Update project updatedAt
+      if (updatedItem.projectId) {
+        ProjectService.touch(updatedItem.projectId).catch(() => { });
+      }
 
-    // Update project updatedAt
-    if (updatedItem.projectId) {
-      ProjectService.touch(updatedItem.projectId).catch(() => { });
-    }
+      // Persist to Cloud SQL and Realtime Database
+      const success = await CloudSqlService.syncTask(updatedItem);
+      await RealtimeSyncService.syncTask(updatedItem, 'task_update');
+      DataConnectService.syncTask(updatedItem).catch(() => { });
 
-    // Persist to Realtime Database, Google Cloud SQL, and Data Connect
-    RealtimeSyncService.syncTask(updatedItem, 'task_update').catch(() => { });
-    CloudSqlService.syncTask(updatedItem).catch(() => { });
-    DataConnectService.syncTask(updatedItem).catch(() => { });
-    return updatedItem;
+      RealtimeSyncService.endSync(!success && isUserConnected());
+      return updatedItem;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
+    }
   },
 
   async move(taskId: string, targetColumnId: string, newPosition: number): Promise<void> {
-    const allTasks = getLocalData<Task>('tasks', initialTasks);
-    const task = allTasks.find(t => t.id === taskId);
-    if (!task) return;
+    RealtimeSyncService.beginSync();
+    try {
+      const allTasks = getLocalData<Task>('tasks', initialTasks);
+      const task = allTasks.find(t => t.id === taskId);
+      if (!task) {
+        RealtimeSyncService.endSync();
+        return;
+      }
 
-    const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-    const targetCol = allCols.find(c => c.id === targetColumnId);
-    const shouldComplete = Boolean(targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu'));
+      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+      const targetCol = allCols.find(c => c.id === targetColumnId);
+      const shouldComplete = Boolean(targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu'));
 
-    const otherTasksInTarget = allTasks
-      .filter(t => t.columnId === targetColumnId && t.id !== taskId)
-      .sort((a, b) => a.position - b.position);
+      const otherTasksInTarget = allTasks
+        .filter(t => t.columnId === targetColumnId && t.id !== taskId)
+        .sort((a, b) => a.position - b.position);
 
-    const movedTask: Task = {
-      ...task,
-      columnId: targetColumnId,
-      position: newPosition,
-      concluded: shouldComplete ? true : (task.concluded ?? false),
-      updatedAt: new Date().toISOString()
-    };
-    otherTasksInTarget.splice(newPosition, 0, movedTask);
+      const movedTask: Task = {
+        ...task,
+        columnId: targetColumnId,
+        position: newPosition,
+        concluded: shouldComplete ? true : (task.concluded ?? false),
+        updatedAt: new Date().toISOString()
+      };
+      otherTasksInTarget.splice(newPosition, 0, movedTask);
 
-    const updatedColumnTasks = otherTasksInTarget.map((t, idx) => ({
-      ...t,
-      position: idx,
-      updatedAt: new Date().toISOString()
-    }));
+      const updatedColumnTasks = otherTasksInTarget.map((t, idx) => ({
+        ...t,
+        position: idx,
+        updatedAt: new Date().toISOString()
+      }));
 
-    const finalTasks = allTasks.map(t => {
-      const match = updatedColumnTasks.find(u => u.id === t.id);
-      return match || t;
-    });
+      const finalTasks = allTasks.map(t => {
+        const match = updatedColumnTasks.find(u => u.id === t.id);
+        return match || t;
+      });
 
-    setLocalData('tasks', finalTasks);
+      setLocalData('tasks', finalTasks);
 
-    // Update project updatedAt
-    if (task.projectId) {
-      ProjectService.touch(task.projectId).catch(() => { });
-    }
+      // Update project updatedAt
+      if (task.projectId) {
+        ProjectService.touch(task.projectId).catch(() => { });
+      }
 
-    // Persist to Realtime Database, Google Cloud SQL, and Data Connect
-    RealtimeSyncService.syncTaskMove(task.projectId, updatedColumnTasks).catch(() => { });
-    for (const t of updatedColumnTasks) {
-      CloudSqlService.syncTask(t).catch(() => { });
-      DataConnectService.syncTask(t).catch(() => { });
+      // Persist to Cloud SQL and Realtime Database awaiting completion
+      const results = await Promise.all(updatedColumnTasks.map(t => CloudSqlService.syncTask(t)));
+      await RealtimeSyncService.syncTaskMove(task.projectId, updatedColumnTasks);
+      for (const t of updatedColumnTasks) {
+        DataConnectService.syncTask(t).catch(() => { });
+      }
+
+      const allOk = results.every(Boolean);
+      RealtimeSyncService.endSync(!allOk && isUserConnected());
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
   },
 
   async delete(id: string): Promise<void> {
-    const allTasks = getLocalData<Task>('tasks', initialTasks);
-    const taskToDelete = allTasks.find(t => t.id === id);
-    setLocalData('tasks', allTasks.filter(t => t.id !== id));
+    RealtimeSyncService.beginSync();
+    try {
+      const allTasks = getLocalData<Task>('tasks', initialTasks);
+      const taskToDelete = allTasks.find(t => t.id === id);
+      setLocalData('tasks', allTasks.filter(t => t.id !== id));
 
-    if (taskToDelete?.projectId) {
-      RealtimeSyncService.deleteTask(taskToDelete.projectId, id).catch(() => { });
-      ProjectService.touch(taskToDelete.projectId).catch(() => { });
+      if (taskToDelete?.projectId) {
+        await RealtimeSyncService.deleteTask(taskToDelete.projectId, id);
+        ProjectService.touch(taskToDelete.projectId).catch(() => { });
+      }
+      const success = await CloudSqlService.deleteTask(id);
+      DataConnectService.deleteTask(id).catch(() => { });
+
+      RealtimeSyncService.endSync(!success && isUserConnected());
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    CloudSqlService.deleteTask(id).catch(() => { });
-    DataConnectService.deleteTask(id).catch(() => { });
   }
 };
 
@@ -1008,35 +1092,49 @@ export const IdeaService = {
   },
 
   async create(data: Omit<Idea, 'id' | 'createdAt' | 'updatedAt' | 'convertedProjectId'>): Promise<Idea> {
-    const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
-    const id = `idea_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
-    const newIdea: Idea = {
-      ...data,
-      id,
-      convertedProjectId: null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    RealtimeSyncService.beginSync();
+    try {
+      const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
+      const id = `idea_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+      const newIdea: Idea = {
+        ...data,
+        id,
+        convertedProjectId: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
 
-    setLocalData('ideas', [newIdea, ...allIdeas]);
-    CloudSqlService.syncIdea(newIdea).catch(() => { });
-    return newIdea;
+      setLocalData('ideas', [newIdea, ...allIdeas]);
+      await CloudSqlService.syncIdea(newIdea);
+      RealtimeSyncService.endSync();
+      return newIdea;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
+    }
   },
 
   async update(id: string, updates: Partial<Idea>): Promise<Idea> {
-    const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
-    const index = allIdeas.findIndex(i => i.id === id);
-    if (index === -1) throw new Error('Ideia não encontrada');
+    RealtimeSyncService.beginSync();
+    try {
+      const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
+      const index = allIdeas.findIndex(i => i.id === id);
+      if (index === -1) throw new Error('Ideia não encontrada');
 
-    allIdeas[index] = {
-      ...allIdeas[index],
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
+      allIdeas[index] = {
+        ...allIdeas[index],
+        ...updates,
+        updatedAt: new Date().toISOString()
+      };
 
-    setLocalData('ideas', allIdeas);
-    CloudSqlService.syncIdea(allIdeas[index]).catch(() => { });
-    return allIdeas[index];
+      setLocalData('ideas', allIdeas);
+      await CloudSqlService.syncIdea(allIdeas[index]);
+      RealtimeSyncService.endSync();
+      return allIdeas[index];
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
+    }
   },
 
   async convertToProject(ideaId: string, ownerId: string, ownerName: string): Promise<Project> {
@@ -1065,9 +1163,16 @@ export const IdeaService = {
   },
 
   async delete(id: string): Promise<void> {
-    const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
-    setLocalData('ideas', allIdeas.filter(i => i.id !== id));
-    CloudSqlService.deleteIdea(id).catch(() => { });
+    RealtimeSyncService.beginSync();
+    try {
+      const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
+      setLocalData('ideas', allIdeas.filter(i => i.id !== id));
+      await CloudSqlService.deleteIdea(id);
+      RealtimeSyncService.endSync();
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
+    }
   }
 };
 
@@ -1096,51 +1201,72 @@ export const DocumentService = {
   },
 
   async create(data: Omit<ProjectDocument, 'id' | 'createdAt' | 'updatedAt'>): Promise<ProjectDocument> {
-    const docs = getLocalData<ProjectDocument>('documents', initialDocs);
-    const id = `doc_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
-    const newDoc: ProjectDocument = {
-      ...data,
-      id,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
+    RealtimeSyncService.beginSync();
+    try {
+      const docs = getLocalData<ProjectDocument>('documents', initialDocs);
+      const id = `doc_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+      const newDoc: ProjectDocument = {
+        ...data,
+        id,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
 
-    setLocalData('documents', [...docs, newDoc]);
-    if (newDoc.projectId) {
-      ProjectService.touch(newDoc.projectId).catch(() => { });
+      setLocalData('documents', [...docs, newDoc]);
+      if (newDoc.projectId) {
+        ProjectService.touch(newDoc.projectId).catch(() => { });
+      }
+      await CloudSqlService.syncDocument(newDoc);
+      RealtimeSyncService.endSync();
+      return newDoc;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    CloudSqlService.syncDocument(newDoc).catch(() => { });
-    return newDoc;
   },
 
   async update(id: string, updates: Partial<ProjectDocument>): Promise<ProjectDocument> {
-    const docs = getLocalData<ProjectDocument>('documents', initialDocs);
-    const index = docs.findIndex(d => d.id === id);
-    if (index === -1) throw new Error('Documento não encontrado');
+    RealtimeSyncService.beginSync();
+    try {
+      const docs = getLocalData<ProjectDocument>('documents', initialDocs);
+      const index = docs.findIndex(d => d.id === id);
+      if (index === -1) throw new Error('Documento não encontrado');
 
-    const projectId = docs[index].projectId;
-    docs[index] = {
-      ...docs[index],
-      ...updates,
-      updatedAt: new Date().toISOString()
-    };
+      const projectId = docs[index].projectId;
+      docs[index] = {
+        ...docs[index],
+        ...updates,
+        updatedAt: new Date().toISOString()
+      };
 
-    setLocalData('documents', docs);
-    if (projectId) {
-      ProjectService.touch(projectId).catch(() => { });
+      setLocalData('documents', docs);
+      if (projectId) {
+        ProjectService.touch(projectId).catch(() => { });
+      }
+      await CloudSqlService.syncDocument(docs[index]);
+      RealtimeSyncService.endSync();
+      return docs[index];
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    CloudSqlService.syncDocument(docs[index]).catch(() => { });
-    return docs[index];
   },
 
   async delete(id: string): Promise<void> {
-    const docs = getLocalData<ProjectDocument>('documents', initialDocs);
-    const docToDelete = docs.find(d => d.id === id);
-    setLocalData('documents', docs.filter(d => d.id !== id));
-    if (docToDelete?.projectId) {
-      ProjectService.touch(docToDelete.projectId).catch(() => { });
+    RealtimeSyncService.beginSync();
+    try {
+      const docs = getLocalData<ProjectDocument>('documents', initialDocs);
+      const docToDelete = docs.find(d => d.id === id);
+      setLocalData('documents', docs.filter(d => d.id !== id));
+      if (docToDelete?.projectId) {
+        ProjectService.touch(docToDelete.projectId).catch(() => { });
+      }
+      await CloudSqlService.deleteDocument(id);
+      RealtimeSyncService.endSync();
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    CloudSqlService.deleteDocument(id).catch(() => { });
   }
 };
 
@@ -1169,71 +1295,93 @@ export const SuggestionService = {
   },
 
   async create(data: Omit<Suggestion, 'id' | 'status' | 'createdAt' | 'updatedAt'>): Promise<Suggestion> {
-    const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
-    const id = `sug_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
-    const newSug: Suggestion = {
-      ...data,
-      id,
-      status: 'ABERTO',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    setLocalData('suggestions', [newSug, ...list]);
-    if (newSug.projectId) {
-      ProjectService.touch(newSug.projectId).catch(() => { });
-    }
-    CloudSqlService.syncSuggestion(newSug).catch(() => { });
-    return newSug;
-  },
-
-  async updateStatus(id: string, status: Suggestion['status']): Promise<Suggestion> {
-    const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
-    const index = list.findIndex(s => s.id === id);
-    if (index === -1) {
-      const item: Suggestion = {
+    RealtimeSyncService.beginSync();
+    try {
+      const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
+      const id = `sug_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+      const newSug: Suggestion = {
+        ...data,
         id,
-        projectId: 'proj-1',
-        authorUserId: null,
-        authorName: 'Usuário',
-        authorEmail: null,
-        title: 'Sugestão',
-        description: '',
-        status,
+        status: 'ABERTO',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      setLocalData('suggestions', [...list, item]);
-      if (item.projectId) {
-        ProjectService.touch(item.projectId).catch(() => { });
+
+      setLocalData('suggestions', [newSug, ...list]);
+      if (newSug.projectId) {
+        ProjectService.touch(newSug.projectId).catch(() => { });
       }
-      CloudSqlService.syncSuggestion(item).catch(() => { });
-      return item;
+      await CloudSqlService.syncSuggestion(newSug);
+      RealtimeSyncService.endSync();
+      return newSug;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
+  },
 
-    const projId = list[index].projectId;
-    list[index] = {
-      ...list[index],
-      status,
-      updatedAt: new Date().toISOString()
-    };
+  async updateStatus(id: string, status: Suggestion['status']): Promise<Suggestion> {
+    RealtimeSyncService.beginSync();
+    try {
+      const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
+      const index = list.findIndex(s => s.id === id);
+      if (index === -1) {
+        const item: Suggestion = {
+          id,
+          projectId: 'proj-1',
+          authorUserId: null,
+          authorName: 'Usuário',
+          authorEmail: null,
+          title: 'Sugestão',
+          description: '',
+          status,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        setLocalData('suggestions', [...list, item]);
+        if (item.projectId) {
+          ProjectService.touch(item.projectId).catch(() => { });
+        }
+        await CloudSqlService.syncSuggestion(item);
+        RealtimeSyncService.endSync();
+        return item;
+      }
 
-    setLocalData('suggestions', list);
-    if (projId) {
-      ProjectService.touch(projId).catch(() => { });
+      const projId = list[index].projectId;
+      list[index] = {
+        ...list[index],
+        status,
+        updatedAt: new Date().toISOString()
+      };
+
+      setLocalData('suggestions', list);
+      if (projId) {
+        ProjectService.touch(projId).catch(() => { });
+      }
+      await CloudSqlService.syncSuggestion(list[index]);
+      RealtimeSyncService.endSync();
+      return list[index];
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    CloudSqlService.syncSuggestion(list[index]).catch(() => { });
-    return list[index];
   },
 
   async delete(id: string): Promise<void> {
-    const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
-    const sugToDelete = list.find(s => s.id === id);
-    setLocalData('suggestions', list.filter(s => s.id !== id));
-    if (sugToDelete?.projectId) {
-      ProjectService.touch(sugToDelete.projectId).catch(() => { });
+    RealtimeSyncService.beginSync();
+    try {
+      const list = getLocalData<Suggestion>('suggestions', initialSuggestions);
+      const sugToDelete = list.find(s => s.id === id);
+      setLocalData('suggestions', list.filter(s => s.id !== id));
+      if (sugToDelete?.projectId) {
+        ProjectService.touch(sugToDelete.projectId).catch(() => { });
+      }
+      await CloudSqlService.deleteSuggestion(id);
+      RealtimeSyncService.endSync();
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    CloudSqlService.deleteSuggestion(id).catch(() => { });
   }
 };
 
@@ -1262,72 +1410,94 @@ export const BugReportService = {
   },
 
   async create(data: Omit<BugReport, 'id' | 'status' | 'createdAt' | 'updatedAt'>): Promise<BugReport> {
-    const list = getLocalData<BugReport>('bugs', initialBugs);
-    const id = `bug_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
-    const newBug: BugReport = {
-      ...data,
-      id,
-      status: 'ABERTO',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    setLocalData('bugs', [newBug, ...list]);
-    if (newBug.projectId) {
-      ProjectService.touch(newBug.projectId).catch(() => { });
-    }
-    CloudSqlService.syncBugReport(newBug).catch(() => { });
-    return newBug;
-  },
-
-  async updateStatus(id: string, status: BugReport['status']): Promise<BugReport> {
-    const list = getLocalData<BugReport>('bugs', initialBugs);
-    const index = list.findIndex(b => b.id === id);
-    if (index === -1) {
-      const item: BugReport = {
+    RealtimeSyncService.beginSync();
+    try {
+      const list = getLocalData<BugReport>('bugs', initialBugs);
+      const id = `bug_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
+      const newBug: BugReport = {
+        ...data,
         id,
-        projectId: 'proj-1',
-        authorUserId: null,
-        authorName: 'Usuário',
-        authorEmail: null,
-        title: 'Bug Report',
-        description: '',
-        severity: 'MEDIA',
-        status,
+        status: 'ABERTO',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
-      setLocalData('bugs', [...list, item]);
-      if (item.projectId) {
-        ProjectService.touch(item.projectId).catch(() => { });
+
+      setLocalData('bugs', [newBug, ...list]);
+      if (newBug.projectId) {
+        ProjectService.touch(newBug.projectId).catch(() => { });
       }
-      CloudSqlService.syncBugReport(item).catch(() => { });
-      return item;
+      await CloudSqlService.syncBugReport(newBug);
+      RealtimeSyncService.endSync();
+      return newBug;
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
+  },
 
-    const projId = list[index].projectId;
-    list[index] = {
-      ...list[index],
-      status,
-      updatedAt: new Date().toISOString()
-    };
+  async updateStatus(id: string, status: BugReport['status']): Promise<BugReport> {
+    RealtimeSyncService.beginSync();
+    try {
+      const list = getLocalData<BugReport>('bugs', initialBugs);
+      const index = list.findIndex(b => b.id === id);
+      if (index === -1) {
+        const item: BugReport = {
+          id,
+          projectId: 'proj-1',
+          authorUserId: null,
+          authorName: 'Usuário',
+          authorEmail: null,
+          title: 'Bug Report',
+          description: '',
+          severity: 'MEDIA',
+          status,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        setLocalData('bugs', [...list, item]);
+        if (item.projectId) {
+          ProjectService.touch(item.projectId).catch(() => { });
+        }
+        await CloudSqlService.syncBugReport(item);
+        RealtimeSyncService.endSync();
+        return item;
+      }
 
-    setLocalData('bugs', list);
-    if (projId) {
-      ProjectService.touch(projId).catch(() => { });
+      const projId = list[index].projectId;
+      list[index] = {
+        ...list[index],
+        status,
+        updatedAt: new Date().toISOString()
+      };
+
+      setLocalData('bugs', list);
+      if (projId) {
+        ProjectService.touch(projId).catch(() => { });
+      }
+      await CloudSqlService.syncBugReport(list[index]);
+      RealtimeSyncService.endSync();
+      return list[index];
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    CloudSqlService.syncBugReport(list[index]).catch(() => { });
-    return list[index];
   },
 
   async delete(id: string): Promise<void> {
-    const list = getLocalData<BugReport>('bugs', initialBugs);
-    const bugToDelete = list.find(b => b.id === id);
-    setLocalData('bugs', list.filter(b => b.id !== id));
-    if (bugToDelete?.projectId) {
-      ProjectService.touch(bugToDelete.projectId).catch(() => { });
+    RealtimeSyncService.beginSync();
+    try {
+      const list = getLocalData<BugReport>('bugs', initialBugs);
+      const bugToDelete = list.find(b => b.id === id);
+      setLocalData('bugs', list.filter(b => b.id !== id));
+      if (bugToDelete?.projectId) {
+        ProjectService.touch(bugToDelete.projectId).catch(() => { });
+      }
+      await CloudSqlService.deleteBugReport(id);
+      RealtimeSyncService.endSync();
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
     }
-    CloudSqlService.deleteBugReport(id).catch(() => { });
   },
 
   async uploadScreenshot(file: File): Promise<string> {

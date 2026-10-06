@@ -207,164 +207,206 @@ export const CloudSqlService = {
   },
 
   // Task operations
-  async syncTask(task: Task): Promise<void> {
-    if (IS_TEST) return;
+  async syncTask(task: Task): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/sync-task', {
+      const res = await fetch('/api/v1/cloudsql/sync-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(task)
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
-  async deleteTask(taskId: string): Promise<void> {
-    if (IS_TEST) return;
+  async deleteTask(taskId: string): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/delete-task', {
+      const res = await fetch('/api/v1/cloudsql/delete-task', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ taskId })
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // Column operations
-  async syncColumn(column: ProjectColumn): Promise<void> {
-    if (IS_TEST) return;
+  async syncColumn(column: ProjectColumn): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/sync-column', {
+      const res = await fetch('/api/v1/cloudsql/sync-column', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(column)
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
-  async deleteColumn(columnId: string, projectId?: string, fallbackColumnId?: string): Promise<void> {
-    if (IS_TEST) return;
+  async deleteColumn(columnId: string, projectId?: string, fallbackColumnId?: string): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/delete-column', {
+      const res = await fetch('/api/v1/cloudsql/delete-column', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ columnId, projectId, fallbackColumnId })
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // Project operations
-  async syncProject(project: Project): Promise<void> {
-    if (IS_TEST) return;
+  async syncProject(project: Project): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/sync-project', {
+      const res = await fetch('/api/v1/cloudsql/sync-project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(project)
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
-  async deleteProject(projectId: string): Promise<void> {
-    if (IS_TEST) return;
+  async deleteProject(projectId: string): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/delete-project', {
+      const res = await fetch('/api/v1/cloudsql/delete-project', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ projectId })
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // Idea operations
-  async syncIdea(idea: Idea): Promise<void> {
-    if (IS_TEST) return;
+  async syncIdea(idea: Idea): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/sync-idea', {
+      const res = await fetch('/api/v1/cloudsql/sync-idea', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(idea)
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
-  async deleteIdea(ideaId: string): Promise<void> {
-    if (IS_TEST) return;
+  async deleteIdea(ideaId: string): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/delete-idea', {
+      const res = await fetch('/api/v1/cloudsql/delete-idea', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ideaId })
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // Document operations
-  async syncDocument(doc: ProjectDocument): Promise<void> {
-    if (IS_TEST) return;
+  async syncDocument(doc: ProjectDocument): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/sync-document', {
+      const res = await fetch('/api/v1/cloudsql/sync-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(doc)
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
-  async deleteDocument(docId: string): Promise<void> {
-    if (IS_TEST) return;
+  async deleteDocument(docId: string): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/delete-document', {
+      const res = await fetch('/api/v1/cloudsql/delete-document', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ docId })
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // Suggestion operations
-  async syncSuggestion(sug: Suggestion): Promise<void> {
-    if (IS_TEST) return;
+  async syncSuggestion(sug: Suggestion): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/sync-suggestion', {
+      const res = await fetch('/api/v1/cloudsql/sync-suggestion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(sug)
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
-  async deleteSuggestion(sugId: string): Promise<void> {
-    if (IS_TEST) return;
+  async deleteSuggestion(sugId: string): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/delete-suggestion', {
+      const res = await fetch('/api/v1/cloudsql/delete-suggestion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sugId })
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // BugReport operations
-  async syncBugReport(bug: BugReport): Promise<void> {
-    if (IS_TEST) return;
+  async syncBugReport(bug: BugReport): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/sync-bug', {
+      const res = await fetch('/api/v1/cloudsql/sync-bug', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(bug)
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
-  async deleteBugReport(bugId: string): Promise<void> {
-    if (IS_TEST) return;
+  async deleteBugReport(bugId: string): Promise<boolean> {
+    if (IS_TEST) return true;
     try {
-      await fetch('/api/v1/cloudsql/delete-bug', {
+      const res = await fetch('/api/v1/cloudsql/delete-bug', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bugId })
       });
-    } catch {}
+      return res.ok;
+    } catch {
+      return false;
+    }
   },
 
   // Bulk sync all data from client to Cloud SQL
