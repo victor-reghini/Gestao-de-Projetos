@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { IdeaService } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
 import { Idea, Visibility, IdeaStatus } from '@/types';
-import { X, Lightbulb, Plus, Trash2, Globe, Sparkles } from 'lucide-react';
+import { X, Lightbulb, Plus, Trash2, Globe, Sparkles, Edit2, Check } from 'lucide-react';
 
 interface IdeaModalProps {
   isOpen: boolean;
@@ -22,6 +22,9 @@ export const IdeaModal: React.FC<IdeaModalProps> = ({ isOpen, onClose, ideaToEdi
   const [links, setLinks] = useState<{ title: string; url: string }[]>([]);
   const [linkTitle, setLinkTitle] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+  const [editingLinkIndex, setEditingLinkIndex] = useState<number | null>(null);
+  const [editingLinkTitle, setEditingLinkTitle] = useState('');
+  const [editingLinkUrl, setEditingLinkUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,8 +69,34 @@ export const IdeaModal: React.FC<IdeaModalProps> = ({ isOpen, onClose, ideaToEdi
     }
   };
 
+  const handleStartEditLink = (index: number) => {
+    setEditingLinkIndex(index);
+    setEditingLinkTitle(links[index].title);
+    setEditingLinkUrl(links[index].url);
+  };
+
+  const handleSaveEditLink = () => {
+    if (editingLinkIndex === null) return;
+    if (editingLinkTitle.trim() && editingLinkUrl.trim()) {
+      const next = [...links];
+      next[editingLinkIndex] = {
+        title: editingLinkTitle.trim(),
+        url: editingLinkUrl.trim()
+      };
+      setLinks(next);
+      setEditingLinkIndex(null);
+    }
+  };
+
+  const handleCancelEditLink = () => {
+    setEditingLinkIndex(null);
+  };
+
   const removeLink = (index: number) => {
     setLinks(links.filter((_, idx) => idx !== index));
+    if (editingLinkIndex === index) {
+      setEditingLinkIndex(null);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -253,14 +282,74 @@ export const IdeaModal: React.FC<IdeaModalProps> = ({ isOpen, onClose, ideaToEdi
             </div>
             {links.length > 0 && (
               <div className="space-y-1 mt-1">
-                {links.map((link, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs p-1 rounded bg-slate-800/60 text-slate-300">
-                    <span>{link.title}: <span className="font-mono text-indigo-400">{link.url}</span></span>
-                    <button type="button" onClick={() => removeLink(idx)} className="text-slate-400 hover:text-rose-400">
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </div>
-                ))}
+                {links.map((link, idx) => {
+                  const isEditingThis = editingLinkIndex === idx;
+                  if (isEditingThis) {
+                    return (
+                      <div key={idx} className="p-2 rounded bg-slate-900 border border-amber-500/40 space-y-1.5">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                          <input
+                            type="text"
+                            value={editingLinkTitle}
+                            onChange={(e) => setEditingLinkTitle(e.target.value)}
+                            placeholder="Título"
+                            className="input text-xs"
+                          />
+                          <input
+                            type="url"
+                            value={editingLinkUrl}
+                            onChange={(e) => setEditingLinkUrl(e.target.value)}
+                            placeholder="https://..."
+                            className="input text-xs"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleCancelEditLink}
+                            className="btn btn-ghost btn-xs text-xs"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveEditLink}
+                            disabled={!editingLinkTitle.trim() || !editingLinkUrl.trim()}
+                            className="btn btn-primary btn-xs text-xs flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Salvar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={idx} className="flex items-center justify-between text-xs p-1.5 rounded bg-slate-800/60 text-slate-300">
+                      <span className="font-medium text-white truncate max-w-[80%]">
+                        {link.title}: <span className="font-mono text-indigo-400">{link.url}</span>
+                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditLink(idx)}
+                          className="p-1 rounded text-slate-400 hover:text-amber-300 transition-colors"
+                          title="Editar Link"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeLink(idx)}
+                          className="p-1 rounded text-slate-400 hover:text-rose-400 transition-colors"
+                          title="Excluir Link"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

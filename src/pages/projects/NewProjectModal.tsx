@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ProjectService, slugify } from '@/services/dbService';
+import { ProjectService, DocumentService, slugify } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
-import { Project, Visibility, ProjectStatus } from '@/types';
-import { X, Plus, Trash2, FolderPlus, GitBranch, Globe, Lock, Users, Sparkles } from 'lucide-react';
+import { Project, Visibility, ProjectStatus, ProjectLink } from '@/types';
+import { X, Plus, Trash2, FolderPlus, GitBranch, Globe, Lock, Users, Sparkles, Edit2, Check } from 'lucide-react';
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -38,9 +38,12 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   const [repoName, setRepoName] = useState('');
   const [repoBranch, setRepoBranch] = useState('main');
 
-  const [links, setLinks] = useState<{ title: string; url: string }[]>([]);
+  const [links, setLinks] = useState<ProjectLink[]>([]);
   const [linkTitle, setLinkTitle] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
+  const [editingLinkIndex, setEditingLinkIndex] = useState<number | null>(null);
+  const [editingLinkTitle, setEditingLinkTitle] = useState('');
+  const [editingLinkUrl, setEditingLinkUrl] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,8 +79,34 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
     }
   };
 
+  const handleStartEditLink = (index: number) => {
+    setEditingLinkIndex(index);
+    setEditingLinkTitle(links[index].title);
+    setEditingLinkUrl(links[index].url);
+  };
+
+  const handleSaveEditLink = () => {
+    if (editingLinkIndex === null) return;
+    if (editingLinkTitle.trim() && editingLinkUrl.trim()) {
+      const next = [...links];
+      next[editingLinkIndex] = {
+        title: editingLinkTitle.trim(),
+        url: editingLinkUrl.trim()
+      };
+      setLinks(next);
+      setEditingLinkIndex(null);
+    }
+  };
+
+  const handleCancelEditLink = () => {
+    setEditingLinkIndex(null);
+  };
+
   const removeLink = (index: number) => {
     setLinks(links.filter((_, idx) => idx !== index));
+    if (editingLinkIndex === index) {
+      setEditingLinkIndex(null);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -106,6 +135,19 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
         } : undefined,
         readme: `# ${name}\n\n${description || 'Documentação inicial do projeto.'}`
       });
+
+      // Automatically initialize project documentation
+      try {
+        await DocumentService.create({
+          projectId: createdProject.id,
+          type: 'markdown',
+          title: 'Visão Geral do Projeto',
+          content: `# ${name}\n\n${description || 'Documentação inicial e notas técnicas.'}\n\n## Objetivos\n- Definir escopo e requisitos.\n- Organizar arquitetura e roadmap.`,
+          position: 0
+        });
+      } catch (docErr) {
+        console.warn('Initial doc creation error:', docErr);
+      }
 
       onClose();
       if (onCreated) {
@@ -334,15 +376,75 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
               </button>
             </div>
             {links.length > 0 && (
-              <div className="space-y-1 mt-2">
-                {links.map((link, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs p-1.5 rounded bg-slate-800/60 text-slate-300">
-                    <span className="font-medium text-white">{link.title}: <span className="font-mono text-indigo-400">{link.url}</span></span>
-                    <button type="button" onClick={() => removeLink(idx)} className="text-slate-400 hover:text-rose-400">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+              <div className="space-y-1.5 mt-2">
+                {links.map((link, idx) => {
+                  const isEditingThis = editingLinkIndex === idx;
+                  if (isEditingThis) {
+                    return (
+                      <div key={idx} className="p-2 rounded bg-slate-900 border border-indigo-500/40 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={editingLinkTitle}
+                            onChange={(e) => setEditingLinkTitle(e.target.value)}
+                            placeholder="Título"
+                            className="input text-xs"
+                          />
+                          <input
+                            type="url"
+                            value={editingLinkUrl}
+                            onChange={(e) => setEditingLinkUrl(e.target.value)}
+                            placeholder="https://..."
+                            className="input text-xs"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleCancelEditLink}
+                            className="btn btn-ghost btn-xs text-xs"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveEditLink}
+                            disabled={!editingLinkTitle.trim() || !editingLinkUrl.trim()}
+                            className="btn btn-primary btn-xs text-xs flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Salvar
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={idx} className="flex items-center justify-between text-xs p-1.5 rounded bg-slate-800/60 text-slate-300">
+                      <span className="font-medium text-white truncate max-w-[80%]">
+                        {link.title}: <span className="font-mono text-indigo-400">{link.url}</span>
+                      </span>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditLink(idx)}
+                          className="p-1 rounded text-slate-400 hover:text-indigo-300 transition-colors"
+                          title="Editar Link"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeLink(idx)}
+                          className="p-1 rounded text-slate-400 hover:text-rose-400 transition-colors"
+                          title="Excluir Link"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>

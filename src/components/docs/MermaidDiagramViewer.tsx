@@ -84,7 +84,10 @@ export const MermaidDiagramViewer: React.FC<MermaidDiagramViewerProps> = ({
   onRefresh,
   isReadOnly = false
 }) => {
-  const diagramDocs = documents.filter(d => d.type === 'mermaid' || d.type === 'diagram');
+  const diagramDocs = documents.filter(d => {
+    const t = (d.type || '').toLowerCase();
+    return t === 'mermaid' || t === 'diagram';
+  });
   const [selectedDocId, setSelectedDocId] = useState<string | null>(diagramDocs[0]?.id || null);
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState('');
@@ -96,6 +99,23 @@ export const MermaidDiagramViewer: React.FC<MermaidDiagramViewerProps> = ({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const selectedDoc = diagramDocs.find(d => d.id === selectedDocId) || diagramDocs[0];
+
+  // Sync selectedDocId when documents change
+  useEffect(() => {
+    if (!selectedDocId && diagramDocs.length > 0) {
+      setSelectedDocId(diagramDocs[0].id);
+    } else if (selectedDocId && !diagramDocs.some(d => d.id === selectedDocId)) {
+      setSelectedDocId(diagramDocs[0]?.id || null);
+    }
+  }, [diagramDocs, selectedDocId]);
+
+  // Keep title and content in sync with selected doc when not editing or creating
+  useEffect(() => {
+    if (!isEditing && !isCreating && selectedDoc) {
+      setTitle(selectedDoc.title);
+      setContent(selectedDoc.content || '');
+    }
+  }, [selectedDoc, isEditing, isCreating]);
 
   useEffect(() => {
     mermaid.initialize({
@@ -154,28 +174,33 @@ export const MermaidDiagramViewer: React.FC<MermaidDiagramViewerProps> = ({
   };
 
   const handleSave = async () => {
+    if (!title.trim()) {
+      alert('Por favor, informe o título do diagrama.');
+      return;
+    }
     setSaving(true);
     try {
       if (isCreating) {
         const newDoc = await DocumentService.create({
           projectId,
           type: 'mermaid',
-          title,
+          title: title.trim(),
           content,
           position: diagramDocs.length
         });
         setSelectedDocId(newDoc.id);
       } else if (selectedDoc) {
         await DocumentService.update(selectedDoc.id, {
-          title,
+          title: title.trim(),
           content
         });
       }
       setIsEditing(false);
       setIsCreating(false);
       onRefresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving diagram:', err);
+      alert('Erro ao salvar diagrama: ' + (err.message || 'Erro desconhecido'));
     } finally {
       setSaving(false);
     }
@@ -184,9 +209,16 @@ export const MermaidDiagramViewer: React.FC<MermaidDiagramViewerProps> = ({
   const handleDelete = async () => {
     if (!selectedDoc) return;
     if (confirm(`Deseja excluir o diagrama "${selectedDoc.title}"?`)) {
-      await DocumentService.delete(selectedDoc.id);
-      setSelectedDocId(null);
-      onRefresh();
+      try {
+        await DocumentService.delete(selectedDoc.id);
+        const remaining = diagramDocs.filter(d => d.id !== selectedDoc.id);
+        setSelectedDocId(remaining[0]?.id || null);
+        setIsEditing(false);
+        setIsCreating(false);
+        onRefresh();
+      } catch (err: any) {
+        alert('Erro ao excluir diagrama: ' + (err.message || 'Erro desconhecido'));
+      }
     }
   };
 

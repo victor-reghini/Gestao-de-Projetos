@@ -1185,11 +1185,19 @@ export const DocumentService = {
       try {
         const remote = await CloudSqlService.fetchDocuments(projectId);
         if (remote !== null) {
-          const sorted = [...remote].sort((a, b) => a.position - b.position);
-          const docs = getLocalData<ProjectDocument>('documents', initialDocs);
-          const otherDocs = docs.filter(d => d.projectId !== projectId);
-          setLocalData('documents', [...otherDocs, ...sorted]);
-          return sorted;
+          if (remote.length > 0) {
+            const sorted = [...remote].sort((a, b) => a.position - b.position);
+            const docs = getLocalData<ProjectDocument>('documents', initialDocs);
+            const otherDocs = docs.filter(d => d.projectId !== projectId);
+            setLocalData('documents', [...otherDocs, ...sorted]);
+            return sorted;
+          }
+          const localDocs = getLocalData<ProjectDocument>('documents', initialDocs).filter(d => d.projectId === projectId);
+          if (localDocs.length > 0) {
+            localDocs.forEach(d => CloudSqlService.syncDocument(d).catch(() => { }));
+            return localDocs;
+          }
+          return [];
         }
       } catch (err) {
         console.warn('Falha ao buscar documentos do banco de dados:', err);
@@ -1207,6 +1215,7 @@ export const DocumentService = {
       const id = `doc_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
       const newDoc: ProjectDocument = {
         ...data,
+        type: (data.type || 'markdown').toLowerCase() as any,
         id,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -1236,6 +1245,7 @@ export const DocumentService = {
       docs[index] = {
         ...docs[index],
         ...updates,
+        type: updates.type ? (updates.type.toLowerCase() as any) : docs[index].type,
         updatedAt: new Date().toISOString()
       };
 

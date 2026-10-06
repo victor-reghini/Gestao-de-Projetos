@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Project, ProjectMember, Visibility, ProjectStatus, MemberRole } from '@/types';
+import { Project, ProjectMember, Visibility, ProjectStatus, MemberRole, ProjectLink } from '@/types';
 import { ProjectService, MemberService, slugify } from '@/services/dbService';
 import { 
   Settings, 
@@ -15,7 +15,11 @@ import {
   Archive, 
   Shield, 
   CheckCircle2,
-  X
+  X,
+  Edit2,
+  Plus,
+  Check,
+  ExternalLink
 } from 'lucide-react';
 
 interface MembersAndSettingsTabProps {
@@ -47,6 +51,28 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
   const [repoUrl, setRepoUrl] = useState(project.repository?.url || '');
   const [repoBranch, setRepoBranch] = useState(project.repository?.defaultBranch || 'main');
 
+  // Links state
+  const [links, setLinks] = useState<ProjectLink[]>(project.links || []);
+  const [newLinkTitle, setNewLinkTitle] = useState('');
+  const [newLinkUrl, setNewLinkUrl] = useState('');
+  const [editingLinkIndex, setEditingLinkIndex] = useState<number | null>(null);
+  const [editingLinkTitle, setEditingLinkTitle] = useState('');
+  const [editingLinkUrl, setEditingLinkUrl] = useState('');
+
+  // Sync state when project changes
+  useEffect(() => {
+    setName(project.name);
+    setSlug(project.slug);
+    setShortDescription(project.shortDescription || '');
+    setDescription(project.description);
+    setVisibility(project.visibility);
+    setStatus(project.status);
+    setTechnologies(project.technologies || []);
+    setLinks(project.links || []);
+    setRepoUrl(project.repository?.url || '');
+    setRepoBranch(project.repository?.defaultBranch || 'main');
+  }, [project]);
+
   // New member state
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteName, setInviteName] = useState('');
@@ -69,6 +95,49 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
     setTechnologies(technologies.filter(t => t !== tech));
   };
 
+  const handleAddLink = () => {
+    if (newLinkTitle.trim() && newLinkUrl.trim()) {
+      setLinks([...links, { title: newLinkTitle.trim(), url: newLinkUrl.trim() }]);
+      setNewLinkTitle('');
+      setNewLinkUrl('');
+    }
+  };
+
+  const handleStartEditLink = (index: number) => {
+    setEditingLinkIndex(index);
+    setEditingLinkTitle(links[index].title);
+    setEditingLinkUrl(links[index].url);
+  };
+
+  const handleSaveEditLink = () => {
+    if (editingLinkIndex === null) return;
+    if (editingLinkTitle.trim() && editingLinkUrl.trim()) {
+      const nextLinks = [...links];
+      nextLinks[editingLinkIndex] = {
+        title: editingLinkTitle.trim(),
+        url: editingLinkUrl.trim()
+      };
+      setLinks(nextLinks);
+      setEditingLinkIndex(null);
+    }
+  };
+
+  const handleCancelEditLink = () => {
+    setEditingLinkIndex(null);
+  };
+
+  const handleRemoveLink = (index: number) => {
+    setLinks(links.filter((_, idx) => idx !== index));
+    if (editingLinkIndex === index) {
+      setEditingLinkIndex(null);
+    }
+  };
+
+  const handleRemoveRepo = () => {
+    setRepoUrl('');
+    setRepoBranch('main');
+  };
+
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
@@ -82,15 +151,16 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
         visibility,
         status,
         technologies,
-        repository: repoUrl ? {
+        links,
+        repository: repoUrl.trim() ? {
           provider: 'github',
-          url: repoUrl,
+          url: repoUrl.trim(),
           owner: project.repository?.owner || name.toLowerCase().replace(/\s+/g, '-'),
           name: project.repository?.name || name,
-          defaultBranch: repoBranch
+          defaultBranch: repoBranch.trim() || 'main'
         } : undefined
       });
-      setStatusMsg('Configurações atualizadas com sucesso!');
+      setStatusMsg('Configurações e links do projeto atualizados com sucesso!');
       onRefresh();
     } catch (err: any) {
       alert(err.message || 'Erro ao atualizar projeto.');
@@ -255,6 +325,127 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
             </div>
           </div>
 
+          {/* Links do Projeto */}
+          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <Globe className="w-3.5 h-3.5 text-indigo-400" /> Links Úteis & Recursos ({links.length})
+              </label>
+            </div>
+
+            {/* Adicionar novo link */}
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+              <input
+                type="text"
+                placeholder="Título (ex: Figma, API Docs)"
+                value={newLinkTitle}
+                onChange={(e) => setNewLinkTitle(e.target.value)}
+                className="input text-xs sm:col-span-2"
+              />
+              <input
+                type="url"
+                placeholder="https://exemplo.com"
+                value={newLinkUrl}
+                onChange={(e) => setNewLinkUrl(e.target.value)}
+                className="input text-xs sm:col-span-2"
+              />
+              <button
+                type="button"
+                onClick={handleAddLink}
+                disabled={!newLinkTitle.trim() || !newLinkUrl.trim()}
+                className="btn btn-secondary btn-sm text-xs flex items-center justify-center gap-1 shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" /> Adicionar Link
+              </button>
+            </div>
+
+            {/* Lista de links com edição inline */}
+            {links.length > 0 && (
+              <div className="space-y-2 mt-3 pt-3 border-t border-slate-800">
+                {links.map((link, idx) => {
+                  const isEditingThis = editingLinkIndex === idx;
+                  if (isEditingThis) {
+                    return (
+                      <div key={idx} className="p-2.5 rounded-lg bg-slate-900 border border-indigo-500/40 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <input
+                            type="text"
+                            value={editingLinkTitle}
+                            onChange={(e) => setEditingLinkTitle(e.target.value)}
+                            placeholder="Título do Link"
+                            className="input text-xs"
+                          />
+                          <input
+                            type="url"
+                            value={editingLinkUrl}
+                            onChange={(e) => setEditingLinkUrl(e.target.value)}
+                            placeholder="https://..."
+                            className="input text-xs"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={handleCancelEditLink}
+                            className="btn btn-ghost btn-xs text-xs"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveEditLink}
+                            disabled={!editingLinkTitle.trim() || !editingLinkUrl.trim()}
+                            className="btn btn-primary btn-xs text-xs flex items-center gap-1"
+                          >
+                            <Check className="w-3 h-3" /> Salvar Link
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between text-xs p-2.5 rounded-lg bg-slate-900/60 border border-slate-800/80 hover:border-slate-700 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 truncate pr-2">
+                        <span className="font-semibold text-white">{link.title}:</span>
+                        <a
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-indigo-400 hover:text-indigo-300 truncate flex items-center gap-1"
+                        >
+                          {link.url}
+                          <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditLink(idx)}
+                          className="p-1.5 rounded text-slate-400 hover:text-indigo-300 hover:bg-slate-800 transition-colors"
+                          title="Editar Link"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveLink(idx)}
+                          className="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors"
+                          title="Excluir Link"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Git Repo URL */}
           <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
@@ -279,6 +470,17 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
                 className="input text-xs"
               />
             </div>
+            {repoUrl && (
+              <div className="sm:col-span-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleRemoveRepo}
+                  className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1"
+                >
+                  <Trash2 className="w-3 h-3" /> Desvincular repositório do projeto
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="pt-3 border-t border-slate-800 flex justify-end">

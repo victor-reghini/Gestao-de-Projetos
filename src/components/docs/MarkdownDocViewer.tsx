@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ProjectDocument } from '@/types';
 import { DocumentService } from '@/services/dbService';
 import { Edit3, Eye, Save, Trash2, Plus, FileText, CheckCircle2 } from 'lucide-react';
@@ -16,7 +16,10 @@ export const MarkdownDocViewer: React.FC<MarkdownDocViewerProps> = ({
   onRefresh,
   isReadOnly = false
 }) => {
-  const mdDocs = documents.filter(d => d.type === 'markdown' || d.type === 'note');
+  const mdDocs = documents.filter(d => {
+    const t = (d.type || '').toLowerCase();
+    return t === 'markdown' || t === 'note';
+  });
   const [selectedDocId, setSelectedDocId] = useState<string | null>(mdDocs[0]?.id || null);
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState('');
@@ -25,6 +28,23 @@ export const MarkdownDocViewer: React.FC<MarkdownDocViewerProps> = ({
   const [saving, setSaving] = useState(false);
 
   const selectedDoc = mdDocs.find(d => d.id === selectedDocId) || mdDocs[0];
+
+  // Sync selectedDocId when documents change
+  useEffect(() => {
+    if (!selectedDocId && mdDocs.length > 0) {
+      setSelectedDocId(mdDocs[0].id);
+    } else if (selectedDocId && !mdDocs.some(d => d.id === selectedDocId)) {
+      setSelectedDocId(mdDocs[0]?.id || null);
+    }
+  }, [mdDocs, selectedDocId]);
+
+  // Keep title and content in sync with selected doc when not editing or creating
+  useEffect(() => {
+    if (!isEditing && !isCreating && selectedDoc) {
+      setTitle(selectedDoc.title);
+      setContent(selectedDoc.content || '');
+    }
+  }, [selectedDoc, isEditing, isCreating]);
 
   const handleSelectDoc = (doc: ProjectDocument) => {
     setSelectedDocId(doc.id);
@@ -49,28 +69,33 @@ export const MarkdownDocViewer: React.FC<MarkdownDocViewerProps> = ({
   };
 
   const handleSave = async () => {
+    if (!title.trim()) {
+      alert('Por favor, informe o título do documento.');
+      return;
+    }
     setSaving(true);
     try {
       if (isCreating) {
         const newDoc = await DocumentService.create({
           projectId,
           type: 'markdown',
-          title,
+          title: title.trim(),
           content,
           position: mdDocs.length
         });
         setSelectedDocId(newDoc.id);
       } else if (selectedDoc) {
         await DocumentService.update(selectedDoc.id, {
-          title,
+          title: title.trim(),
           content
         });
       }
       setIsEditing(false);
       setIsCreating(false);
       onRefresh();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving document:', err);
+      alert('Erro ao salvar documento: ' + (err.message || 'Erro desconhecido'));
     } finally {
       setSaving(false);
     }
@@ -79,9 +104,16 @@ export const MarkdownDocViewer: React.FC<MarkdownDocViewerProps> = ({
   const handleDelete = async () => {
     if (!selectedDoc) return;
     if (confirm(`Deseja excluir o documento "${selectedDoc.title}"?`)) {
-      await DocumentService.delete(selectedDoc.id);
-      setSelectedDocId(null);
-      onRefresh();
+      try {
+        await DocumentService.delete(selectedDoc.id);
+        const remaining = mdDocs.filter(d => d.id !== selectedDoc.id);
+        setSelectedDocId(remaining[0]?.id || null);
+        setIsEditing(false);
+        setIsCreating(false);
+        onRefresh();
+      } catch (err: any) {
+        alert('Erro ao excluir documento: ' + (err.message || 'Erro desconhecido'));
+      }
     }
   };
 
