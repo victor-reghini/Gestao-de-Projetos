@@ -767,4 +767,94 @@ describe('Domain & Business Rules Tests', () => {
       }
     });
   });
+
+  describe('Project Links and Documentation Editability & CRUD', () => {
+    it('allows owner to add, edit, and remove project links after project creation', async () => {
+      const proj = await ProjectService.create({
+        ownerId: 'demo-user-123',
+        ownerName: 'Victor Reghini',
+        name: 'Projeto com Links Editáveis',
+        description: 'Teste de edição de links',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: ['React'],
+        links: [{ title: 'Figma Inicial', url: 'https://figma.com/file/1' }]
+      });
+
+      // 1. Initial link exists
+      let current = await ProjectService.getById(proj.id);
+      expect(current!.links).toHaveLength(1);
+      expect(current!.links[0].title).toBe('Figma Inicial');
+
+      // 2. Add new link and edit existing link
+      const updatedLinks = [
+        { title: 'Figma Atualizado', url: 'https://figma.com/file/v2' },
+        { title: 'API Docs', url: 'https://api.exemplo.com' }
+      ];
+      await ProjectService.update(proj.id, { links: updatedLinks });
+
+      current = await ProjectService.getById(proj.id);
+      expect(current!.links).toHaveLength(2);
+      expect(current!.links[0].title).toBe('Figma Atualizado');
+      expect(current!.links[0].url).toBe('https://figma.com/file/v2');
+      expect(current!.links[1].title).toBe('API Docs');
+
+      // 3. Delete a link
+      const filteredLinks = current!.links.filter(l => l.title !== 'Figma Atualizado');
+      await ProjectService.update(proj.id, { links: filteredLinks });
+
+      current = await ProjectService.getById(proj.id);
+      expect(current!.links).toHaveLength(1);
+      expect(current!.links[0].title).toBe('API Docs');
+
+      // 4. Delete all links
+      await ProjectService.update(proj.id, { links: [] });
+      current = await ProjectService.getById(proj.id);
+      expect(current!.links).toHaveLength(0);
+    });
+
+    it('allows creating, editing, and deleting markdown and mermaid documents', async () => {
+      const proj = await ProjectService.create({
+        ownerId: 'demo-user-123',
+        ownerName: 'Victor Reghini',
+        name: 'Projeto para Documentação',
+        description: 'Teste de docs',
+        visibility: 'PUBLIC',
+        status: 'EM_ANDAMENTO',
+        technologies: ['TypeScript'],
+        links: []
+      });
+
+      // 1. Create new Markdown document
+      const doc = await DocumentService.create({
+        projectId: proj.id,
+        title: 'Documento de Especificação',
+        content: '# Requisitos do Sistema',
+        type: 'markdown',
+        position: 0
+      });
+
+      expect(doc.id).toBeDefined();
+      expect(doc.type).toBe('markdown');
+
+      let docs = await DocumentService.getByProject(proj.id);
+      expect(docs.some(d => d.id === doc.id)).toBe(true);
+
+      // 2. Edit existing document
+      await DocumentService.update(doc.id, {
+        title: 'Especificação Atualizada',
+        content: '# Requisitos Atualizados com Sucesso'
+      });
+
+      docs = await DocumentService.getByProject(proj.id);
+      const updated = docs.find(d => d.id === doc.id);
+      expect(updated!.title).toBe('Especificação Atualizada');
+      expect(updated!.content).toBe('# Requisitos Atualizados com Sucesso');
+
+      // 3. Delete document
+      await DocumentService.delete(doc.id);
+      docs = await DocumentService.getByProject(proj.id);
+      expect(docs.some(d => d.id === doc.id)).toBe(false);
+    });
+  });
 });

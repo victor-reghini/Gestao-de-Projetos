@@ -209,7 +209,7 @@ function mapDocumentRow(row: any): ProjectDocument {
     projectId: row.project_id,
     title: row.title,
     content: row.content || '',
-    type: row.type || 'MARKDOWN',
+    type: (row.type ? row.type.toLowerCase() : 'markdown') as any,
     position: row.position ?? 0,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
     updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString()
@@ -781,7 +781,7 @@ export async function persistDocument(doc: ProjectDocument): Promise<void> {
         doc.projectId,
         doc.title,
         doc.content,
-        doc.type || 'MARKDOWN',
+        (doc.type ? doc.type.toLowerCase() : 'markdown'),
         doc.position ?? 0,
         doc.createdAt || new Date().toISOString(),
         doc.updatedAt || new Date().toISOString()
@@ -1112,7 +1112,7 @@ export async function syncAllToCloudSql(data: {
           doc.projectId,
           doc.title,
           doc.content,
-          doc.type || 'MARKDOWN',
+          (doc.type ? doc.type.toLowerCase() : 'markdown'),
           doc.position ?? 0,
           doc.createdAt || new Date().toISOString(),
           doc.updatedAt || new Date().toISOString()

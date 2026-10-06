@@ -158,7 +158,7 @@ export const ProjectDetailPage: React.FC = () => {
   // User has edit permissions if they are not explicitly restricted as a 'viewer'
   const isExplicitViewer = members.some(m => m.userId === user?.id && m.role === 'viewer');
   const canEdit = !isExplicitViewer;
-  const isOwner = user?.id === project.ownerId || !project.ownerId || user?.id === 'demo-user-123' || members.some(m => m.userId === user?.id && m.role === 'owner');
+  const isOwner = Boolean(user?.id && project.ownerId && user.id === project.ownerId);
   const publicUrl = `${window.location.origin}/p/${project.slug}`;
 
   const copyPublicUrl = () => {
@@ -170,8 +170,8 @@ export const ProjectDetailPage: React.FC = () => {
   const tabs = [
     { id: 'kanban', label: 'Kanban', icon: FolderKanban, count: undefined },
     { id: 'overview', label: 'Visão Geral', icon: LayoutDashboard, count: undefined },
-    { id: 'docs', label: 'Documentação', icon: FileText, count: documents.filter(d => d.type === 'markdown' || d.type === 'note').length },
-    { id: 'diagrams', label: 'Diagramas', icon: Network, count: documents.filter(d => d.type === 'mermaid' || d.type === 'diagram').length },
+    { id: 'docs', label: 'Documentação', icon: FileText, count: documents.filter(d => (d.type || '').toLowerCase() === 'markdown' || (d.type || '').toLowerCase() === 'note').length },
+    { id: 'diagrams', label: 'Diagramas', icon: Network, count: documents.filter(d => (d.type || '').toLowerCase() === 'mermaid' || (d.type || '').toLowerCase() === 'diagram').length },
     { id: 'suggestions', label: 'Sugestões', icon: MessageSquarePlus, count: suggestions.filter(s => s.status === 'ABERTO' || s.status === 'EM_ANALISE').length },
     { id: 'bugs', label: 'Bugs & Falhas', icon: Bug, count: bugs.filter(b => b.status === 'ABERTO' || b.status === 'EM_ANALISE').length },
     { id: 'settings', label: 'Membros & Configurações', icon: Settings, count: undefined }
@@ -230,18 +230,30 @@ export const ProjectDetailPage: React.FC = () => {
             </p>
           </div>
 
-          {project.repository && (
-            <a
-              href={project.repository.url}
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-secondary btn-sm self-start md:self-center font-mono text-xs flex items-center gap-2"
-            >
-              <GitBranch className="w-4 h-4 text-blue-400" />
-              <span>{project.repository.owner}/{project.repository.name}</span>
-              <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
-            </a>
-          )}
+          <div className="flex items-center gap-2 flex-wrap self-start md:self-center">
+            {isOwner && (
+              <button
+                onClick={() => handleTabChange('settings')}
+                className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5 border-slate-700 hover:border-blue-500/50"
+                title="Editar informações do projeto e links"
+              >
+                <Settings className="w-3.5 h-3.5 text-blue-400" />
+                <span>Editar Projeto</span>
+              </button>
+            )}
+            {project.repository && (
+              <a
+                href={project.repository.url}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-secondary btn-sm font-mono text-xs flex items-center gap-2"
+              >
+                <GitBranch className="w-4 h-4 text-blue-400" />
+                <span>{project.repository.owner}/{project.repository.name}</span>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
+              </a>
+            )}
+          </div>
         </div>
 
         {/* Tech Badges */}
@@ -303,9 +315,20 @@ export const ProjectDetailPage: React.FC = () => {
                 {project.description}
               </p>
 
-              {project.links && project.links.length > 0 && (
-                <div className="pt-4 border-t border-slate-800 space-y-2">
+              <div className="pt-4 border-t border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
                   <h4 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Links do Projeto</h4>
+                  {isOwner && (
+                    <button
+                      onClick={() => handleTabChange('settings')}
+                      className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 font-medium transition-colors"
+                      title="Gerenciar links nas configurações"
+                    >
+                      <Settings className="w-3 h-3" /> Gerenciar Links
+                    </button>
+                  )}
+                </div>
+                {project.links && project.links.length > 0 ? (
                   <div className="flex flex-wrap gap-2">
                     {project.links.map((link, idx) => (
                       <a
@@ -320,8 +343,10 @@ export const ProjectDetailPage: React.FC = () => {
                       </a>
                     ))}
                   </div>
-                </div>
-              )}
+                ) : (
+                  <p className="text-xs text-slate-500 italic">Nenhum link útil cadastrado no momento.</p>
+                )}
+              </div>
             </div>
 
             <div className="glass-panel p-6 space-y-4">
@@ -353,7 +378,7 @@ export const ProjectDetailPage: React.FC = () => {
             projectId={project.id}
             documents={documents}
             onRefresh={() => loadProjectData(true)}
-            isReadOnly={!isOwner}
+            isReadOnly={!canEdit}
           />
         )}
 
