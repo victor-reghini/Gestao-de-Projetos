@@ -78,50 +78,47 @@ const KanbanTaskCard = React.memo<KanbanTaskCardProps>(({
       onDrop={(e) => onDropOnTask(e, columnId, taskIndex)}
       onClick={() => onClick(task)}
       className={`group p-3.5 rounded-xl bg-slate-800 hover:bg-slate-700/80 border shadow-sm transition-all cursor-grab active:cursor-grabbing ${isDragging
-          ? 'opacity-100 scale-[0.98] border-dashed border-blue-500/40 bg-slate-700/80 ring-1 ring-blue-500/20'
-          : isDropTarget
-            ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-750'
-            : 'border-slate-700/80 hover:-translate-y-0.5 hover:border-blue-500/50 hover:shadow-md'
+        ? 'opacity-100 scale-[0.98] border-dashed border-blue-500/40 bg-slate-700/80 ring-1 ring-blue-500/20'
+        : isDropTarget
+          ? 'border-blue-400 ring-2 ring-blue-500/40 bg-slate-750'
+          : 'border-slate-700/80 hover:-translate-y-0.5 hover:border-blue-500/50 hover:shadow-md'
         }`}
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={`badge text-[10px] py-0.5 px-2 ${getPriorityBadgeClass(task.priority)}`}>
-            {task.priority}
-          </span>
-          {task.concluded && (
-            <span className="badge text-[10px] py-0.5 px-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
-              Concluída
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
           {!isReadOnly && (
             <button
               type="button"
               onClick={(e) => onToggleConcluded(e, task)}
               title={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
               aria-label={task.concluded ? "Marcar como pendente" : "Marcar como concluída"}
-              className={`rounded-lg transition-all bg-transparent ${task.concluded
-                  ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
-                  : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-700/60'
+              className={`rounded-lg transition-all bg-transparent hover:btn-active ${task.concluded
+                ? 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                : 'text-slate-400 hover:text-emerald-400 hover:bg-slate-700/60'
                 }`}
             >
               <CheckCircle2 className={`w-4 h-4 ${task.concluded ? 'fill-emerald-500/20 text-emerald-400' : 'text-slate-400'}`} />
             </button>
           )}
-          {!isReadOnly && (
-            <GripVertical className="w-3.5 h-3.5 text-slate-400 opacity-0 group-hover:opacity-70 transition-opacity" />
+
+          <span className={`badge text-[10px] py-0.5 px-2 ${getPriorityBadgeClass(task.priority)}`}>
+            {task.priority}
+          </span>
+
+          {task.concluded && (
+            <span className="badge text-[10px] py-0.5 px-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
+              Concluída
+            </span>
           )}
         </div>
       </div>
 
-      <h4 className={`text-sm font-semibold transition-colors leading-snug mb-1.5 ${task.concluded ? 'line-through text-slate-400' : 'text-white group-hover:text-blue-300'}`}>
+      <h4 className={`text-sm font-semibold transition-colors leading-snug mb-1.5 cursor-pointer ${task.concluded ? 'line-through text-slate-400' : 'text-white group-hover:text-blue-300'}`}>
         {task.title}
       </h4>
 
       {task.description && (
-        <p className="text-xs text-slate-300 line-clamp-2 mb-3">
+        <p className="text-xs text-slate-300 line-clamp-2 mb-3 cursor-pointer">
           {task.description}
         </p>
       )}

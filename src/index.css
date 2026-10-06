@@ -163,6 +163,14 @@ button {
   transform: scale(0.98);
 }
 
+.btn-active {
+  transform: scale(1.25);
+}
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
