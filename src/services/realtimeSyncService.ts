@@ -36,6 +36,41 @@ let currentSyncState: SyncState = 'synced';
 let lastSyncedAt: string = new Date().toISOString();
 let isRtdbConnected = false;
 let syncStatusListeners: ((status: SyncValidationStatus) => void)[] = [];
+let activeSyncCount = 0;
+let lastSyncError = false;
+
+// Dynamically update site favicon (green, orange, red)
+export function updateFavicon(statusColor: 'green' | 'orange' | 'red'): void {
+  if (typeof document === 'undefined') return;
+  const colorMap = {
+    green: '#10b981',
+    orange: '#f59e0b',
+    red: '#ef4444'
+  };
+  const color = colorMap[statusColor] || '#10b981';
+  let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null;
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    document.head.appendChild(link);
+  }
+  link.type = 'image/svg+xml';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="13" fill="${color}" stroke="#0f172a" stroke-width="3"/></svg>`;
+  link.href = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+export function beginSync(): void {
+  activeSyncCount++;
+  lastSyncError = false;
+  notifyStatusChange();
+}
+
+export function endSync(hasError = false): void {
+  if (activeSyncCount > 0) activeSyncCount--;
+  if (hasError) lastSyncError = true;
+  lastSyncedAt = new Date().toISOString();
+  notifyStatusChange();
+}
 
 // Helper to determine network state
 export function isBrowserOnline(): boolean {
@@ -86,7 +121,7 @@ export function enqueueSync(item: Omit<SyncQueueItem, 'id' | 'timestamp'>): void
 // Notify subscribers about current sync status
 function notifyStatusChange(): void {
   const queue = getSyncQueue();
-  const pendingCount = queue.length;
+  const totalPending = queue.length + activeSyncCount;
 
   let state: SyncState = 'synced';
   let message = 'Sincronizado com Realtime Database';
@@ -94,18 +129,22 @@ function notifyStatusChange(): void {
 
   if (!isBrowserOnline()) {
     state = 'offline';
-    message = pendingCount > 0 
-      ? `Modo Offline (${pendingCount} alteração pendente salva no navegador)`
+    message = totalPending > 0 
+      ? `Modo Offline (${totalPending} alteração pendente salva no navegador)`
       : 'Modo Offline (Dados salvos no navegador)';
     source = 'localStorage';
+  } else if (lastSyncError) {
+    state = 'offline';
+    message = 'Erro ao sincronizar com o banco de dados';
+    source = 'cloudsql';
   } else if (isSlowConnection()) {
     state = 'slow_connection';
     message = 'Conexão Lenta (Operando via cache local com sincronização)';
     source = 'localStorage';
-  } else if (pendingCount > 0) {
+  } else if (totalPending > 0) {
     state = 'syncing';
-    message = `Sincronizando ${pendingCount} alteração(ões)...`;
-    source = 'realtime';
+    message = `Sincronizando ${totalPending} alteração(ões)...`;
+    source = 'cloudsql';
   } else {
     state = 'synced';
     message = 'Sincronizado via Realtime Database';
@@ -116,7 +155,7 @@ function notifyStatusChange(): void {
   const status: SyncValidationStatus = {
     state,
     lastSyncedAt,
-    pendingChangesCount: pendingCount,
+    pendingChangesCount: totalPending,
     message,
     source
   };
@@ -126,6 +165,17 @@ function notifyStatusChange(): void {
       listener(status);
     } catch {}
   });
+
+  // Dynamic favicon update
+  let faviconColor: 'green' | 'orange' | 'red' = 'green';
+  if (!isBrowserOnline() || lastSyncError) {
+    faviconColor = 'red';
+  } else if (totalPending > 0 || state === 'syncing') {
+    faviconColor = 'orange';
+  } else {
+    faviconColor = 'green';
+  }
+  updateFavicon(faviconColor);
 }
 
 // Initialize connection listeners in browser
@@ -215,33 +265,49 @@ export const RealtimeSyncService = {
     };
   },
 
+  beginSync(): void {
+    beginSync();
+  },
+
+  endSync(hasError = false): void {
+    endSync(hasError);
+  },
+
+  updateFavicon(statusColor: 'green' | 'orange' | 'red'): void {
+    updateFavicon(statusColor);
+  },
+
   getCurrentStatus(): SyncValidationStatus {
     const queue = getSyncQueue();
-    const pendingCount = queue.length;
+    const totalPending = queue.length + activeSyncCount;
     let state: SyncState = 'synced';
     let message = 'Sincronizado via Realtime Database';
     let source: 'realtime' | 'cloudsql' | 'localStorage' = 'realtime';
 
     if (!isBrowserOnline()) {
       state = 'offline';
-      message = pendingCount > 0 
-        ? `Modo Offline (${pendingCount} alteração pendente salva no navegador)`
+      message = totalPending > 0 
+        ? `Modo Offline (${totalPending} alteração pendente salva no navegador)`
         : 'Modo Offline (Dados salvos no navegador)';
       source = 'localStorage';
+    } else if (lastSyncError) {
+      state = 'offline';
+      message = 'Erro ao sincronizar com o banco de dados';
+      source = 'cloudsql';
     } else if (isSlowConnection()) {
       state = 'slow_connection';
       message = 'Conexão Lenta (Operando via cache local com sincronização)';
       source = 'localStorage';
-    } else if (pendingCount > 0) {
+    } else if (totalPending > 0) {
       state = 'syncing';
-      message = `Sincronizando ${pendingCount} alteração(ões)...`;
-      source = 'realtime';
+      message = `Sincronizando ${totalPending} alteração(ões)...`;
+      source = 'cloudsql';
     }
 
     return {
       state,
       lastSyncedAt,
-      pendingChangesCount: pendingCount,
+      pendingChangesCount: totalPending,
       message,
       source
     };

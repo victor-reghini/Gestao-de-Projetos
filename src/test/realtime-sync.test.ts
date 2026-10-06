@@ -198,4 +198,43 @@ describe('Firebase Realtime Database & Sync Cache Architecture Tests', () => {
       await expect(syncAllLocalToCloudSql()).resolves.toBeDefined();
     });
   });
+
+  describe('6. Favicon Dynamic Status & In-Flight Sync Tracking', () => {
+    it('updates favicon link href to green, orange, or red svg circle', () => {
+      // 1. Synced (green)
+      RealtimeSyncService.updateFavicon('green');
+      let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      expect(link).toBeDefined();
+      expect(link.href).toContain('data:image/svg+xml');
+      expect(decodeURIComponent(link.href)).toContain('#10b981');
+
+      // 2. Syncing (orange)
+      RealtimeSyncService.updateFavicon('orange');
+      link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      expect(decodeURIComponent(link.href)).toContain('#f59e0b');
+
+      // 3. Error / Offline (red)
+      RealtimeSyncService.updateFavicon('red');
+      link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      expect(decodeURIComponent(link.href)).toContain('#ef4444');
+    });
+
+    it('tracks active mutations with beginSync and endSync', () => {
+      expect(RealtimeSyncService.getCurrentStatus().pendingChangesCount).toBe(0);
+
+      RealtimeSyncService.beginSync();
+      const syncingStatus = RealtimeSyncService.getCurrentStatus();
+      expect(syncingStatus.state).toBe('syncing');
+      expect(syncingStatus.pendingChangesCount).toBe(1);
+
+      const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement;
+      expect(decodeURIComponent(link.href)).toContain('#f59e0b'); // orange
+
+      RealtimeSyncService.endSync(false);
+      const syncedStatus = RealtimeSyncService.getCurrentStatus();
+      expect(syncedStatus.state).toBe('synced');
+      expect(syncedStatus.pendingChangesCount).toBe(0);
+      expect(decodeURIComponent(link.href)).toContain('#10b981'); // green
+    });
+  });
 });

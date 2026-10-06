@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { NewProjectModal } from '@/pages/projects/NewProjectModal';
 import { IdeaModal } from '@/pages/ideas/IdeaModal';
+import { SyncStatusIndicator } from '@/components/sync/SyncStatusIndicator';
 
 export const AppLayout: React.FC = () => {
   const { user, isDemo, logout } = useAuth();
@@ -74,14 +75,17 @@ export const AppLayout: React.FC = () => {
               </div>
             )}
           </Link>
-          <button
-            onClick={toggleSidebar}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
-            title={isCollapsed ? "Expandir menu lateral" : "Minimizar menu lateral"}
-            aria-label={isCollapsed ? "Expandir menu lateral" : "Minimizar menu lateral"}
-          >
-            {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <SyncStatusIndicator />
+            <button
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
+              title={isCollapsed ? "Expandir menu lateral" : "Minimizar menu lateral"}
+              aria-label={isCollapsed ? "Expandir menu lateral" : "Minimizar menu lateral"}
+            >
+              {isCollapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+            </button>
+          </div>
         </div>
 
         {/* Action Buttons */}
@@ -199,6 +203,7 @@ export const AppLayout: React.FC = () => {
           <span className="font-bold text-sm text-white">Gestor de Projetos</span>
         </Link>
         <div className="flex items-center gap-2">
+          <SyncStatusIndicator />
           <button
             onClick={() => setIsNewProjectOpen(true)}
             className="btn btn-primary btn-sm p-2"
@@ -213,6 +218,7 @@ export const AppLayout: React.FC = () => {
           </button>
         </div>
       </header>
+
 
       {/* Mobile Drawer */}
       {mobileOpen && (
