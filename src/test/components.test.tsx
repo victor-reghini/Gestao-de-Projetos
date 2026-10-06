@@ -639,4 +639,29 @@ describe('UI Components & Pages Tests', () => {
     expect(screen.getByTestId('segment-backlog')).toBeInTheDocument();
     expect(screen.getByTestId('segment-done')).toBeInTheDocument();
   });
+
+  it('renders SyncStatusIndicator button and opens SyncModal on click', async () => {
+    const { SyncStatusIndicator } = await import('@/components/sync/SyncStatusIndicator');
+
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <SyncStatusIndicator />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    const indicatorBtn = screen.getByRole('button');
+    expect(indicatorBtn).toBeInTheDocument();
+
+    // Click indicator button to open SyncModal
+    fireEvent.click(indicatorBtn);
+
+    expect(screen.getByText('Sincronização com o Banco de Dados')).toBeInTheDocument();
+    expect(screen.getByText('Google Cloud SQL (PostgreSQL)')).toBeInTheDocument();
+    expect(screen.getByText(/Dados Salvos no Navegador/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Enviar Dados do Navegador para o Banco/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Copiar Script SQL/i })).toBeInTheDocument();
+  });
 });
+

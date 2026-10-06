@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { TaskModal } from './TaskModal';
 import { ColumnModal } from './NewColumnModal';
+import { SyncModal } from '@/components/sync/SyncModal';
 
 const getPriorityBadgeClass = (priority: TaskPriority) => {
   switch (priority) {
@@ -348,6 +349,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
   const [filterPriority, setFilterPriority] = useState<string>('ALL');
 
   // Modals
+  const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [selectedColumnId, setSelectedColumnId] = useState<string | undefined>();
   const [taskToEdit, setTaskToEdit] = useState<Task | null>(null);
@@ -762,16 +764,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
 
         <div className="flex items-center gap-2 self-end sm:self-auto flex-wrap">
           {/* Sync Status Badge */}
-          <div
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors ${syncStatus.state === 'synced'
-              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+          <button
+            onClick={() => setIsSyncModalOpen(true)}
+            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${syncStatus.state === 'synced'
+              ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20'
               : syncStatus.state === 'syncing'
-                ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                ? 'bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/20'
                 : syncStatus.state === 'slow_connection'
-                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20'
-                  : 'bg-slate-800 text-slate-300 border-slate-700'
+                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                  : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
               }`}
-            title={`${syncStatus.message} • ${syncStatus.source === 'realtime' ? 'Firebase Realtime DB' : 'Cache Local (localStorage)'}`}
+            title={`${syncStatus.message} • Clique para gerenciar sincronização com Cloud SQL`}
           >
             {syncStatus.state === 'synced' && (
               <>
@@ -798,16 +801,19 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
                 <span>Offline (Local)</span>
               </>
             )}
-            <button
-              onClick={handleManualSync}
-              disabled={isValidating}
+            <span
+              onClick={(e) => {
+                e.stopPropagation();
+                handleManualSync();
+              }}
               title="Validar sincronização com banco de dados"
               aria-label="Validar sincronização"
-              className="ml-1 p-0.5 text-slate-400 hover:text-white rounded transition-colors"
+              className="ml-1 p-0.5 text-slate-400 hover:text-white rounded transition-colors inline-flex items-center"
             >
               <RefreshCw className={`w-3 h-3 ${isValidating ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+            </span>
+          </button>
+
 
 
           {!isReadOnly && (
@@ -944,6 +950,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
           }}
         />
       )}
+
+      {isSyncModalOpen && (
+        <SyncModal
+          isOpen={isSyncModalOpen}
+          onClose={() => setIsSyncModalOpen(false)}
+          onSyncSuccess={() => {
+            loadKanban();
+            onProjectUpdate?.();
+          }}
+        />
+      )}
     </div>
   );
 };
+
