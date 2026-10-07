@@ -1,4 +1,5 @@
 import { Project, ProjectColumn, Task, Idea, ProjectDocument, Suggestion, BugReport, SystemSettings } from '@/types';
+import { getActiveStorageUserId } from './storageCrypto';
 
 export interface CloudSqlStatus {
   connected: boolean;
@@ -14,6 +15,11 @@ export interface CloudSqlStatus {
 
 const IS_TEST = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
 
+function getAuthHeaders(): Record<string, string> {
+  const uid = getActiveStorageUserId();
+  return uid ? { 'X-User-Id': uid } : {};
+}
+
 export const CloudSqlService = {
   // Check connection status of Cloud SQL
   async getStatus(): Promise<CloudSqlStatus> {
@@ -27,7 +33,7 @@ export const CloudSqlService = {
 
     try {
       const res = await fetch('/api/v1/cloudsql/status', {
-        headers: { 'Accept': 'application/json' }
+        headers: { 'Accept': 'application/json', ...getAuthHeaders() }
       });
       if (res.ok) {
         const data = await res.json();
@@ -48,10 +54,16 @@ export const CloudSqlService = {
   },
 
   // Read operations from Cloud SQL
-  async fetchProjects(): Promise<Project[] | null> {
+  async fetchProjects(userId?: string): Promise<Project[] | null> {
     if (IS_TEST) return null;
     try {
-      const res = await fetch('/api/v1/cloudsql/projects');
+      const targetUser = userId || getActiveStorageUserId();
+      const url = targetUser 
+        ? `/api/v1/cloudsql/projects?userId=${encodeURIComponent(targetUser)}` 
+        : '/api/v1/cloudsql/projects';
+      const res = await fetch(url, {
+        headers: { ...getAuthHeaders() }
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success === false || json.data === null || json.data === undefined) return null;
@@ -114,10 +126,16 @@ export const CloudSqlService = {
     }
   },
 
-  async fetchIdeas(): Promise<Idea[] | null> {
+  async fetchIdeas(userId?: string): Promise<Idea[] | null> {
     if (IS_TEST) return null;
     try {
-      const res = await fetch('/api/v1/cloudsql/ideas');
+      const targetUser = userId || getActiveStorageUserId();
+      const url = targetUser 
+        ? `/api/v1/cloudsql/ideas?userId=${encodeURIComponent(targetUser)}` 
+        : '/api/v1/cloudsql/ideas';
+      const res = await fetch(url, {
+        headers: { ...getAuthHeaders() }
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success === false || json.data === null || json.data === undefined) return null;
@@ -135,7 +153,7 @@ export const CloudSqlService = {
       const url = projectId 
         ? `/api/v1/cloudsql/documents?projectId=${encodeURIComponent(projectId)}`
         : '/api/v1/cloudsql/documents';
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: { ...getAuthHeaders() } });
       if (res.ok) {
         const json = await res.json();
         if (json.success === false || json.data === null || json.data === undefined) return null;
@@ -153,7 +171,7 @@ export const CloudSqlService = {
       const url = projectId 
         ? `/api/v1/cloudsql/suggestions?projectId=${encodeURIComponent(projectId)}`
         : '/api/v1/cloudsql/suggestions';
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: { ...getAuthHeaders() } });
       if (res.ok) {
         const json = await res.json();
         if (json.success === false || json.data === null || json.data === undefined) return null;
@@ -171,7 +189,7 @@ export const CloudSqlService = {
       const url = projectId 
         ? `/api/v1/cloudsql/bugs?projectId=${encodeURIComponent(projectId)}`
         : '/api/v1/cloudsql/bugs';
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: { ...getAuthHeaders() } });
       if (res.ok) {
         const json = await res.json();
         if (json.success === false || json.data === null || json.data === undefined) return null;
@@ -194,7 +212,7 @@ export const CloudSqlService = {
   } | null> {
     if (IS_TEST) return null;
     try {
-      const res = await fetch('/api/v1/cloudsql/all');
+      const res = await fetch('/api/v1/cloudsql/all', { headers: { ...getAuthHeaders() } });
       if (res.ok) {
         const json = await res.json();
         if (json.success === false || json.data === null || json.data === undefined) return null;
@@ -212,8 +230,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/sync-task', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(task)
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ...task, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -226,8 +244,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/delete-task', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ taskId })
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ taskId, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -241,8 +259,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/sync-column', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(column)
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ...column, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -255,8 +273,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/delete-column', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ columnId, projectId, fallbackColumnId })
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ columnId, projectId, fallbackColumnId, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -270,8 +288,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/sync-project', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(project)
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ...project, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -284,8 +302,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/delete-project', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId })
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ projectId, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -299,8 +317,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/sync-idea', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(idea)
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ...idea, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -313,8 +331,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/delete-idea', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ideaId })
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ideaId, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -328,8 +346,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/sync-document', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(doc)
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ...doc, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -342,8 +360,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/delete-document', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ docId })
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ docId, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -357,8 +375,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/sync-suggestion', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(sug)
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ...sug, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -371,8 +389,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/delete-suggestion', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sugId })
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ sugId, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -386,8 +404,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/sync-bug', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bug)
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ...bug, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -400,8 +418,8 @@ export const CloudSqlService = {
     try {
       const res = await fetch('/api/v1/cloudsql/delete-bug', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bugId })
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ bugId, requestingUserId: getActiveStorageUserId() })
       });
       return res.ok;
     } catch {
@@ -620,8 +638,8 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.de
     try {
       const res = await fetch('/api/v1/cloudsql/sync-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(user)
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ ...user, requestingUserId: getActiveStorageUserId() })
       });
       if (res.ok) {
         const json = await res.json();

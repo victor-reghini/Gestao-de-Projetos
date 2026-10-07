@@ -74,6 +74,7 @@ export interface Project {
   links: ProjectLink[];
   repository?: Repository;
   readme?: string;
+  members?: ProjectMember[];
   createdAt: string;
   updatedAt: string;
 }
@@ -110,6 +111,7 @@ export interface Task {
   position: number;
   concluded?: boolean;
   dueDate?: string | null;
+  assigneeId?: string | null;
   createdById: string;
   createdByName?: string;
   createdAt: string;

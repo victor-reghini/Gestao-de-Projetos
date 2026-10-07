@@ -13,6 +13,7 @@ import { auth, googleProvider, getEnvVar } from '@/services/firebase';
 import { User } from '@/types';
 import { SystemSettingsService } from '@/services/systemSettingsService';
 import { CloudSqlService } from '@/services/cloudSqlService';
+import { setActiveStorageUserId } from '@/services/storageCrypto';
 
 interface AuthContextType {
   user: User | null;
@@ -95,6 +96,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(false);
     }
   }, [isDemo]);
+
+  useEffect(() => {
+    setActiveStorageUserId(user ? user.id : null);
+  }, [user]);
 
   const login = async (email: string, pass: string) => {
     try {
@@ -183,6 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     sessionStorage.setItem('gestao_manual_logout', 'true');
     sessionStorage.removeItem('gestao_demo_user');
+    setActiveStorageUserId(null);
     setIsDemo(false);
     setUser(null);
     try {

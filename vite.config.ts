@@ -62,6 +62,8 @@ function cloudSqlApiPlugin(): Plugin {
           });
         };
 
+        const requestingUserId = (req.headers['x-user-id'] as string) || url.searchParams.get('userId') || undefined;
+
         try {
           if (pathname === '/api/v1/cloudsql/status' && req.method === 'GET') {
             const status = await testCloudSqlConnection();
@@ -81,7 +83,8 @@ function cloudSqlApiPlugin(): Plugin {
               res.end(JSON.stringify({ success: true, data: proj }));
               return;
             }
-            const projects = await fetchCloudSqlProjects();
+            const userId = url.searchParams.get('userId') || requestingUserId;
+            const projects = await fetchCloudSqlProjects(userId);
             if (projects === null) {
               res.statusCode = 503;
               res.end(JSON.stringify({ success: false, data: null, error: 'Cloud SQL indisponível' }));
@@ -116,7 +119,8 @@ function cloudSqlApiPlugin(): Plugin {
           }
 
           if (pathname === '/api/v1/cloudsql/ideas' && req.method === 'GET') {
-            const ideas = await fetchCloudSqlIdeas();
+            const userId = url.searchParams.get('userId') || requestingUserId;
+            const ideas = await fetchCloudSqlIdeas(userId);
             if (ideas === null) {
               res.statusCode = 503;
               res.end(JSON.stringify({ success: false, data: null, error: 'Cloud SQL indisponível' }));
@@ -175,35 +179,35 @@ function cloudSqlApiPlugin(): Plugin {
 
           if (pathname === '/api/v1/cloudsql/sync-task' && req.method === 'POST') {
             const task = await readBody();
-            await persistTask(task);
+            await persistTask(task, task.requestingUserId || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
 
           if (pathname === '/api/v1/cloudsql/sync-column' && req.method === 'POST') {
             const column = await readBody();
-            await persistColumn(column);
+            await persistColumn(column, column.requestingUserId || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
 
           if (pathname === '/api/v1/cloudsql/sync-project' && req.method === 'POST') {
             const project = await readBody();
-            await persistProject(project);
+            await persistProject(project, project.requestingUserId || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
 
           if (pathname === '/api/v1/cloudsql/sync-idea' && req.method === 'POST') {
             const idea = await readBody();
-            await persistIdea(idea);
+            await persistIdea(idea, idea.requestingUserId || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
 
           if (pathname === '/api/v1/cloudsql/sync-document' && req.method === 'POST') {
             const doc = await readBody();
-            await persistDocument(doc);
+            await persistDocument(doc, doc.requestingUserId || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
@@ -223,36 +227,36 @@ function cloudSqlApiPlugin(): Plugin {
           }
 
           if (pathname === '/api/v1/cloudsql/delete-task' && req.method === 'POST') {
-            const { taskId } = await readBody();
-            if (taskId) await deleteCloudSqlTask(taskId);
+            const { taskId, requestingUserId: rUid } = await readBody();
+            if (taskId) await deleteCloudSqlTask(taskId, rUid || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
 
           if (pathname === '/api/v1/cloudsql/delete-column' && req.method === 'POST') {
-            const { columnId, projectId, fallbackColumnId } = await readBody();
-            if (columnId) await deleteCloudSqlColumn(columnId, projectId, fallbackColumnId);
+            const { columnId, projectId, fallbackColumnId, requestingUserId: rUid } = await readBody();
+            if (columnId) await deleteCloudSqlColumn(columnId, projectId, fallbackColumnId, rUid || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
 
           if (pathname === '/api/v1/cloudsql/delete-project' && req.method === 'POST') {
-            const { projectId } = await readBody();
-            if (projectId) await deleteCloudSqlProject(projectId);
+            const { projectId, requestingUserId: rUid } = await readBody();
+            if (projectId) await deleteCloudSqlProject(projectId, rUid || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
 
           if (pathname === '/api/v1/cloudsql/delete-idea' && req.method === 'POST') {
-            const { ideaId } = await readBody();
-            if (ideaId) await deleteCloudSqlIdea(ideaId);
+            const { ideaId, requestingUserId: rUid } = await readBody();
+            if (ideaId) await deleteCloudSqlIdea(ideaId, rUid || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
 
           if (pathname === '/api/v1/cloudsql/delete-document' && req.method === 'POST') {
-            const { docId } = await readBody();
-            if (docId) await deleteCloudSqlDocument(docId);
+            const { docId, requestingUserId: rUid } = await readBody();
+            if (docId) await deleteCloudSqlDocument(docId, rUid || requestingUserId);
             res.end(JSON.stringify({ success: true }));
             return;
           }
@@ -273,7 +277,7 @@ function cloudSqlApiPlugin(): Plugin {
 
           if (pathname === '/api/v1/cloudsql/sync-all' && req.method === 'POST') {
             const payload = await readBody();
-            const result = await syncAllToCloudSql(payload);
+            const result = await syncAllToCloudSql(payload, payload.requestingUserId || requestingUserId);
             res.end(JSON.stringify(result));
             return;
           }
@@ -313,8 +317,9 @@ function cloudSqlApiPlugin(): Plugin {
 
           next();
         } catch (err: any) {
-          res.statusCode = 500;
-          res.end(JSON.stringify({ error: err.message }));
+          const isForbidden = err.message && (err.message.startsWith('Acesso negado') || err.message.includes('permissão'));
+          res.statusCode = isForbidden ? 403 : 500;
+          res.end(JSON.stringify({ success: false, error: err.message }));
         }
       });
 

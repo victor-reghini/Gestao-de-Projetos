@@ -15,6 +15,13 @@ import {
 import { RealtimeSyncService } from './realtimeSyncService';
 import { CloudSqlService } from './cloudSqlService';
 import { DataConnectService } from './dataConnectService';
+import { 
+  getEncryptedLocalData, 
+  setEncryptedLocalData, 
+  getActiveStorageUserId, 
+  clearUserStorage,
+  getAllStoredItemsAcrossUsers 
+} from './storageCrypto';
 
 // Backward compatibility helpers (no-op since Firestore was removed)
 export function sanitizeForFirestore<T>(data: T): T {
@@ -31,22 +38,12 @@ export async function safeFirestoreQuery<T>(fn: () => Promise<T>, fallback: T): 
 
 const LOCAL_STORAGE_KEY_PREFIX = 'gestao_projetos_db_';
 
-export function getLocalData<T>(key: string, defaultValue: T[]): T[] {
-  try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + key);
-    if (!raw) return defaultValue;
-    return JSON.parse(raw);
-  } catch {
-    return defaultValue;
-  }
+export function getLocalData<T>(key: string, defaultValue: T[], userId?: string): T[] {
+  return getEncryptedLocalData<T>(key, defaultValue, userId);
 }
 
-function setLocalData<T>(key: string, data: T[]): void {
-  try {
-    localStorage.setItem(LOCAL_STORAGE_KEY_PREFIX + key, JSON.stringify(data));
-  } catch (err) {
-    console.error(`Error saving local data for ${key}:`, err);
-  }
+function setLocalData<T>(key: string, data: T[], userId?: string): void {
+  setEncryptedLocalData<T>(key, data, userId);
 }
 
 // Initial seed sample data
@@ -314,29 +311,32 @@ export function isUserConnected(userId?: string): boolean {
 function ensureSeedData() {
   if (typeof localStorage === 'undefined') return;
   if (isUserConnected()) return;
+  const activeUser = getActiveStorageUserId();
+  if (activeUser && activeUser !== 'demo-user-123') return;
+
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'projects')) {
-    setLocalData('projects', initialProjects);
+    setLocalData('projects', initialProjects, 'demo-user-123');
   }
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'columns')) {
-    setLocalData('columns', initialColumns);
+    setLocalData('columns', initialColumns, 'demo-user-123');
   }
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'tasks')) {
-    setLocalData('tasks', initialTasks);
+    setLocalData('tasks', initialTasks, 'demo-user-123');
   }
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'ideas')) {
-    setLocalData('ideas', initialIdeas);
+    setLocalData('ideas', initialIdeas, 'demo-user-123');
   }
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'documents')) {
-    setLocalData('documents', initialDocs);
+    setLocalData('documents', initialDocs, 'demo-user-123');
   }
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'suggestions')) {
-    setLocalData('suggestions', initialSuggestions);
+    setLocalData('suggestions', initialSuggestions, 'demo-user-123');
   }
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'bugs')) {
-    setLocalData('bugs', initialBugs);
+    setLocalData('bugs', initialBugs, 'demo-user-123');
   }
   if (!localStorage.getItem(LOCAL_STORAGE_KEY_PREFIX + 'members')) {
-    setLocalData('members', []);
+    setLocalData('members', [], 'demo-user-123');
   }
 }
 ensureSeedData();
@@ -349,11 +349,11 @@ export const ProjectService = {
     // Quando o usuário estiver conectado, ignora o localStorage e consome os dados atualizados do banco
     if (connected) {
       try {
-        const remote = await CloudSqlService.fetchProjects();
+        const remote = await CloudSqlService.fetchProjects(userId);
         if (remote !== null) {
-          setLocalData('projects', remote);
+          setLocalData('projects', remote, userId);
           if (userId) {
-            return remote.filter(p => p.ownerId === userId || p.visibility === 'PUBLIC' || p.visibility === 'SHARED');
+            return remote.filter(p => p.ownerId === userId || p.members?.some(m => m.userId === userId));
           }
           return remote;
         }
@@ -363,9 +363,10 @@ export const ProjectService = {
     }
 
     // Modo offline / fallback
-    const local = getLocalData<Project>('projects', initialProjects);
+    const fallbackProjects = (userId && userId !== 'demo-user-123') ? [] : initialProjects;
+    const local = getLocalData<Project>('projects', fallbackProjects, userId);
     if (userId) {
-      return local.filter(p => p.ownerId === userId || p.visibility === 'PUBLIC' || p.visibility === 'SHARED');
+      return local.filter(p => p.ownerId === userId || p.members?.some(m => m.userId === userId));
     }
     return local;
   },
@@ -394,7 +395,10 @@ export const ProjectService = {
 
     // Fallback offline / não conectado
     const local = getLocalData<Project>('projects', initialProjects);
-    const found = local.find(p => p.id === id);
+    let found = local.find(p => p.id === id);
+    if (!found) {
+      found = getAllStoredItemsAcrossUsers<Project>('projects').find(p => p.id === id);
+    }
     if (found) return found;
 
     try {
@@ -428,7 +432,10 @@ export const ProjectService = {
 
     // Fallback offline / não conectado
     const local = getLocalData<Project>('projects', initialProjects);
-    const found = local.find(p => p.slug === slug || p.id === slug);
+    let found = local.find(p => p.slug === slug || p.id === slug);
+    if (!found) {
+      found = getAllStoredItemsAcrossUsers<Project>('projects').find(p => p.slug === slug || p.id === slug);
+    }
     if (found) return found;
 
     try {
@@ -480,10 +487,35 @@ export const ProjectService = {
     }
   },
 
-  async update(id: string, updates: Partial<Project>): Promise<Project> {
+  async update(id: string, updates: Partial<Project>, requestingUserId?: string): Promise<Project> {
     const list = getLocalData<Project>('projects', initialProjects);
-    const index = list.findIndex(p => p.id === id);
-    if (index === -1) throw new Error('Projeto não encontrado');
+    let index = list.findIndex(p => p.id === id);
+    const currentUid = requestingUserId || getActiveStorageUserId();
+
+    if (index === -1) {
+      const allProjects = getAllStoredItemsAcrossUsers<Project>('projects');
+      const existingInGlobal = allProjects.find(p => p.id === id);
+      if (existingInGlobal) {
+        if (currentUid && existingInGlobal.ownerId && existingInGlobal.ownerId !== currentUid) {
+          const isMember = existingInGlobal.members?.some(m => m.userId === currentUid && m.role !== 'viewer');
+          if (!isMember) {
+            throw new Error('Permissão negada: você só pode atualizar projetos pertencentes à sua conta.');
+          }
+        }
+        list.push(existingInGlobal);
+        index = list.length - 1;
+      } else {
+        throw new Error('Projeto não encontrado');
+      }
+    }
+
+    const targetProj = list[index];
+    if (currentUid && targetProj.ownerId && targetProj.ownerId !== currentUid) {
+      const isMember = targetProj.members?.some(m => m.userId === currentUid && m.role !== 'viewer');
+      if (!isMember) {
+        throw new Error('Permissão negada: você só pode atualizar projetos pertencentes à sua conta.');
+      }
+    }
 
     const updatedItem: Project = {
       ...list[index],
@@ -494,7 +526,7 @@ export const ProjectService = {
     RealtimeSyncService.beginSync();
     try {
       list[index] = updatedItem;
-      setLocalData('projects', list);
+      setLocalData('projects', list, currentUid || undefined);
 
       // Persist to Google Cloud SQL & Data Connect
       await CloudSqlService.syncProject(updatedItem);
@@ -531,12 +563,32 @@ export const ProjectService = {
     return updatedItem;
   },
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, requestingUserId?: string): Promise<void> {
     RealtimeSyncService.beginSync();
     try {
       const list = getLocalData<Project>('projects', initialProjects);
+      let targetProj = list.find(p => p.id === id);
+      const currentUid = requestingUserId || getActiveStorageUserId();
+
+      if (!targetProj) {
+        const allProjects = getAllStoredItemsAcrossUsers<Project>('projects');
+        const existingInGlobal = allProjects.find(p => p.id === id);
+        if (existingInGlobal) {
+          if (currentUid && existingInGlobal.ownerId && existingInGlobal.ownerId !== currentUid) {
+            throw new Error('Permissão negada: você só pode excluir projetos pertencentes à sua conta.');
+          }
+          targetProj = existingInGlobal;
+        } else {
+          throw new Error('Projeto não encontrado');
+        }
+      }
+
+      if (currentUid && targetProj?.ownerId && targetProj.ownerId !== currentUid) {
+        throw new Error('Permissão negada: você só pode excluir projetos pertencentes à sua conta.');
+      }
+
       const filtered = list.filter(p => p.id !== id);
-      setLocalData('projects', filtered);
+      setLocalData('projects', filtered, currentUid || undefined);
 
       // Persist deletion to Google Cloud SQL & Data Connect
       await CloudSqlService.deleteProject(id);
@@ -831,9 +883,21 @@ export const TaskService = {
     return localTasks;
   },
 
-  async create(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'position'> & { position?: number }): Promise<Task> {
+  async create(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'position'> & { position?: number }, requestingUserId?: string): Promise<Task> {
     RealtimeSyncService.beginSync();
     try {
+      const currentUid = requestingUserId || getActiveStorageUserId();
+      if (currentUid && data.projectId) {
+        const pList = getLocalData<Project>('projects', initialProjects);
+        const targetProj = pList.find(p => p.id === data.projectId);
+        if (targetProj && targetProj.ownerId && targetProj.ownerId !== currentUid) {
+          const isMember = targetProj.members?.some(m => m.userId === currentUid && m.role !== 'viewer');
+          if (!isMember) {
+            throw new Error('Permissão negada: você não tem permissão para criar atividades neste projeto.');
+          }
+        }
+      }
+
       const allTasks = getLocalData<Task>('tasks', initialTasks);
       const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
 
@@ -887,7 +951,7 @@ export const TaskService = {
     }
   },
 
-  async update(id: string, updates: Partial<Task>): Promise<Task> {
+  async update(id: string, updates: Partial<Task>, requestingUserId?: string): Promise<Task> {
     RealtimeSyncService.beginSync();
     try {
       const allTasks = getLocalData<Task>('tasks', initialTasks);
@@ -895,7 +959,24 @@ export const TaskService = {
       const index = allTasks.findIndex(t => t.id === id);
       let updatedItem: Task;
 
+      const currentUid = requestingUserId || getActiveStorageUserId();
+
       if (index === -1) {
+        const globalTasks = getAllStoredItemsAcrossUsers<Task>('tasks');
+        const existingGlobalTask = globalTasks.find(t => t.id === id);
+        if (existingGlobalTask) {
+          const projId = existingGlobalTask.projectId;
+          const allProjects = getAllStoredItemsAcrossUsers<Project>('projects');
+          const globalProj = allProjects.find(p => p.id === projId);
+          if (globalProj && currentUid && globalProj.ownerId !== currentUid) {
+            const isMember = globalProj.members?.some(m => m.userId === currentUid && m.role !== 'viewer');
+            const isCreator = existingGlobalTask.createdById === currentUid;
+            if (!isMember && !isCreator) {
+              throw new Error('Permissão negada: você não tem permissão para alterar atividades deste projeto.');
+            }
+          }
+        }
+
         const targetColId = updates.columnId || 'col-1';
         const targetCol = allCols.find(c => c.id === targetColId);
         const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
@@ -916,7 +997,6 @@ export const TaskService = {
           createdAt: updates.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
-        setLocalData('tasks', [...allTasks, updatedItem]);
       } else {
         const currentTask = allTasks[index];
         let position = updates.position !== undefined ? updates.position : currentTask.position;
@@ -940,6 +1020,27 @@ export const TaskService = {
           concluded: concluded ?? false,
           updatedAt: new Date().toISOString()
         };
+      }
+
+      if (currentUid && updatedItem.projectId) {
+        let pList = getLocalData<Project>('projects', initialProjects);
+        let targetProj = pList.find(p => p.id === updatedItem.projectId);
+        if (!targetProj) {
+          const allProjects = getAllStoredItemsAcrossUsers<Project>('projects');
+          targetProj = allProjects.find(p => p.id === updatedItem.projectId);
+        }
+        if (targetProj && targetProj.ownerId && targetProj.ownerId !== currentUid) {
+          const isMember = targetProj.members?.some(m => m.userId === currentUid && m.role !== 'viewer');
+          const isCreator = updatedItem.createdById === currentUid;
+          if (!isMember && !isCreator) {
+            throw new Error('Permissão negada: você não tem permissão para alterar atividades deste projeto.');
+          }
+        }
+      }
+
+      if (index === -1) {
+        setLocalData('tasks', [...allTasks, updatedItem]);
+      } else {
         allTasks[index] = updatedItem;
         setLocalData('tasks', allTasks);
       }
@@ -970,6 +1071,18 @@ export const TaskService = {
       if (!task) {
         RealtimeSyncService.endSync();
         return;
+      }
+
+      const currentUid = getActiveStorageUserId();
+      if (currentUid && task.projectId) {
+        const pList = getLocalData<Project>('projects', initialProjects);
+        const targetProj = pList.find(p => p.id === task.projectId);
+        if (targetProj && targetProj.ownerId && targetProj.ownerId !== currentUid) {
+          const isMember = targetProj.members?.some(m => m.userId === currentUid && m.role !== 'viewer');
+          if (!isMember) {
+            throw new Error('Permissão negada: você não tem permissão para movimentar atividades deste projeto.');
+          }
+        }
       }
 
       const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
@@ -1022,11 +1135,34 @@ export const TaskService = {
     }
   },
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, requestingUserId?: string): Promise<void> {
     RealtimeSyncService.beginSync();
     try {
       const allTasks = getLocalData<Task>('tasks', initialTasks);
-      const taskToDelete = allTasks.find(t => t.id === id);
+      let taskToDelete = allTasks.find(t => t.id === id);
+      const currentUid = requestingUserId || getActiveStorageUserId();
+
+      if (!taskToDelete) {
+        const globalTasks = getAllStoredItemsAcrossUsers<Task>('tasks');
+        taskToDelete = globalTasks.find(t => t.id === id);
+      }
+
+      if (currentUid && taskToDelete?.projectId) {
+        let pList = getLocalData<Project>('projects', initialProjects);
+        let targetProj = pList.find(p => p.id === taskToDelete.projectId);
+        if (!targetProj) {
+          const allProjects = getAllStoredItemsAcrossUsers<Project>('projects');
+          targetProj = allProjects.find(p => p.id === taskToDelete.projectId);
+        }
+        if (targetProj && targetProj.ownerId && targetProj.ownerId !== currentUid) {
+          const isMember = targetProj.members?.some(m => m.userId === currentUid && m.role !== 'viewer');
+          const isCreator = taskToDelete.createdById === currentUid;
+          if (!isMember && !isCreator) {
+            throw new Error('Permissão negada: você não tem permissão para excluir atividades deste projeto.');
+          }
+        }
+      }
+
       setLocalData('tasks', allTasks.filter(t => t.id !== id));
 
       if (taskToDelete?.projectId) {
@@ -1051,11 +1187,11 @@ export const IdeaService = {
 
     if (connected) {
       try {
-        const remote = await CloudSqlService.fetchIdeas();
+        const remote = await CloudSqlService.fetchIdeas(userId);
         if (remote !== null) {
-          setLocalData('ideas', remote);
+          setLocalData('ideas', remote, userId);
           if (userId) {
-            return remote.filter(i => i.ownerId === userId || i.visibility === 'PUBLIC' || i.visibility === 'SHARED');
+            return remote.filter(i => i.ownerId === userId);
           }
           return remote;
         }
@@ -1064,9 +1200,10 @@ export const IdeaService = {
       }
     }
 
-    const local = getLocalData<Idea>('ideas', initialIdeas);
+    const fallbackIdeas = (userId && userId !== 'demo-user-123') ? [] : initialIdeas;
+    const local = getLocalData<Idea>('ideas', fallbackIdeas, userId);
     if (userId) {
-      return local.filter(i => i.ownerId === userId || i.visibility === 'PUBLIC' || i.visibility === 'SHARED');
+      return local.filter(i => i.ownerId === userId);
     }
     return local;
   },
@@ -1088,7 +1225,11 @@ export const IdeaService = {
     }
 
     const local = getLocalData<Idea>('ideas', initialIdeas);
-    return local.find(i => i.id === id) || null;
+    let found = local.find(i => i.id === id);
+    if (!found) {
+      found = getAllStoredItemsAcrossUsers<Idea>('ideas').find(i => i.id === id);
+    }
+    return found || null;
   },
 
   async create(data: Omit<Idea, 'id' | 'createdAt' | 'updatedAt' | 'convertedProjectId'>): Promise<Idea> {
@@ -1104,7 +1245,7 @@ export const IdeaService = {
         updatedAt: new Date().toISOString()
       };
 
-      setLocalData('ideas', [newIdea, ...allIdeas]);
+      setLocalData('ideas', [newIdea, ...allIdeas], data.ownerId);
       await CloudSqlService.syncIdea(newIdea);
       RealtimeSyncService.endSync();
       return newIdea;
@@ -1114,12 +1255,31 @@ export const IdeaService = {
     }
   },
 
-  async update(id: string, updates: Partial<Idea>): Promise<Idea> {
+  async update(id: string, updates: Partial<Idea>, requestingUserId?: string): Promise<Idea> {
     RealtimeSyncService.beginSync();
     try {
       const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
-      const index = allIdeas.findIndex(i => i.id === id);
-      if (index === -1) throw new Error('Ideia não encontrada');
+      let index = allIdeas.findIndex(i => i.id === id);
+      const currentUid = requestingUserId || getActiveStorageUserId();
+
+      if (index === -1) {
+        const globalIdeas = getAllStoredItemsAcrossUsers<Idea>('ideas');
+        const existingGlobal = globalIdeas.find(i => i.id === id);
+        if (existingGlobal) {
+          if (currentUid && existingGlobal.ownerId && existingGlobal.ownerId !== currentUid) {
+            throw new Error('Permissão negada: você só pode atualizar ideias pertencentes à sua conta.');
+          }
+          allIdeas.push(existingGlobal);
+          index = allIdeas.length - 1;
+        } else {
+          throw new Error('Ideia não encontrada');
+        }
+      }
+
+      const targetIdea = allIdeas[index];
+      if (currentUid && targetIdea.ownerId && targetIdea.ownerId !== currentUid) {
+        throw new Error('Permissão negada: você só pode atualizar ideias pertencentes à sua conta.');
+      }
 
       allIdeas[index] = {
         ...allIdeas[index],
@@ -1127,7 +1287,7 @@ export const IdeaService = {
         updatedAt: new Date().toISOString()
       };
 
-      setLocalData('ideas', allIdeas);
+      setLocalData('ideas', allIdeas, currentUid || undefined);
       await CloudSqlService.syncIdea(allIdeas[index]);
       RealtimeSyncService.endSync();
       return allIdeas[index];
@@ -1137,9 +1297,45 @@ export const IdeaService = {
     }
   },
 
+  async delete(id: string, requestingUserId?: string): Promise<void> {
+    RealtimeSyncService.beginSync();
+    try {
+      const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
+      let targetIdea = allIdeas.find(i => i.id === id);
+      const currentUid = requestingUserId || getActiveStorageUserId();
+
+      if (!targetIdea) {
+        const globalIdeas = getAllStoredItemsAcrossUsers<Idea>('ideas');
+        const existingGlobal = globalIdeas.find(i => i.id === id);
+        if (existingGlobal) {
+          if (currentUid && existingGlobal.ownerId && existingGlobal.ownerId !== currentUid) {
+            throw new Error('Permissão negada: você só pode excluir ideias pertencentes à sua conta.');
+          }
+          targetIdea = existingGlobal;
+        } else {
+          throw new Error('Ideia não encontrada');
+        }
+      }
+
+      if (currentUid && targetIdea?.ownerId && targetIdea.ownerId !== currentUid) {
+        throw new Error('Permissão negada: você só pode excluir ideias pertencentes à sua conta.');
+      }
+
+      setLocalData('ideas', allIdeas.filter(i => i.id !== id), currentUid || undefined);
+      await CloudSqlService.deleteIdea(id);
+      RealtimeSyncService.endSync();
+    } catch (err) {
+      RealtimeSyncService.endSync(true);
+      throw err;
+    }
+  },
+
   async convertToProject(ideaId: string, ownerId: string, ownerName: string): Promise<Project> {
     const idea = await this.getById(ideaId);
     if (!idea) throw new Error('Ideia não encontrada');
+    if (idea.ownerId && ownerId && idea.ownerId !== ownerId) {
+      throw new Error('Permissão negada: você só pode converter ideias pertencentes à sua conta.');
+    }
 
     const newProject = await ProjectService.create({
       ownerId,
@@ -1157,22 +1353,9 @@ export const IdeaService = {
     await this.update(ideaId, {
       status: 'CONVERTIDA',
       convertedProjectId: newProject.id
-    });
+    }, ownerId);
 
     return newProject;
-  },
-
-  async delete(id: string): Promise<void> {
-    RealtimeSyncService.beginSync();
-    try {
-      const allIdeas = getLocalData<Idea>('ideas', initialIdeas);
-      setLocalData('ideas', allIdeas.filter(i => i.id !== id));
-      await CloudSqlService.deleteIdea(id);
-      RealtimeSyncService.endSync();
-    } catch (err) {
-      RealtimeSyncService.endSync(true);
-      throw err;
-    }
   }
 };
 

@@ -256,11 +256,18 @@ function mapBugReportRow(row: any): BugReport {
 // QUERY FUNCTIONS (READ FROM CLOUD SQL)
 // ==========================================================
 
-export async function fetchCloudSqlProjects(): Promise<Project[] | null> {
+export async function fetchCloudSqlProjects(userId?: string): Promise<Project[] | null> {
   const p = getPool();
   if (!p) return null;
   try {
-    const res = await p.query('SELECT * FROM "public"."project" ORDER BY created_at DESC');
+    const isSuper = userId ? await checkCloudSqlSuperUser(userId) : false;
+    let query = 'SELECT * FROM "public"."project" ORDER BY created_at DESC';
+    let params: any[] = [];
+    if (userId && !isSuper) {
+      query = 'SELECT * FROM "public"."project" WHERE owner_id = $1 ORDER BY created_at DESC';
+      params = [userId];
+    }
+    const res = await p.query(query, params);
     return res.rows.map(mapProjectRow);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlProjects error:', err);
@@ -329,11 +336,18 @@ export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | n
   }
 }
 
-export async function fetchCloudSqlIdeas(): Promise<Idea[] | null> {
+export async function fetchCloudSqlIdeas(userId?: string): Promise<Idea[] | null> {
   const p = getPool();
   if (!p) return null;
   try {
-    const res = await p.query('SELECT * FROM "public"."idea" ORDER BY created_at DESC');
+    const isSuper = userId ? await checkCloudSqlSuperUser(userId) : false;
+    let query = 'SELECT * FROM "public"."idea" ORDER BY created_at DESC';
+    let params: any[] = [];
+    if (userId && !isSuper) {
+      query = 'SELECT * FROM "public"."idea" WHERE owner_id = $1 ORDER BY created_at DESC';
+      params = [userId];
+    }
+    const res = await p.query(query, params);
     return res.rows.map(mapIdeaRow);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlIdeas error:', err);
@@ -431,8 +445,132 @@ export async function fetchCloudSqlAll(): Promise<{
 }
 
 // ==========================================================
-// ENTITY PERSISTENCE FUNCTIONS
+// ENTITY PERSISTENCE FUNCTIONS & PERMISSION VALIDATION
 // ==========================================================
+
+export async function validateProjectPermission(
+  projectIdOrEntity: string | any,
+  requestingUserId?: string | null
+): Promise<{ allowed: boolean; reason?: string }> {
+  if (!requestingUserId) return { allowed: true };
+
+  const isSuper = await checkCloudSqlSuperUser(requestingUserId);
+  if (isSuper) return { allowed: true };
+
+  if (typeof projectIdOrEntity === 'object' && projectIdOrEntity !== null) {
+    const ownerId = projectIdOrEntity.ownerId || projectIdOrEntity.owner_id;
+    if (ownerId && ownerId !== requestingUserId) {
+      const isMember = projectIdOrEntity.members?.some((m: any) => m.userId === requestingUserId && m.role !== 'viewer');
+      if (!isMember) {
+        return { allowed: false, reason: 'Acesso negado: você não tem permissão para alterar este projeto.' };
+      }
+    }
+    return { allowed: true };
+  }
+
+  const p = getPool();
+  if (!p) return { allowed: true };
+
+  try {
+    const projRes = await p.query('SELECT owner_id FROM "public"."project" WHERE id = $1', [projectIdOrEntity]);
+    if (projRes.rows.length === 0) {
+      return { allowed: true };
+    }
+
+    const ownerId = projRes.rows[0].owner_id;
+    if (ownerId === requestingUserId) {
+      return { allowed: true };
+    }
+
+    return { allowed: false, reason: 'Acesso negado: você não tem permissão para alterar este projeto.' };
+  } catch (err: any) {
+    console.warn('[CloudSQL] validateProjectPermission error:', err.message);
+    return { allowed: true };
+  }
+}
+
+export async function validateTaskPermission(
+  task: Task,
+  requestingUserId?: string | null
+): Promise<{ allowed: boolean; reason?: string }> {
+  if (!requestingUserId) return { allowed: true };
+
+  const p = getPool();
+  if (!p) return { allowed: true };
+
+  try {
+    const isSuper = await checkCloudSqlSuperUser(requestingUserId);
+    if (isSuper) return { allowed: true };
+
+    if (task.createdById === requestingUserId || task.assigneeId === requestingUserId) {
+      return { allowed: true };
+    }
+
+    if (task.projectId) {
+      const projPerm = await validateProjectPermission(task.projectId, requestingUserId);
+      if (projPerm.allowed) return { allowed: true };
+    }
+
+    const taskRes = await p.query('SELECT project_id, created_by_id, assignee_id FROM "public"."task" WHERE id = $1', [task.id]);
+    if (taskRes.rows.length > 0) {
+      const row = taskRes.rows[0];
+      if (row.created_by_id === requestingUserId || row.assignee_id === requestingUserId) {
+        return { allowed: true };
+      }
+      if (row.project_id) {
+        const projPerm = await validateProjectPermission(row.project_id, requestingUserId);
+        if (projPerm.allowed) return { allowed: true };
+      }
+    }
+
+    return { allowed: false, reason: 'Acesso negado: você não tem permissão para alterar esta atividade.' };
+  } catch (err: any) {
+    console.warn('[CloudSQL] validateTaskPermission error:', err.message);
+    return { allowed: true };
+  }
+}
+
+export async function validateIdeaPermission(
+  ideaIdOrEntity: string | any,
+  requestingUserId?: string | null,
+  newOwnerId?: string
+): Promise<{ allowed: boolean; reason?: string }> {
+  if (!requestingUserId) return { allowed: true };
+
+  const isSuper = await checkCloudSqlSuperUser(requestingUserId);
+  if (isSuper) return { allowed: true };
+
+  if (typeof ideaIdOrEntity === 'object' && ideaIdOrEntity !== null) {
+    const ownerId = ideaIdOrEntity.ownerId || ideaIdOrEntity.owner_id;
+    if (ownerId && ownerId !== requestingUserId) {
+      return { allowed: false, reason: 'Acesso negado: esta ideia pertence a outro usuário.' };
+    }
+    return { allowed: true };
+  }
+
+  const p = getPool();
+  if (!p) return { allowed: true };
+
+  try {
+    const ideaRes = await p.query('SELECT owner_id FROM "public"."idea" WHERE id = $1', [ideaIdOrEntity]);
+    if (ideaRes.rows.length === 0) {
+      if (newOwnerId && newOwnerId !== requestingUserId) {
+        return { allowed: false, reason: 'Acesso negado: não é permitido criar ideias em nome de outro usuário.' };
+      }
+      return { allowed: true };
+    }
+
+    const ownerId = ideaRes.rows[0].owner_id;
+    if (ownerId === requestingUserId) {
+      return { allowed: true };
+    }
+
+    return { allowed: false, reason: 'Acesso negado: esta ideia pertence a outro usuário.' };
+  } catch (err: any) {
+    console.warn('[CloudSQL] validateIdeaPermission error:', err.message);
+    return { allowed: true };
+  }
+}
 
 export async function persistUser(user: { id: string; name: string; email: string; avatarUrl?: string }): Promise<void> {
   const p = getPool();
@@ -454,9 +592,16 @@ export async function persistUser(user: { id: string; name: string; email: strin
   }
 }
 
-export async function persistProject(project: Project): Promise<void> {
+export async function persistProject(project: Project, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    const perm = await validateProjectPermission(project.id, requestingUserId);
+    if (!perm.allowed) {
+      throw new Error(perm.reason || 'Acesso negado: você não tem permissão para alterar este projeto.');
+    }
+  }
 
   try {
     await persistUser({
@@ -498,16 +643,26 @@ export async function persistProject(project: Project): Promise<void> {
     );
   } catch (err) {
     console.warn('[CloudSQL] persistProject error:', err);
+    throw err;
   }
 }
 
-export async function deleteCloudSqlProject(projectId: string): Promise<void> {
+export async function deleteCloudSqlProject(projectId: string, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    const perm = await validateProjectPermission(projectId, requestingUserId);
+    if (!perm.allowed) {
+      throw new Error(perm.reason || 'Acesso negado: você não tem permissão para excluir este projeto.');
+    }
+  }
+
   try {
     await p.query('DELETE FROM "public"."project" WHERE id = $1', [projectId]);
   } catch (err) {
     console.warn('[CloudSQL] deleteCloudSqlProject error:', err);
+    throw err;
   }
 }
 
@@ -535,9 +690,16 @@ async function ensureSchema(p: any): Promise<void> {
   }
 }
 
-export async function persistColumn(column: ProjectColumn): Promise<void> {
+export async function persistColumn(column: ProjectColumn, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    const perm = await validateProjectPermission(column.projectId, requestingUserId);
+    if (!perm.allowed) {
+      throw new Error(perm.reason || 'Acesso negado: você não tem permissão para alterar colunas deste projeto.');
+    }
+  }
 
   try {
     await ensureSchema(p);
@@ -583,9 +745,24 @@ export async function persistColumn(column: ProjectColumn): Promise<void> {
   }
 }
 
-export async function deleteCloudSqlColumn(columnId: string, projectId?: string, fallbackColumnId?: string): Promise<void> {
+export async function deleteCloudSqlColumn(columnId: string, projectId?: string, fallbackColumnId?: string, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    let targetProjectId = projectId;
+    if (!targetProjectId) {
+      const colRes = await p.query('SELECT project_id FROM "public"."project_column" WHERE id = $1', [columnId]);
+      targetProjectId = colRes.rows[0]?.project_id;
+    }
+    if (targetProjectId) {
+      const perm = await validateProjectPermission(targetProjectId, requestingUserId);
+      if (!perm.allowed) {
+        throw new Error(perm.reason || 'Acesso negado: você não tem permissão para excluir colunas deste projeto.');
+      }
+    }
+  }
+
   try {
     if (fallbackColumnId) {
       if (projectId) {
@@ -612,9 +789,16 @@ export async function deleteCloudSqlColumn(columnId: string, projectId?: string,
   }
 }
 
-export async function persistTask(task: Task): Promise<void> {
+export async function persistTask(task: Task, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    const perm = await validateTaskPermission(task, requestingUserId);
+    if (!perm.allowed) {
+      throw new Error(perm.reason || 'Acesso negado: você não tem permissão para alterar esta atividade.');
+    }
+  }
 
   try {
     await ensureSchema(p);
@@ -694,19 +878,44 @@ export async function persistTask(task: Task): Promise<void> {
   }
 }
 
-export async function deleteCloudSqlTask(taskId: string): Promise<void> {
+export async function deleteCloudSqlTask(taskId: string, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    const isSuper = await checkCloudSqlSuperUser(requestingUserId);
+    if (!isSuper) {
+      const taskRes = await p.query('SELECT project_id, created_by_id, assignee_id FROM "public"."task" WHERE id = $1', [taskId]);
+      if (taskRes.rows.length > 0) {
+        const row = taskRes.rows[0];
+        if (row.created_by_id !== requestingUserId && row.assignee_id !== requestingUserId) {
+          const perm = await validateProjectPermission(row.project_id, requestingUserId);
+          if (!perm.allowed) {
+            throw new Error('Acesso negado: você não tem permissão para excluir esta atividade.');
+          }
+        }
+      }
+    }
+  }
+
   try {
     await p.query('DELETE FROM "public"."task" WHERE id = $1', [taskId]);
   } catch (err) {
     console.warn('[CloudSQL] deleteCloudSqlTask error:', err);
+    throw err;
   }
 }
 
-export async function persistIdea(idea: Idea): Promise<void> {
+export async function persistIdea(idea: Idea, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    const perm = await validateIdeaPermission(idea.id, requestingUserId, idea.ownerId);
+    if (!perm.allowed) {
+      throw new Error(perm.reason || 'Acesso negado: você não tem permissão para alterar esta ideia.');
+    }
+  }
 
   try {
     if (idea.ownerId) {
@@ -751,19 +960,35 @@ export async function persistIdea(idea: Idea): Promise<void> {
   }
 }
 
-export async function deleteCloudSqlIdea(ideaId: string): Promise<void> {
+export async function deleteCloudSqlIdea(ideaId: string, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    const perm = await validateIdeaPermission(ideaId, requestingUserId);
+    if (!perm.allowed) {
+      throw new Error(perm.reason || 'Acesso negado: você não tem permissão para excluir esta ideia.');
+    }
+  }
+
   try {
     await p.query('DELETE FROM "public"."idea" WHERE id = $1', [ideaId]);
   } catch (err) {
     console.warn('[CloudSQL] deleteCloudSqlIdea error:', err);
+    throw err;
   }
 }
 
-export async function persistDocument(doc: ProjectDocument): Promise<void> {
+export async function persistDocument(doc: ProjectDocument, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    const perm = await validateProjectPermission(doc.projectId, requestingUserId);
+    if (!perm.allowed) {
+      throw new Error(perm.reason || 'Acesso negado: você não tem permissão para alterar documentos deste projeto.');
+    }
+  }
 
   try {
     await p.query(
@@ -794,13 +1019,28 @@ export async function persistDocument(doc: ProjectDocument): Promise<void> {
   }
 }
 
-export async function deleteCloudSqlDocument(docId: string): Promise<void> {
+export async function deleteCloudSqlDocument(docId: string, requestingUserId?: string): Promise<void> {
   const p = getPool();
   if (!p) return;
+
+  if (requestingUserId) {
+    const isSuper = await checkCloudSqlSuperUser(requestingUserId);
+    if (!isSuper) {
+      const docRes = await p.query('SELECT project_id FROM "public"."project_document" WHERE id = $1', [docId]);
+      if (docRes.rows.length > 0) {
+        const perm = await validateProjectPermission(docRes.rows[0].project_id, requestingUserId);
+        if (!perm.allowed) {
+          throw new Error('Acesso negado: você não tem permissão para excluir este documento.');
+        }
+      }
+    }
+  }
+
   try {
     await p.query('DELETE FROM "public"."project_document" WHERE id = $1', [docId]);
   } catch (err) {
     console.warn('[CloudSQL] deleteCloudSqlDocument error:', err);
+    throw err;
   }
 }
 
@@ -920,7 +1160,7 @@ export async function syncAllToCloudSql(data: {
   documents?: ProjectDocument[];
   suggestions?: Suggestion[];
   bugs?: BugReport[];
-}): Promise<{
+}, requestingUserId?: string): Promise<{
   success: boolean;
   message: string;
   syncedCount: {
@@ -1495,7 +1735,14 @@ export async function persistCloudSqlSystemSettings(
   };
 }
 
-export async function syncUserToCloudSql(user: { id: string; name: string; email: string; avatarUrl?: string }): Promise<{ isSuperUser: boolean }> {
+export async function syncUserToCloudSql(user: { id: string; name: string; email: string; avatarUrl?: string }, requestingUserId?: string): Promise<{ isSuperUser: boolean }> {
+  if (requestingUserId && user.id !== requestingUserId) {
+    const isSuper = await checkCloudSqlSuperUser(requestingUserId);
+    if (!isSuper) {
+      throw new Error('Acesso negado: você só pode alterar seus próprios dados de usuário.');
+    }
+  }
+
   const p = getPool();
   if (!p) return { isSuperUser: false };
   try {
@@ -1515,6 +1762,6 @@ export async function syncUserToCloudSql(user: { id: string; name: string; email
     return { isSuperUser: Boolean(res.rows[0]?.is_super_user) };
   } catch (err: any) {
     console.warn('[CloudSQL] syncUserToCloudSql error:', err.message);
-    return { isSuperUser: false };
+    throw err;
   }
 }
