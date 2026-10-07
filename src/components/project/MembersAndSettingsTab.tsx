@@ -13,7 +13,6 @@ import {
   GitBranch, 
   AlertTriangle, 
   Archive, 
-  Shield, 
   CheckCircle2,
   X,
   Edit2,

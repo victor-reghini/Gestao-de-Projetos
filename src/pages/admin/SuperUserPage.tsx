@@ -16,8 +16,7 @@ import {
   Layers, 
   Sparkles,
   Lock,
-  Terminal,
-  ExternalLink
+  Terminal
 } from 'lucide-react';
 import { SystemTheme } from '@/types';
 

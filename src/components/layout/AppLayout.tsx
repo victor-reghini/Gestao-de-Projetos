@@ -13,7 +13,6 @@ import {
   X, 
   Layers, 
   Sparkles,
-  ExternalLink,
   ChevronLeft,
   ChevronRight,
   ShieldCheck

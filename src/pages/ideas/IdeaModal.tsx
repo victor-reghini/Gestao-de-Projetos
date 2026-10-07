@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { IdeaService } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
 import { Idea, Visibility, IdeaStatus } from '@/types';
-import { X, Lightbulb, Plus, Trash2, Globe, Sparkles, Edit2, Check, Lock } from 'lucide-react';
+import { X, Lightbulb, Trash2, Globe, Edit2, Check, Lock } from 'lucide-react';
 
 interface IdeaModalProps {
   isOpen: boolean;

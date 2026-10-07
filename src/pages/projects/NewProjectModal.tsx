@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ProjectService, DocumentService, slugify } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
 import { Project, Visibility, ProjectStatus, ProjectLink } from '@/types';
-import { X, Plus, Trash2, FolderPlus, GitBranch, Globe, Lock, Users, Sparkles, Edit2, Check } from 'lucide-react';
+import { X, Trash2, FolderPlus, GitBranch, Globe, Edit2, Check } from 'lucide-react';
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -34,8 +34,6 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
   // Git Repo
   const [hasRepo, setHasRepo] = useState(true);
   const [repoUrl, setRepoUrl] = useState('');
-  const [repoOwner, setRepoOwner] = useState('');
-  const [repoName, setRepoName] = useState('');
   const [repoBranch, setRepoBranch] = useState('main');
 
   const [links, setLinks] = useState<ProjectLink[]>([]);
@@ -129,8 +127,8 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
         repository: hasRepo && repoUrl ? {
           provider: 'github',
           url: repoUrl,
-          owner: repoOwner || name.toLowerCase().replace(/\s+/g, '-'),
-          name: repoName || name,
+          owner: repoUrl.replace(/^https?:\/\/github\.com\//i, '').split('/')[0] || name.toLowerCase().replace(/\s+/g, '-'),
+          name: repoUrl.replace(/^https?:\/\/github\.com\//i, '').split('/')[1] || name,
           defaultBranch: repoBranch || 'main'
         } : undefined,
         readme: `# ${name}\n\n${description || 'Documentação inicial do projeto.'}`

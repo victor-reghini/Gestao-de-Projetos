@@ -57,7 +57,6 @@ export const ProjectsListPage: React.FC = () => {
   const [columns, setColumns] = useState<ProjectColumn[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [bugs, setBugs] = useState<BugReport[]>([]);
-  const [loading, setLoading] = useState(true);
 
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -68,10 +67,7 @@ export const ProjectsListPage: React.FC = () => {
 
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
 
-  const loadProjects = async (silent = false) => {
-    if (!silent) {
-      setLoading(true);
-    }
+  const loadProjects = async (_silent = false) => {
     try {
       const projs = await ProjectService.getAll(user?.id);
       setProjects(projs);
@@ -95,8 +91,6 @@ export const ProjectsListPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Error loading projects:', err);
-    } finally {
-      setLoading(false);
     }
   };
 

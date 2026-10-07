@@ -4,8 +4,7 @@ import {
   getSyncQueue, 
   saveSyncQueue, 
   enqueueSync,
-  isBrowserOnline,
-  isSlowConnection
+  isBrowserOnline
 } from '../services/realtimeSyncService';
 import { TaskService, ColumnService, syncAllLocalToCloudSql, generateCloudSqlScript } from '../services/dbService';
 import { CloudSqlService } from '../services/cloudSqlService';

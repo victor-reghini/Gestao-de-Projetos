@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ProjectColumn, Task, TaskPriority, SyncValidationStatus } from '@/types';
+import { ProjectColumn, Task, SyncValidationStatus } from '@/types';
 import { ColumnService, TaskService, deduplicateColumns, getLocalData, initialColumns, initialTasks } from '@/services/dbService';
 import { RealtimeSyncService } from '@/services/realtimeSyncService';
 import {
@@ -22,15 +22,8 @@ import {
 import { TaskModal } from './TaskModal';
 import { ColumnModal } from './NewColumnModal';
 import { SyncModal } from '@/components/sync/SyncModal';
-
-const getPriorityBadgeClass = (priority: TaskPriority) => {
-  switch (priority) {
-    case 'URGENTE': return 'badge-priority-urgent text-rose-300';
-    case 'ALTA': return 'badge-priority-high text-amber-300';
-    case 'MEDIA': return 'badge-priority-medium text-blue-300';
-    default: return 'badge-priority-low text-slate-300';
-  }
-};
+import { PriorityBadge } from '@/components/common/PriorityBadge';
+import { isDoneColumn } from '@/utils/columnUtils';
 
 interface KanbanTaskCardProps {
   task: Task;
@@ -101,9 +94,7 @@ const KanbanTaskCard = React.memo<KanbanTaskCardProps>(({
             </button>
           )}
 
-          <span className={`badge text-[10px] py-0.5 px-2 ${getPriorityBadgeClass(task.priority)}`}>
-            {task.priority}
-          </span>
+          <PriorityBadge priority={task.priority} />
 
           {task.concluded && (
             <span className="badge text-[10px] py-0.5 px-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
@@ -534,7 +525,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     if (!task) return;
 
     const targetCol = columns.find(c => c.id === targetColumnId);
-    const shouldComplete = Boolean(targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu'));
+    const shouldComplete = isDoneColumn(targetCol);
 
     // Place at the end of the destination column
     const destinationTasks = tasks
@@ -583,7 +574,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     if (!task) return;
 
     const targetCol = columns.find(c => c.id === targetColumnId);
-    const shouldComplete = Boolean(targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu'));
+    const shouldComplete = isDoneColumn(targetCol);
 
     const destinationTasks = tasks
       .filter(t => t.columnId === targetColumnId && t.id !== taskId)
@@ -706,7 +697,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     setIsColModalOpen(true);
   }, []);
 
-  const handleTaskDragOver = React.useCallback((e: React.DragEvent, taskId: string) => {
+  const handleTaskDragOver = React.useCallback((_e: React.DragEvent, taskId: string) => {
     setDragOverTaskId(taskId);
   }, []);
 

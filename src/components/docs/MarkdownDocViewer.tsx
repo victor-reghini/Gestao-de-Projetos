@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ProjectDocument } from '@/types';
 import { DocumentService } from '@/services/dbService';
-import { Edit3, Eye, Save, Trash2, Plus, FileText, CheckCircle2 } from 'lucide-react';
+import { Edit3, Save, Trash2, Plus, FileText } from 'lucide-react';
 
 interface MarkdownDocViewerProps {
   projectId: string;

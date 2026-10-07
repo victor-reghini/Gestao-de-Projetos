@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ProjectColumn, Task } from '@/types';
 import { TaskService, ColumnService } from '@/services/dbService';
+import { isDoneColumn } from '@/utils/columnUtils';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export interface ProjectColumnProgressBarProps {
@@ -142,7 +143,7 @@ export const ProjectColumnProgressBar: React.FC<ProjectColumnProgressBarProps> =
     // Done columns identification
     const doneColIds = new Set(
       projectCols
-        .filter(c => c.autoComplete || c.key === 'done' || c.name.toLowerCase().includes('conclu'))
+        .filter(isDoneColumn)
         .map(c => c.id)
     );
 

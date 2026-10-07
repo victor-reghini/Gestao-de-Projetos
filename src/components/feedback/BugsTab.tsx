@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { BugReport, ItemStatus, BugSeverity } from '@/types';
 import { BugReportService, TaskService, ColumnService } from '@/services/dbService';
-import { Bug, AlertTriangle, CheckCircle2, User, Layers, Eye, Image as ImageIcon, ExternalLink, X } from 'lucide-react';
+import { Bug, User, Layers, Eye, X } from 'lucide-react';
 
 interface BugsTabProps {
   projectId: string;

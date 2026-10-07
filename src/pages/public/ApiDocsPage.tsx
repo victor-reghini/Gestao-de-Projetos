@@ -8,8 +8,7 @@ import {
   Zap, 
   Globe, 
   Terminal, 
-  CheckCircle2, 
-  ExternalLink
+  CheckCircle2
 } from 'lucide-react';
 
 interface EndpointDoc {

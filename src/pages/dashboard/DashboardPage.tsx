@@ -12,9 +12,9 @@ import {
   GitBranch,
   Globe,
   Lock,
-  Bug,
-  Sparkles
+  Bug
 } from 'lucide-react';
+import { isDoneColumn } from '@/utils/columnUtils';
 import { NewProjectModal } from '@/pages/projects/NewProjectModal';
 import { IdeaModal } from '@/pages/ideas/IdeaModal';
 
@@ -26,15 +26,11 @@ export const DashboardPage: React.FC = () => {
   const [columns, setColumns] = useState<ProjectColumn[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [bugs, setBugs] = useState<BugReport[]>([]);
-  const [loading, setLoading] = useState(true);
 
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [isNewIdeaOpen, setIsNewIdeaOpen] = useState(false);
 
-  const loadData = async (silent = false) => {
-    if (!silent) {
-      setLoading(true);
-    }
+  const loadData = async (_silent = false) => {
     try {
       const [p, i] = await Promise.all([
         ProjectService.getAll(user?.id),
@@ -58,8 +54,6 @@ export const DashboardPage: React.FC = () => {
       }
     } catch (err) {
       console.error('Error loading dashboard data:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -78,7 +72,7 @@ export const DashboardPage: React.FC = () => {
   const activeProjects = projects.filter(p => p.status === 'EM_ANDAMENTO' || p.status === 'PLANEJAMENTO');
   const doneColumnIds = new Set(
     columns
-      .filter(c => c.autoComplete || c.key === 'done' || c.name.toLowerCase().includes('conclu'))
+      .filter(isDoneColumn)
       .map(c => c.id)
   );
   const concludedTasks = tasks.filter(t => t.concluded ?? doneColumnIds.has(t.columnId));

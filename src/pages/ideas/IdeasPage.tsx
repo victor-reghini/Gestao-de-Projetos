@@ -21,7 +21,6 @@ export const IdeasPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [ideas, setIdeas] = useState<Idea[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('ALL');
   const [filterVisibility, setFilterVisibility] = useState<string>('ALL');
@@ -31,14 +30,11 @@ export const IdeasPage: React.FC = () => {
   const [convertingId, setConvertingId] = useState<string | null>(null);
 
   const loadIdeas = async () => {
-    setLoading(true);
     try {
       const list = await IdeaService.getAll(user?.id);
       setIdeas(list);
     } catch (err) {
       console.error('Error loading ideas:', err);
-    } finally {
-      setLoading(false);
     }
   };
 

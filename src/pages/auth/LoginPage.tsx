@@ -10,7 +10,7 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { login, loginWithGoogle, loginDemo, loginWithTestUser } = useAuth();
+  const { login, loginWithGoogle, loginWithTestUser } = useAuth();
   const { settings } = useSystemSettings();
   const navigate = useNavigate();
   const location = useLocation();

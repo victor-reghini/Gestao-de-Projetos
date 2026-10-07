@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ColumnService } from '@/services/dbService';
 import { ProjectColumn } from '@/types';
-import { X, Columns, Trash2, CheckCircle2 } from 'lucide-react';
+import { X, Columns, CheckCircle2 } from 'lucide-react';
 
 interface ColumnModalProps {
   isOpen: boolean;

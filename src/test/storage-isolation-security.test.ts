@@ -1,21 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { 
   encryptStorageData, 
   decryptStorageData, 
   getEncryptedLocalData, 
   setEncryptedLocalData, 
   setActiveStorageUserId,
-  getActiveStorageUserId,
   clearUserStorage 
 } from '@/services/storageCrypto';
-import { ProjectService, IdeaService, TaskService, ColumnService } from '@/services/dbService';
+import { ProjectService, IdeaService, TaskService } from '@/services/dbService';
 import { 
-  persistProject, 
-  deleteCloudSqlProject, 
-  persistTask, 
-  deleteCloudSqlTask, 
-  persistIdea, 
-  deleteCloudSqlIdea,
   validateProjectPermission,
   validateIdeaPermission
 } from '@/services/server/cloudSqlDb';

@@ -1160,7 +1160,7 @@ export async function syncAllToCloudSql(data: {
   documents?: ProjectDocument[];
   suggestions?: Suggestion[];
   bugs?: BugReport[];
-}, requestingUserId?: string): Promise<{
+}, _requestingUserId?: string): Promise<{
   success: boolean;
   message: string;
   syncedCount: {
