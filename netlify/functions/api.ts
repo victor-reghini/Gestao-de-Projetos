@@ -85,7 +85,7 @@ function checkRateLimit(ip: string): boolean {
 // CORS Headers helper
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With, X-User-Id',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Content-Type': 'application/json; charset=utf-8'
 };
@@ -152,6 +152,8 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
     if (segments[0] === 'cloudsql') {
       const action = segments[1];
       const body = event.body ? JSON.parse(event.body) : {};
+      const rawUserIdHeader = (event.headers['x-user-id'] || event.headers['X-User-Id']) as string | undefined;
+      const requestingUserId = (rawUserIdHeader || body?.requestingUserId || event.queryStringParameters?.userId) as string | undefined;
 
       if (action === 'status' && event.httpMethod === 'GET') {
         const status = await testCloudSqlConnection();
@@ -163,27 +165,27 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
 
       if (action === 'sync-task' && event.httpMethod === 'POST') {
-        await persistTask(body);
+        await persistTask(body, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
       if (action === 'sync-column' && event.httpMethod === 'POST') {
-        await persistColumn(body);
+        await persistColumn(body, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
       if (action === 'sync-project' && event.httpMethod === 'POST') {
-        await persistProject(body);
+        await persistProject(body, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
       if (action === 'sync-idea' && event.httpMethod === 'POST') {
-        await persistIdea(body);
+        await persistIdea(body, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
       if (action === 'sync-document' && event.httpMethod === 'POST') {
-        await persistDocument(body);
+        await persistDocument(body, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
@@ -198,27 +200,27 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
 
       if (action === 'delete-task' && event.httpMethod === 'POST') {
-        if (body.taskId) await deleteCloudSqlTask(body.taskId);
+        if (body.taskId) await deleteCloudSqlTask(body.taskId, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
       if (action === 'delete-column' && event.httpMethod === 'POST') {
-        if (body.columnId) await deleteCloudSqlColumn(body.columnId, body.projectId, body.fallbackColumnId);
+        if (body.columnId) await deleteCloudSqlColumn(body.columnId, body.projectId, body.fallbackColumnId, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
       if (action === 'delete-project' && event.httpMethod === 'POST') {
-        if (body.projectId) await deleteCloudSqlProject(body.projectId);
+        if (body.projectId) await deleteCloudSqlProject(body.projectId, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
       if (action === 'delete-idea' && event.httpMethod === 'POST') {
-        if (body.ideaId) await deleteCloudSqlIdea(body.ideaId);
+        if (body.ideaId) await deleteCloudSqlIdea(body.ideaId, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
       if (action === 'delete-document' && event.httpMethod === 'POST') {
-        if (body.docId) await deleteCloudSqlDocument(body.docId);
+        if (body.docId) await deleteCloudSqlDocument(body.docId, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true }) };
       }
 
@@ -233,7 +235,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
 
       if (action === 'sync-all' && event.httpMethod === 'POST') {
-        const result = await syncAllToCloudSql(body);
+        const result = await syncAllToCloudSql(body, requestingUserId);
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify(result) };
       }
 
@@ -246,7 +248,8 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
           }
           return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: project }) };
         }
-        const projects = await fetchCloudSqlProjects();
+        const userId = event.queryStringParameters?.userId || rawUserIdHeader;
+        const projects = await fetchCloudSqlProjects(userId);
         if (projects === null) {
           return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
         }
@@ -272,7 +275,8 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
 
       if (action === 'ideas' && event.httpMethod === 'GET') {
-        const ideas = await fetchCloudSqlIdeas();
+        const userId = event.queryStringParameters?.userId || rawUserIdHeader;
+        const ideas = await fetchCloudSqlIdeas(userId);
         if (ideas === null) {
           return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
         }
@@ -500,12 +504,13 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       })
     };
   } catch (err: any) {
+    const isForbidden = err.message && (err.message.startsWith('Acesso negado') || err.message.includes('permissão'));
     return {
-      statusCode: 500,
+      statusCode: isForbidden ? 403 : 500,
       headers: corsHeaders,
       body: JSON.stringify({
         success: false,
-        error: 'Erro interno no servidor de API.',
+        error: isForbidden ? 'Acesso negado' : 'Erro interno no servidor de API.',
         message: err.message
       })
     };

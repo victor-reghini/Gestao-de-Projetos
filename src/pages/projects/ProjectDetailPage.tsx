@@ -155,10 +155,26 @@ export const ProjectDetailPage: React.FC = () => {
     );
   }
 
-  // User has edit permissions if they are not explicitly restricted as a 'viewer'
-  const isExplicitViewer = members.some(m => m.userId === user?.id && m.role === 'viewer');
-  const canEdit = !isExplicitViewer;
+  // Check user access and permissions
   const isOwner = Boolean(user?.id && project.ownerId && user.id === project.ownerId);
+  const isMember = members.some(m => m.userId === user?.id);
+  const isExplicitViewer = members.some(m => m.userId === user?.id && m.role === 'viewer');
+  const canEdit = isOwner || (isMember && !isExplicitViewer);
+  const hasAccess = isOwner || isMember || project.visibility === 'PUBLIC';
+
+  if (!hasAccess) {
+    return (
+      <div className="page-wrapper text-center py-16">
+        <Lock className="w-12 h-12 text-rose-500 mx-auto mb-3" />
+        <h2 className="text-xl font-bold text-white mb-2">Acesso Restrito</h2>
+        <p className="text-sm text-slate-400 mb-6">Este projeto é privado e você não possui permissão para acessá-lo.</p>
+        <Link to="/projects" className="btn btn-primary">
+          <ArrowLeft className="w-4 h-4" /> Voltar para Meus Projetos
+        </Link>
+      </div>
+    );
+  }
+
   const publicUrl = `${window.location.origin}/p/${project.slug}`;
 
   const copyPublicUrl = () => {
@@ -174,7 +190,7 @@ export const ProjectDetailPage: React.FC = () => {
     { id: 'diagrams', label: 'Diagramas', icon: Network, count: documents.filter(d => (d.type || '').toLowerCase() === 'mermaid' || (d.type || '').toLowerCase() === 'diagram').length },
     { id: 'suggestions', label: 'Sugestões', icon: MessageSquarePlus, count: suggestions.filter(s => s.status === 'ABERTO' || s.status === 'EM_ANALISE').length },
     { id: 'bugs', label: 'Bugs & Falhas', icon: Bug, count: bugs.filter(b => b.status === 'ABERTO' || b.status === 'EM_ANALISE').length },
-    { id: 'settings', label: 'Membros & Configurações', icon: Settings, count: undefined }
+    ...(canEdit ? [{ id: 'settings', label: 'Membros & Configurações', icon: Settings, count: undefined }] : [])
   ];
 
   return (
