@@ -2,9 +2,11 @@ import React from 'react';
 import { Outlet, Link } from 'react-router-dom';
 import { Layers, LogIn, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { useSystemSettings } from '@/context/SystemSettingsContext';
 
 export const PublicLayout: React.FC = () => {
   const { user } = useAuth();
+  const { settings } = useSystemSettings();
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
@@ -34,9 +36,11 @@ export const PublicLayout: React.FC = () => {
                 <Link to="/login" className="btn btn-secondary btn-sm flex items-center gap-1.5">
                   <LogIn className="w-3.5 h-3.5" /> Entrar
                 </Link>
-                <Link to="/register" className="btn btn-primary btn-sm hidden sm:inline-flex">
-                  Cadastrar
-                </Link>
+                {settings.allowRegistration !== false && (
+                  <Link to="/register" className="btn btn-primary btn-sm hidden sm:inline-flex">
+                    Cadastrar
+                  </Link>
+                )}
               </>
             )}
           </div>

@@ -27,7 +27,11 @@ import {
   fetchCloudSqlDocuments,
   fetchCloudSqlSuggestions,
   fetchCloudSqlBugs,
-  fetchCloudSqlAll
+  fetchCloudSqlAll,
+  fetchCloudSqlSystemSettings,
+  persistCloudSqlSystemSettings,
+  checkCloudSqlSuperUser,
+  syncUserToCloudSql
 } from './src/services/server/cloudSqlDb';
 
 function cloudSqlApiPlugin(): Plugin {
@@ -271,6 +275,39 @@ function cloudSqlApiPlugin(): Plugin {
             const payload = await readBody();
             const result = await syncAllToCloudSql(payload);
             res.end(JSON.stringify(result));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/system-settings' && req.method === 'GET') {
+            const settings = await fetchCloudSqlSystemSettings();
+            res.end(JSON.stringify({ success: true, data: settings }));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/system-settings' && req.method === 'POST') {
+            const { settings, userId, email } = await readBody();
+            try {
+              const updated = await persistCloudSqlSystemSettings(settings || {}, { id: userId, email });
+              res.end(JSON.stringify({ success: true, data: updated }));
+            } catch (err: any) {
+              res.statusCode = 403;
+              res.end(JSON.stringify({ success: false, error: err.message }));
+            }
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/user-status' && req.method === 'GET') {
+            const userId = url.searchParams.get('userId') || undefined;
+            const email = url.searchParams.get('email') || undefined;
+            const isSuperUser = await checkCloudSqlSuperUser(userId, email);
+            res.end(JSON.stringify({ success: true, isSuperUser }));
+            return;
+          }
+
+          if (pathname === '/api/v1/cloudsql/sync-user' && req.method === 'POST') {
+            const userData = await readBody();
+            const result = await syncUserToCloudSql(userData);
+            res.end(JSON.stringify({ success: true, ...result }));
             return;
           }
 

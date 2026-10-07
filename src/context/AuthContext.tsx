@@ -11,6 +11,8 @@ import {
 } from 'firebase/auth';
 import { auth, googleProvider, getEnvVar } from '@/services/firebase';
 import { User } from '@/types';
+import { SystemSettingsService } from '@/services/systemSettingsService';
+import { CloudSqlService } from '@/services/cloudSqlService';
 
 interface AuthContextType {
   user: User | null;
@@ -113,19 +115,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const register = async (name: string, email: string, pass: string) => {
+    const currentSettings = SystemSettingsService.getLocalSettings();
+    if (currentSettings.allowRegistration === false) {
+      throw new Error('O cadastro de novas contas está temporariamente desativado pelo administrador do sistema.');
+    }
+
     try {
       const res = await createUserWithEmailAndPassword(auth, email, pass);
       await updateProfile(res.user, { displayName: name });
       sessionStorage.removeItem('gestao_demo_user');
       setIsDemo(false);
-      setUser({
+      const newUser: User = {
         id: res.user.uid,
         name,
         email: res.user.email || '',
         avatarUrl: res.user.photoURL || undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
-      });
+      };
+      setUser(newUser);
+      CloudSqlService.syncUser(newUser).catch(() => {});
     } catch (error: any) {
       throw new Error(error.message || 'Falha ao criar conta.');
     }

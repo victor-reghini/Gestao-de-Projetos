@@ -1,4 +1,4 @@
-import { Project, ProjectColumn, Task, Idea, ProjectDocument, Suggestion, BugReport } from '@/types';
+import { Project, ProjectColumn, Task, Idea, ProjectDocument, Suggestion, BugReport, SystemSettings } from '@/types';
 
 export interface CloudSqlStatus {
   connected: boolean;
@@ -568,5 +568,68 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.de
 
     lines.push('COMMIT;');
     return lines.join('\n');
+  },
+
+  // System Settings & Super User
+  async fetchSystemSettings(): Promise<SystemSettings | null> {
+    if (IS_TEST) return null;
+    try {
+      const res = await fetch('/api/v1/cloudsql/system-settings');
+      if (res.ok) {
+        const json = await res.json();
+        return json.data || null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  async saveSystemSettings(settings: Partial<SystemSettings>, userIdentifier: { id?: string; email?: string }): Promise<SystemSettings> {
+    const res = await fetch('/api/v1/cloudsql/system-settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings, userId: userIdentifier.id, email: userIdentifier.email })
+    });
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      throw new Error(json.error || 'Falha ao salvar configurações do sistema.');
+    }
+    return json.data;
+  },
+
+  async checkUserIsSuperUser(userId?: string, email?: string): Promise<boolean> {
+    if (IS_TEST) return false;
+    try {
+      const params = new URLSearchParams();
+      if (userId) params.set('userId', userId);
+      if (email) params.set('email', email);
+      const res = await fetch(`/api/v1/cloudsql/user-status?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        return Boolean(json.isSuperUser);
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  },
+
+  async syncUser(user: { id: string; name: string; email: string; avatarUrl?: string }): Promise<{ isSuperUser: boolean }> {
+    if (IS_TEST) return { isSuperUser: false };
+    try {
+      const res = await fetch('/api/v1/cloudsql/sync-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(user)
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return { isSuperUser: Boolean(json.isSuperUser) };
+      }
+      return { isSuperUser: false };
+    } catch {
+      return { isSuperUser: false };
+    }
   }
 };

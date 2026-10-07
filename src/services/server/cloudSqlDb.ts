@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { Project, ProjectColumn, Task, Idea, ProjectDocument, Suggestion, BugReport } from '../../types';
+import { Project, ProjectColumn, Task, Idea, ProjectDocument, Suggestion, BugReport, SystemSettings } from '../../types';
 
 const { Pool } = pg;
 
@@ -1353,4 +1353,168 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.de
   lines.push('SELECT COUNT(*) AS total_usuarios FROM "public"."user";');
 
   return lines.join('\n');
+}
+
+// ==========================================================
+// SUPER USUÁRIO & SYSTEM SETTINGS
+// Validação ESTRITA no PostgreSQL (Cloud SQL)
+// ==========================================================
+
+export async function ensureSystemSettingsSchema(): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await p.query(`
+      ALTER TABLE "public"."user" 
+      ADD COLUMN IF NOT EXISTS is_super_user BOOLEAN NOT NULL DEFAULT FALSE;
+
+      CREATE TABLE IF NOT EXISTS "public"."system_setting" (
+        id TEXT PRIMARY KEY,
+        theme TEXT NOT NULL DEFAULT 'dark',
+        primary_color TEXT NOT NULL DEFAULT '#2563eb',
+        secondary_color TEXT NOT NULL DEFAULT '#8b5cf6',
+        allow_registration BOOLEAN NOT NULL DEFAULT TRUE,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_by TEXT
+      );
+
+      INSERT INTO "public"."system_setting" (id, theme, primary_color, secondary_color, allow_registration, updated_at)
+      VALUES ('default', 'dark', '#2563eb', '#8b5cf6', TRUE, NOW())
+      ON CONFLICT (id) DO NOTHING;
+    `);
+  } catch (err: any) {
+    console.warn('[CloudSQL] ensureSystemSettingsSchema warning:', err.message);
+  }
+}
+
+export async function checkCloudSqlSuperUser(userId?: string, email?: string): Promise<boolean> {
+  const p = getPool();
+  if (!p) return false;
+
+  const cleanId = (userId || '').trim();
+  const cleanEmail = (email || '').trim().toLowerCase();
+  if (!cleanId && !cleanEmail) return false;
+
+  try {
+    await ensureSystemSettingsSchema();
+    const res = await p.query(
+      `SELECT is_super_user FROM "public"."user" 
+       WHERE (id = $1 OR (LOWER(email) = $2 AND email IS NOT NULL AND email != '')) 
+         AND is_super_user = TRUE 
+       LIMIT 1`,
+      [cleanId || null, cleanEmail || null]
+    );
+
+    return (res.rowCount ?? 0) > 0;
+  } catch (err: any) {
+    console.warn('[CloudSQL] checkCloudSqlSuperUser error:', err.message);
+    return false;
+  }
+}
+
+export async function fetchCloudSqlSystemSettings(): Promise<SystemSettings> {
+  const defaultSettings: SystemSettings = {
+    id: 'default',
+    theme: 'dark',
+    primaryColor: '#2563eb',
+    secondaryColor: '#8b5cf6',
+    allowRegistration: true
+  };
+
+  const p = getPool();
+  if (!p) return defaultSettings;
+
+  try {
+    await ensureSystemSettingsSchema();
+    const res = await p.query('SELECT * FROM "public"."system_setting" WHERE id = $1 LIMIT 1', ['default']);
+    if (res.rows.length === 0) {
+      return defaultSettings;
+    }
+    const row = res.rows[0];
+    return {
+      id: row.id,
+      theme: row.theme === 'light' ? 'light' : 'dark',
+      primaryColor: row.primary_color || '#2563eb',
+      secondaryColor: row.secondary_color || '#8b5cf6',
+      allowRegistration: row.allow_registration !== false,
+      updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+      updatedBy: row.updated_by || undefined
+    };
+  } catch (err: any) {
+    console.warn('[CloudSQL] fetchCloudSqlSystemSettings error:', err.message);
+    return defaultSettings;
+  }
+}
+
+export async function persistCloudSqlSystemSettings(
+  settings: Partial<SystemSettings>,
+  userIdentifier: { id?: string; email?: string }
+): Promise<SystemSettings> {
+  const p = getPool();
+  if (!p) {
+    throw new Error('Banco de dados PostgreSQL não conectado.');
+  }
+
+  // 1. Validação ESTRITA no banco de dados (não no frontend)
+  const isSuperUser = await checkCloudSqlSuperUser(userIdentifier.id, userIdentifier.email);
+  if (!isSuperUser) {
+    throw new Error('Acesso negado: apenas superusuários configurados diretamente no banco de dados podem alterar configurações do sistema.');
+  }
+
+  // 2. Persistir configurações
+  const theme = settings.theme === 'light' ? 'light' : 'dark';
+  const primaryColor = settings.primaryColor || '#2563eb';
+  const secondaryColor = settings.secondaryColor || '#8b5cf6';
+  const allowRegistration = settings.allowRegistration !== false;
+  const updatedBy = userIdentifier.email || userIdentifier.id || 'super-user';
+
+  const res = await p.query(
+    `INSERT INTO "public"."system_setting" 
+       (id, theme, primary_color, secondary_color, allow_registration, updated_at, updated_by)
+     VALUES ('default', $1, $2, $3, $4, NOW(), $5)
+     ON CONFLICT (id) DO UPDATE SET
+       theme = EXCLUDED.theme,
+       primary_color = EXCLUDED.primary_color,
+       secondary_color = EXCLUDED.secondary_color,
+       allow_registration = EXCLUDED.allow_registration,
+       updated_at = NOW(),
+       updated_by = EXCLUDED.updated_by
+     RETURNING *`,
+    [theme, primaryColor, secondaryColor, allowRegistration, updatedBy]
+  );
+
+  const row = res.rows[0];
+  return {
+    id: row.id,
+    theme: row.theme === 'light' ? 'light' : 'dark',
+    primaryColor: row.primary_color,
+    secondaryColor: row.secondary_color,
+    allowRegistration: row.allow_registration,
+    updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : undefined,
+    updatedBy: row.updated_by
+  };
+}
+
+export async function syncUserToCloudSql(user: { id: string; name: string; email: string; avatarUrl?: string }): Promise<{ isSuperUser: boolean }> {
+  const p = getPool();
+  if (!p) return { isSuperUser: false };
+  try {
+    await ensureSystemSettingsSchema();
+    const res = await p.query(
+      `INSERT INTO "public"."user" (id, name, email, avatar_url, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (id) DO UPDATE SET 
+         name = EXCLUDED.name, 
+         email = EXCLUDED.email, 
+         avatar_url = COALESCE(EXCLUDED.avatar_url, "user".avatar_url),
+         updated_at = NOW()
+       RETURNING is_super_user`,
+      [user.id, user.name || 'Usuário', user.email, user.avatarUrl || null]
+    );
+
+    return { isSuperUser: Boolean(res.rows[0]?.is_super_user) };
+  } catch (err: any) {
+    console.warn('[CloudSQL] syncUserToCloudSql error:', err.message);
+    return { isSuperUser: false };
+  }
 }

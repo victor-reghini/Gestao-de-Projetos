@@ -29,8 +29,21 @@ export interface User {
   name: string;
   email: string;
   avatarUrl?: string;
+  isSuperUser?: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export type SystemTheme = 'dark' | 'light';
+
+export interface SystemSettings {
+  id: string;
+  theme: SystemTheme;
+  primaryColor: string;
+  secondaryColor: string;
+  allowRegistration: boolean;
+  updatedAt?: string;
+  updatedBy?: string;
 }
 
 export interface Repository {
