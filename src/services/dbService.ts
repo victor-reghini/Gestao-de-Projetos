@@ -22,6 +22,11 @@ import {
   clearUserStorage,
   getAllStoredItemsAcrossUsers 
 } from './storageCrypto';
+import { 
+  encryptSensitiveMarkers, 
+  sanitizeProjectForUser, 
+  sanitizeTaskForUser 
+} from './sensitiveInfoService';
 
 // Backward compatibility helpers (no-op since Firestore was removed)
 export function sanitizeForFirestore<T>(data: T): T {
@@ -346,6 +351,8 @@ export const ProjectService = {
   async getAll(userId?: string): Promise<Project[]> {
     const connected = isUserConnected(userId);
 
+    const activeUid = userId || getActiveStorageUserId();
+
     // Quando o usuário estiver conectado, ignora o localStorage e consome os dados atualizados do banco
     if (connected) {
       try {
@@ -353,9 +360,11 @@ export const ProjectService = {
         if (remote !== null) {
           setLocalData('projects', remote, userId);
           if (userId) {
-            return remote.filter(p => p.ownerId === userId || p.members?.some(m => m.userId === userId));
+            return remote
+              .filter(p => p.ownerId === userId || p.members?.some(m => m.userId === userId))
+              .map(p => sanitizeProjectForUser(p, activeUid));
           }
-          return remote;
+          return remote.map(p => sanitizeProjectForUser(p, activeUid));
         }
       } catch (err) {
         console.warn('Falha ao buscar projetos do banco de dados:', err);
@@ -366,9 +375,11 @@ export const ProjectService = {
     const fallbackProjects = (userId && userId !== 'demo-user-123') ? [] : initialProjects;
     const local = getLocalData<Project>('projects', fallbackProjects, userId);
     if (userId) {
-      return local.filter(p => p.ownerId === userId || p.members?.some(m => m.userId === userId));
+      return local
+        .filter(p => p.ownerId === userId || p.members?.some(m => m.userId === userId))
+        .map(p => sanitizeProjectForUser(p, activeUid));
     }
-    return local;
+    return local.map(p => sanitizeProjectForUser(p, activeUid));
   },
 
   async getPublicProjects(): Promise<Project[]> {
@@ -378,6 +389,7 @@ export const ProjectService = {
 
   async getById(id: string): Promise<Project | null> {
     const connected = isUserConnected();
+    const activeUid = getActiveStorageUserId();
 
     // Se conectado, prioriza buscar diretamente do banco para dados mais recentes
     if (connected) {
@@ -386,7 +398,7 @@ export const ProjectService = {
         if (remote) {
           const local = getLocalData<Project>('projects', initialProjects);
           setLocalData('projects', [...local.filter(p => p.id !== remote.id), remote]);
-          return remote;
+          return sanitizeProjectForUser(remote, activeUid);
         }
       } catch (err) {
         console.warn('Falha ao buscar projeto por ID do banco de dados:', err);
@@ -399,13 +411,13 @@ export const ProjectService = {
     if (!found) {
       found = getAllStoredItemsAcrossUsers<Project>('projects').find(p => p.id === id);
     }
-    if (found) return found;
+    if (found) return sanitizeProjectForUser(found, activeUid);
 
     try {
       const remote = await CloudSqlService.fetchProjectByIdOrSlug(id);
       if (remote) {
         setLocalData('projects', [...local.filter(p => p.id !== remote.id), remote]);
-        return remote;
+        return sanitizeProjectForUser(remote, activeUid);
       }
     } catch (err) {
       console.warn('Failed to fetch project by id from Cloud SQL:', err);
@@ -415,6 +427,7 @@ export const ProjectService = {
 
   async getBySlug(slug: string): Promise<Project | null> {
     const connected = isUserConnected();
+    const activeUid = getActiveStorageUserId();
 
     // Se conectado, prioriza buscar diretamente do banco para dados mais recentes
     if (connected) {
@@ -423,7 +436,7 @@ export const ProjectService = {
         if (remote) {
           const local = getLocalData<Project>('projects', initialProjects);
           setLocalData('projects', [...local.filter(p => p.id !== remote.id), remote]);
-          return remote;
+          return sanitizeProjectForUser(remote, activeUid);
         }
       } catch (err) {
         console.warn('Falha ao buscar projeto por slug do banco de dados:', err);
@@ -436,13 +449,13 @@ export const ProjectService = {
     if (!found) {
       found = getAllStoredItemsAcrossUsers<Project>('projects').find(p => p.slug === slug || p.id === slug);
     }
-    if (found) return found;
+    if (found) return sanitizeProjectForUser(found, activeUid);
 
     try {
       const remote = await CloudSqlService.fetchProjectByIdOrSlug(slug);
       if (remote) {
         setLocalData('projects', [...local.filter(p => p.id !== remote.id), remote]);
-        return remote;
+        return sanitizeProjectForUser(remote, activeUid);
       }
     } catch (err) {
       console.warn('Failed to fetch project by slug from Cloud SQL:', err);
@@ -461,8 +474,13 @@ export const ProjectService = {
       finalSlug = `${slugBase}-${counter++}`;
     }
 
+    const encDesc = encryptSensitiveMarkers(data.description);
+    const encShortDesc = data.shortDescription ? encryptSensitiveMarkers(data.shortDescription) : data.shortDescription;
+
     const newProject: Project = {
       ...data,
+      description: encDesc,
+      ...(encShortDesc !== undefined ? { shortDescription: encShortDesc } : {}),
       id,
       slug: finalSlug,
       createdAt: new Date().toISOString(),
@@ -517,9 +535,17 @@ export const ProjectService = {
       }
     }
 
+    const processedUpdates = { ...updates };
+    if (processedUpdates.description !== undefined) {
+      processedUpdates.description = encryptSensitiveMarkers(processedUpdates.description);
+    }
+    if (processedUpdates.shortDescription !== undefined) {
+      processedUpdates.shortDescription = encryptSensitiveMarkers(processedUpdates.shortDescription);
+    }
+
     const updatedItem: Project = {
       ...list[index],
-      ...updates,
+      ...processedUpdates,
       updatedAt: new Date().toISOString()
     };
 
@@ -862,6 +888,10 @@ export const ColumnService = {
 export const TaskService = {
   async getByProject(projectId: string): Promise<Task[]> {
     const connected = isUserConnected();
+    const activeUid = getActiveStorageUserId();
+    const allProjects = getAllStoredItemsAcrossUsers<Project>('projects');
+    const targetProj = allProjects.find(p => p.id === projectId);
+    const ownerId = targetProj?.ownerId;
 
     if (connected) {
       try {
@@ -871,7 +901,7 @@ export const TaskService = {
           const allTasks = getLocalData<Task>('tasks', initialTasks);
           const otherTasks = allTasks.filter(t => t.projectId !== projectId);
           setLocalData('tasks', [...otherTasks, ...sorted]);
-          return sorted;
+          return sorted.map(t => sanitizeTaskForUser(t, ownerId, activeUid));
         }
       } catch (err) {
         console.warn('Falha ao buscar atividades do banco de dados:', err);
@@ -880,7 +910,7 @@ export const TaskService = {
 
     const allTasks = getLocalData<Task>('tasks', initialTasks);
     const localTasks = allTasks.filter(t => t.projectId === projectId).sort((a, b) => a.position - b.position);
-    return localTasks;
+    return localTasks.map(t => sanitizeTaskForUser(t, ownerId, activeUid));
   },
 
   async create(data: Omit<Task, 'id' | 'createdAt' | 'updatedAt' | 'position'> & { position?: number }, requestingUserId?: string): Promise<Task> {
@@ -918,6 +948,8 @@ export const TaskService = {
       const finalPosition = data.position !== undefined ? data.position : maxPos + 1;
       const id = `task_${Math.random().toString(36).substring(2, 9)}_${Date.now().toString(36)}`;
 
+      const encTaskDesc = encryptSensitiveMarkers(data.description);
+
       const newTask: Task = {
         ...data,
         columnId: targetColId,
@@ -925,7 +957,7 @@ export const TaskService = {
         position: finalPosition,
         concluded,
         dueDate: data.dueDate || null,
-        description: data.description || '',
+        description: encTaskDesc || '',
         priority: data.priority || 'MEDIA',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -982,19 +1014,24 @@ export const TaskService = {
         const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
         const concluded = updates.concluded !== undefined ? Boolean(updates.concluded) : Boolean(shouldComplete);
 
+        const processedUpdates = { ...updates };
+        if (processedUpdates.description !== undefined) {
+          processedUpdates.description = encryptSensitiveMarkers(processedUpdates.description);
+        }
+
         updatedItem = {
           id,
-          projectId: updates.projectId || 'proj-1',
+          projectId: processedUpdates.projectId || 'proj-1',
           columnId: targetColId,
-          title: updates.title || 'Nova Atividade',
-          description: updates.description || '',
-          priority: updates.priority || 'MEDIA',
-          position: updates.position || 0,
+          title: processedUpdates.title || 'Nova Atividade',
+          description: processedUpdates.description || '',
+          priority: processedUpdates.priority || 'MEDIA',
+          position: processedUpdates.position || 0,
           concluded,
-          dueDate: updates.dueDate || null,
-          createdById: updates.createdById || 'demo-user-123',
-          createdByName: updates.createdByName || 'Victor Reghini',
-          createdAt: updates.createdAt || new Date().toISOString(),
+          dueDate: processedUpdates.dueDate || null,
+          createdById: processedUpdates.createdById || 'demo-user-123',
+          createdByName: processedUpdates.createdByName || 'Victor Reghini',
+          createdAt: processedUpdates.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString()
         };
       } else {
@@ -1013,9 +1050,14 @@ export const TaskService = {
           }
         }
 
+        const processedUpdates = { ...updates };
+        if (processedUpdates.description !== undefined) {
+          processedUpdates.description = encryptSensitiveMarkers(processedUpdates.description);
+        }
+
         updatedItem = {
           ...currentTask,
-          ...updates,
+          ...processedUpdates,
           position,
           concluded: concluded ?? false,
           updatedAt: new Date().toISOString()

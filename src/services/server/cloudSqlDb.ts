@@ -1,5 +1,10 @@
 import pg from 'pg';
 import { Project, ProjectColumn, Task, Idea, ProjectDocument, Suggestion, BugReport, SystemSettings } from '../../types';
+import { 
+  encryptSensitiveMarkers, 
+  sanitizeProjectForUser, 
+  sanitizeTaskForUser 
+} from '../sensitiveInfoService';
 
 const { Pool } = pg;
 
@@ -268,14 +273,15 @@ export async function fetchCloudSqlProjects(userId?: string): Promise<Project[] 
       params = [userId];
     }
     const res = await p.query(query, params);
-    return res.rows.map(mapProjectRow);
+    const projects = res.rows.map(mapProjectRow);
+    return projects.map(proj => sanitizeProjectForUser(proj, userId, isSuper));
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlProjects error:', err);
     return null;
   }
 }
 
-export async function fetchCloudSqlProjectByIdOrSlug(idOrSlug: string): Promise<Project | null> {
+export async function fetchCloudSqlProjectByIdOrSlug(idOrSlug: string, requestingUserId?: string): Promise<Project | null> {
   const p = getPool();
   if (!p) return null;
   try {
@@ -284,7 +290,9 @@ export async function fetchCloudSqlProjectByIdOrSlug(idOrSlug: string): Promise<
       [idOrSlug]
     );
     if (res.rows.length === 0) return null;
-    return mapProjectRow(res.rows[0]);
+    const project = mapProjectRow(res.rows[0]);
+    const isSuper = requestingUserId ? await checkCloudSqlSuperUser(requestingUserId) : false;
+    return sanitizeProjectForUser(project, requestingUserId, isSuper);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlProjectByIdOrSlug error:', err);
     return null;
@@ -320,7 +328,7 @@ export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectC
   }
 }
 
-export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | null> {
+export async function fetchCloudSqlTasks(projectId?: string, requestingUserId?: string): Promise<Task[] | null> {
   const p = getPool();
   if (!p) return null;
   try {
@@ -329,7 +337,26 @@ export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | n
       : 'SELECT * FROM "public"."task" ORDER BY position ASC';
     const params = projectId ? [projectId] : [];
     const res = await p.query(query, params);
-    return res.rows.map(mapTaskRow);
+    const tasks = res.rows.map(mapTaskRow);
+
+    const isSuper = requestingUserId ? await checkCloudSqlSuperUser(requestingUserId) : false;
+    const projectIds = [...new Set(tasks.map(t => t.projectId).filter(Boolean))];
+    const ownersMap = new Map<string, string>();
+
+    if (projectIds.length > 0) {
+      const projRes = await p.query(
+        'SELECT id, owner_id FROM "public"."project" WHERE id = ANY($1)',
+        [projectIds]
+      );
+      projRes.rows.forEach(r => {
+        ownersMap.set(r.id, r.owner_id);
+      });
+    }
+
+    return tasks.map(t => {
+      const ownerId = ownersMap.get(t.projectId);
+      return sanitizeTaskForUser(t, ownerId, requestingUserId, isSuper);
+    });
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlTasks error:', err);
     return null;
@@ -403,7 +430,7 @@ export async function fetchCloudSqlBugs(projectId?: string): Promise<BugReport[]
   }
 }
 
-export async function fetchCloudSqlAll(): Promise<{
+export async function fetchCloudSqlAll(requestingUserId?: string): Promise<{
   projects: Project[];
   columns: ProjectColumn[];
   tasks: Task[];
@@ -416,10 +443,10 @@ export async function fetchCloudSqlAll(): Promise<{
   if (!p) return null;
   try {
     const [projects, columns, tasks, ideas, documents, suggestions, bugs] = await Promise.all([
-      fetchCloudSqlProjects(),
+      fetchCloudSqlProjects(requestingUserId),
       fetchCloudSqlColumns(),
-      fetchCloudSqlTasks(),
-      fetchCloudSqlIdeas(),
+      fetchCloudSqlTasks(undefined, requestingUserId),
+      fetchCloudSqlIdeas(requestingUserId),
       fetchCloudSqlDocuments(),
       fetchCloudSqlSuggestions(),
       fetchCloudSqlBugs()
@@ -610,6 +637,9 @@ export async function persistProject(project: Project, requestingUserId?: string
       email: 'contato@victorreghini.com.br'
     });
 
+    const encDescription = encryptSensitiveMarkers(project.description);
+    const encShortDesc = project.shortDescription ? encryptSensitiveMarkers(project.shortDescription) : null;
+
     await p.query(
       `INSERT INTO "public"."project" 
        (id, owner_id, name, slug, short_description, description, visibility, status, technologies, links, readme, created_at, updated_at)
@@ -630,8 +660,8 @@ export async function persistProject(project: Project, requestingUserId?: string
         project.ownerId || 'demo-user-123',
         project.name,
         project.slug,
-        project.shortDescription || null,
-        project.description,
+        encShortDesc,
+        encDescription,
         project.visibility || 'PUBLIC',
         project.status || 'EM_ANDAMENTO',
         project.technologies || [],
@@ -842,6 +872,8 @@ export async function persistTask(task: Task, requestingUserId?: string): Promis
       }
     }
 
+    const encDescription = encryptSensitiveMarkers(task.description);
+
     await p.query(
       `INSERT INTO "public"."task" 
        (id, project_id, column_id, title, description, priority, position, due_date, concluded, created_by_id, created_by_name, created_at, updated_at)
@@ -860,7 +892,7 @@ export async function persistTask(task: Task, requestingUserId?: string): Promis
         task.projectId,
         task.columnId,
         task.title,
-        task.description || '',
+        encDescription || '',
         task.priority || 'MEDIA',
         task.position,
         task.dueDate ? task.dueDate.split('T')[0] : null,
@@ -1191,6 +1223,9 @@ export async function syncAllToCloudSql(data: {
         [proj.ownerId || 'demo-user-123', proj.ownerName || 'Victor Reghini', 'contato@victorreghini.com.br']
       );
 
+      const encProjDesc = encryptSensitiveMarkers(proj.description);
+      const encProjShortDesc = proj.shortDescription ? encryptSensitiveMarkers(proj.shortDescription) : null;
+
       await client.query(
         `INSERT INTO "public"."project" 
          (id, owner_id, name, slug, short_description, description, visibility, status, technologies, links, readme, created_at, updated_at)
@@ -1211,8 +1246,8 @@ export async function syncAllToCloudSql(data: {
           proj.ownerId || 'demo-user-123',
           proj.name,
           proj.slug,
-          proj.shortDescription || null,
-          proj.description,
+          encProjShortDesc,
+          encProjDesc,
           proj.visibility || 'PUBLIC',
           proj.status || 'EM_ANDAMENTO',
           proj.technologies || [],
@@ -1262,6 +1297,8 @@ export async function syncAllToCloudSql(data: {
         );
       }
 
+      const encTaskDesc = encryptSensitiveMarkers(task.description);
+
       await client.query(
         `INSERT INTO "public"."task" 
          (id, project_id, column_id, title, description, priority, position, due_date, concluded, created_by_id, created_by_name, created_at, updated_at)
@@ -1280,7 +1317,7 @@ export async function syncAllToCloudSql(data: {
           task.projectId,
           task.columnId,
           task.title,
-          task.description || '',
+          encTaskDesc || '',
           task.priority || 'MEDIA',
           task.position,
           task.dueDate ? task.dueDate.split('T')[0] : null,

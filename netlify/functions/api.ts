@@ -30,6 +30,7 @@ import {
   checkCloudSqlSuperUser,
   syncUserToCloudSql
 } from '../../src/services/server/cloudSqlDb';
+import { sanitizeProjectForUser } from '../../src/services/sensitiveInfoService';
 
 const defaultFallbackProjects = [
   {
@@ -242,7 +243,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       if (action === 'projects' && event.httpMethod === 'GET') {
         const idOrSlug = segments[2] || event.queryStringParameters?.id;
         if (idOrSlug) {
-          const project = await fetchCloudSqlProjectByIdOrSlug(idOrSlug);
+          const project = await fetchCloudSqlProjectByIdOrSlug(idOrSlug, requestingUserId);
           if (!project) {
             return { statusCode: 404, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Projeto não encontrado' }) };
           }
@@ -267,7 +268,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
       if (action === 'tasks' && event.httpMethod === 'GET') {
         const projectId = event.queryStringParameters?.projectId || segments[2];
-        const tasks = await fetchCloudSqlTasks(projectId);
+        const tasks = await fetchCloudSqlTasks(projectId, requestingUserId);
         if (tasks === null) {
           return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
         }
@@ -311,7 +312,7 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
       }
 
       if (action === 'all' && event.httpMethod === 'GET') {
-        const allData = await fetchCloudSqlAll();
+        const allData = await fetchCloudSqlAll(requestingUserId);
         if (allData === null) {
           return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
         }
@@ -359,11 +360,13 @@ export const handler: Handler = async (event: HandlerEvent, context: HandlerCont
 
       // Route: GET /api/v1/projects/:slug
       if (!resource && event.httpMethod === 'GET') {
-        const proj = (await fetchCloudSqlProjectByIdOrSlug(slug)) || defaultFallbackProjects.find(p => p.slug === slug || p.id === slug);
+        const rawUserId = (event.headers['x-user-id'] || event.headers['X-User-Id']) as string | undefined;
+        const proj = (await fetchCloudSqlProjectByIdOrSlug(slug, rawUserId)) || defaultFallbackProjects.find(p => p.slug === slug || p.id === slug);
         if (proj) {
+          const sanitizedProj = sanitizeProjectForUser(proj, rawUserId);
           const publicProj = {
-            ...proj,
-            links: (proj.links || []).filter((l: any) => !l.isPrivate)
+            ...sanitizedProj,
+            links: (sanitizedProj.links || []).filter((l: any) => !l.isPrivate)
           };
           return {
             statusCode: 200,

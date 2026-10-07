@@ -74,7 +74,7 @@ function cloudSqlApiPlugin(): Plugin {
           if (pathname === '/api/v1/cloudsql/projects' && req.method === 'GET') {
             const id = url.searchParams.get('id');
             if (id) {
-              const proj = await fetchCloudSqlProjectByIdOrSlug(id);
+              const proj = await fetchCloudSqlProjectByIdOrSlug(id, requestingUserId);
               if (!proj) {
                 res.statusCode = 404;
                 res.end(JSON.stringify({ success: false, data: null, error: 'Projeto não encontrado' }));
@@ -108,7 +108,7 @@ function cloudSqlApiPlugin(): Plugin {
 
           if (pathname === '/api/v1/cloudsql/tasks' && req.method === 'GET') {
             const projectId = url.searchParams.get('projectId') || undefined;
-            const tasks = await fetchCloudSqlTasks(projectId);
+            const tasks = await fetchCloudSqlTasks(projectId, requestingUserId);
             if (tasks === null) {
               res.statusCode = 503;
               res.end(JSON.stringify({ success: false, data: null, error: 'Cloud SQL indisponível' }));
@@ -167,7 +167,7 @@ function cloudSqlApiPlugin(): Plugin {
           }
 
           if (pathname === '/api/v1/cloudsql/all' && req.method === 'GET') {
-            const all = await fetchCloudSqlAll();
+            const all = await fetchCloudSqlAll(requestingUserId);
             if (all === null) {
               res.statusCode = 503;
               res.end(JSON.stringify({ success: false, data: null, error: 'Cloud SQL indisponível' }));

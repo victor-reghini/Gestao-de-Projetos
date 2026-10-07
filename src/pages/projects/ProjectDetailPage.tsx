@@ -36,6 +36,7 @@ import { SuggestionsTab } from '@/components/feedback/SuggestionsTab';
 import { BugsTab } from '@/components/feedback/BugsTab';
 import { MembersAndSettingsTab } from '@/components/project/MembersAndSettingsTab';
 import { ProjectColumnProgressBar } from '@/components/project/ProjectColumnProgressBar';
+import { renderFormattedMarkdown } from '@/services/sensitiveInfoService';
 
 const VALID_TABS = ['overview', 'kanban', 'docs', 'diagrams', 'suggestions', 'bugs', 'settings'] as const;
 type TabType = typeof VALID_TABS[number];
@@ -327,9 +328,12 @@ export const ProjectDetailPage: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 glass-panel p-6 space-y-4">
               <h3 className="text-base font-bold text-white">Sobre o Projeto</h3>
-              <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
-                {project.description}
-              </p>
+              <div 
+                className="prose-content text-sm leading-relaxed"
+                dangerouslySetInnerHTML={{
+                  __html: renderFormattedMarkdown(project.description, isOwner)
+                }}
+              />
 
               <div className="pt-4 border-t border-slate-800 space-y-2">
                 <div className="flex items-center justify-between">

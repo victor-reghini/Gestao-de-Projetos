@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { NewProjectModal } from '@/pages/projects/NewProjectModal';
 import { IdeaModal } from '@/pages/ideas/IdeaModal';
+import { redactSensitiveMarkers } from '@/services/sensitiveInfoService';
 
 export const DashboardPage: React.FC = () => {
   const { user } = useAuth();
@@ -229,7 +230,7 @@ export const DashboardPage: React.FC = () => {
                   </div>
 
                   <p className="text-xs text-slate-300 line-clamp-2 mb-3">
-                    {project.shortDescription || project.description}
+                    {project.shortDescription || redactSensitiveMarkers(project.description)}
                   </p>
 
                   <div className="flex flex-wrap gap-1.5 mb-4">

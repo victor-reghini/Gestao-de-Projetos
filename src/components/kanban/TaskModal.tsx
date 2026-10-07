@@ -3,6 +3,7 @@ import { Task, ProjectColumn, TaskPriority } from '@/types';
 import { TaskService } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
 import { X, Calendar, Trash2, CheckCircle2 } from 'lucide-react';
+import { MarkdownTextareaWithPreview } from '@/components/common/MarkdownTextareaWithPreview';
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -234,17 +235,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
           </div>
 
-          <div className="form-group mb-0">
-            <label className="form-label" htmlFor="task-desc">Descrição & Critérios de Aceite</label>
-            <textarea
-              id="task-desc"
-              rows={4}
-              placeholder="Descreva detalhes da tarefa, passos e critérios para conclusão..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="textarea text-sm"
-            />
-          </div>
+          <MarkdownTextareaWithPreview
+            id="task-desc"
+            label="Descrição & Critérios de Aceite"
+            value={description}
+            onChange={setDescription}
+            placeholder="Descreva detalhes da tarefa, passos e critérios (suporta Markdown e :::secret)..."
+            rows={4}
+          />
 
           <div className="flex items-center justify-between pt-4 border-t border-slate-800">
             {taskToEdit ? (

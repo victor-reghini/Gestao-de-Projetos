@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { NewProjectModal } from './NewProjectModal';
 import { ProjectColumnProgressBar } from '@/components/project/ProjectColumnProgressBar';
+import { redactSensitiveMarkers } from '@/services/sensitiveInfoService';
 
 export type ProjectSortOption = 'recent' | 'name' | 'status' | 'pending';
 
@@ -346,7 +347,7 @@ export const ProjectsListPage: React.FC = () => {
                   </Link>
 
                   <p className="text-xs text-slate-300 line-clamp-2 mb-4">
-                    {project.shortDescription || project.description}
+                    {project.shortDescription || redactSensitiveMarkers(project.description)}
                   </p>
 
                   <div className="flex flex-wrap gap-1.5 mb-4">

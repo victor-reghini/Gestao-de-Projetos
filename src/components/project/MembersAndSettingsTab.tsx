@@ -21,6 +21,7 @@ import {
   Check,
   ExternalLink
 } from 'lucide-react';
+import { MarkdownTextareaWithPreview } from '@/components/common/MarkdownTextareaWithPreview';
 
 interface MembersAndSettingsTabProps {
   project: Project;
@@ -312,16 +313,15 @@ export const MembersAndSettingsTab: React.FC<MembersAndSettingsTabProps> = ({
             />
           </div>
 
-          <div className="form-group mb-0">
-            <label className="form-label" htmlFor="edit-desc">Descrição Completa</label>
-            <textarea
-              id="edit-desc"
-              rows={4}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="textarea text-sm"
-            />
-          </div>
+          <MarkdownTextareaWithPreview
+            id="edit-desc"
+            label="Descrição Completa"
+            value={description}
+            onChange={setDescription}
+            placeholder="Detalhes, objetivos e requisitos do projeto (suporta Markdown e :::secret)..."
+            rows={4}
+            isOwner={isOwner}
+          />
 
           {/* Tech Stack */}
           <div className="form-group mb-0">

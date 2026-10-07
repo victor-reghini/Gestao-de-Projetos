@@ -25,6 +25,7 @@ import {
 import { MarkdownDocViewer } from '@/components/docs/MarkdownDocViewer';
 import { MermaidDiagramViewer } from '@/components/docs/MermaidDiagramViewer';
 import { ProjectColumnProgressBar } from '@/components/project/ProjectColumnProgressBar';
+import { renderFormattedMarkdown } from '@/services/sensitiveInfoService';
 
 export const PublicProjectPage: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -208,9 +209,12 @@ export const PublicProjectPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-2 glass-panel p-6 space-y-4">
               <h3 className="text-lg font-bold text-white">Sobre a Iniciativa</h3>
-              <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
-                {project.description}
-              </p>
+              <div
+                className="prose-content text-sm leading-relaxed"
+                dangerouslySetInnerHTML={{
+                  __html: renderFormattedMarkdown(project.description, false)
+                }}
+              />
 
               {project.links && project.links.filter(link => !link.isPrivate).length > 0 && (
                 <div className="pt-4 border-t border-slate-800 space-y-3">

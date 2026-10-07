@@ -78,7 +78,9 @@ export const CloudSqlService = {
   async fetchProjectByIdOrSlug(idOrSlug: string): Promise<Project | null> {
     if (IS_TEST) return null;
     try {
-      const res = await fetch(`/api/v1/cloudsql/projects?id=${encodeURIComponent(idOrSlug)}`);
+      const res = await fetch(`/api/v1/cloudsql/projects?id=${encodeURIComponent(idOrSlug)}`, {
+        headers: { ...getAuthHeaders() }
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success === false || json.data === null || json.data === undefined) return null;
@@ -114,7 +116,9 @@ export const CloudSqlService = {
       const url = projectId 
         ? `/api/v1/cloudsql/tasks?projectId=${encodeURIComponent(projectId)}`
         : '/api/v1/cloudsql/tasks';
-      const res = await fetch(url);
+      const res = await fetch(url, {
+        headers: { ...getAuthHeaders() }
+      });
       if (res.ok) {
         const json = await res.json();
         if (json.success === false || json.data === null || json.data === undefined) return null;

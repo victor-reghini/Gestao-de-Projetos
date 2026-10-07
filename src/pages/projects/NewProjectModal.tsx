@@ -4,6 +4,7 @@ import { ProjectService, DocumentService, slugify } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
 import { Project, Visibility, ProjectStatus, ProjectLink } from '@/types';
 import { X, Plus, Trash2, FolderPlus, GitBranch, Globe, Lock, Users, Sparkles, Edit2, Check } from 'lucide-react';
+import { MarkdownTextareaWithPreview } from '@/components/common/MarkdownTextareaWithPreview';
 
 interface NewProjectModalProps {
   isOpen: boolean;
@@ -265,17 +266,14 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
             />
           </div>
 
-          <div className="form-group mb-0">
-            <label className="form-label" htmlFor="proj-desc">Descrição Completa</label>
-            <textarea
-              id="proj-desc"
-              rows={3}
-              placeholder="Detalhes, objetivos e requisitos do projeto..."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="textarea text-sm"
-            />
-          </div>
+          <MarkdownTextareaWithPreview
+            id="proj-desc"
+            label="Descrição Completa"
+            value={description}
+            onChange={setDescription}
+            placeholder="Detalhes, objetivos e requisitos do projeto (suporta Markdown e :::secret)..."
+            rows={3}
+          />
 
           {/* Technologies Tag Input */}
           <div className="form-group mb-0">

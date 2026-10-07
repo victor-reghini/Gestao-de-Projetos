@@ -17,8 +17,10 @@ import {
   ChevronRight,
   ChevronDown,
   Columns,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Lock
 } from 'lucide-react';
+import { hasSensitiveMarkers, redactSensitiveMarkers } from '@/services/sensitiveInfoService';
 import { TaskModal } from './TaskModal';
 import { ColumnModal } from './NewColumnModal';
 import { SyncModal } from '@/components/sync/SyncModal';
@@ -105,6 +107,13 @@ const KanbanTaskCard = React.memo<KanbanTaskCardProps>(({
             {task.priority}
           </span>
 
+          {hasSensitiveMarkers(task.description) && (
+            <span className="badge text-[9px] py-0.5 px-1.5 bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1 font-medium" title="Esta atividade contém informações sigilosas">
+              <Lock className="w-2.5 h-2.5 text-amber-400" />
+              Sigiloso
+            </span>
+          )}
+
           {task.concluded && (
             <span className="badge text-[10px] py-0.5 px-1.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-medium">
               Concluída
@@ -119,7 +128,7 @@ const KanbanTaskCard = React.memo<KanbanTaskCardProps>(({
 
       {task.description && (
         <p className="text-xs text-slate-300 line-clamp-2 mb-3 cursor-pointer">
-          {task.description}
+          {redactSensitiveMarkers(task.description) || '🔒 Informações sigilosas'}
         </p>
       )}
 

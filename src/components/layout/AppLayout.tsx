@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { 
-  LayoutDashboard, 
-  FolderKanban, 
-  Lightbulb, 
-  Code2, 
-  User as UserIcon, 
-  LogOut, 
-  Plus, 
-  Menu, 
-  X, 
-  Layers, 
+import {
+  LayoutDashboard,
+  FolderKanban,
+  Lightbulb,
+  Code2,
+  User as UserIcon,
+  LogOut,
+  Plus,
+  Menu,
+  X,
+  Layers,
   Sparkles,
   ExternalLink,
   ChevronLeft,
@@ -43,7 +43,7 @@ export const AppLayout: React.FC = () => {
       const next = !prev;
       try {
         localStorage.setItem('gestao_sidebar_collapsed', String(next));
-      } catch {}
+      } catch { }
       return next;
     });
   };
@@ -80,7 +80,6 @@ export const AppLayout: React.FC = () => {
             )}
           </Link>
           <div className="flex items-center gap-1 shrink-0">
-            <SyncStatusIndicator />
             <button
               onClick={toggleSidebar}
               className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
@@ -124,12 +123,10 @@ export const AppLayout: React.FC = () => {
                 to={item.to}
                 title={isCollapsed ? item.label : undefined}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 py-2.5 rounded-xl font-medium text-sm transition-all ${
-                    isCollapsed ? 'justify-center px-0 w-10 h-10 mx-auto' : 'px-3.5'
-                  } ${
-                    isActive
-                      ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40 shadow-sm'
-                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
+                  `flex items-center gap-3 py-2.5 rounded-xl font-medium text-sm transition-all ${isCollapsed ? 'justify-center px-0 w-10 h-10 mx-auto' : 'px-3.5'
+                  } ${isActive
+                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-100 hover:bg-slate-800/60'
                   }`
                 }
               >
@@ -142,10 +139,9 @@ export const AppLayout: React.FC = () => {
 
         {/* Demo Mode Notice */}
         {isDemo && (
-          <div 
-            className={`mx-3 mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 ${
-              isCollapsed ? 'flex justify-center p-2 mx-2' : ''
-            }`}
+          <div
+            className={`mx-3 mb-3 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 ${isCollapsed ? 'flex justify-center p-2 mx-2' : ''
+              }`}
             title="Modo Demo Ativo: Dados sincronizados localmente e na nuvem"
           >
             {isCollapsed ? (
@@ -163,9 +159,8 @@ export const AppLayout: React.FC = () => {
 
         {/* User Footer */}
         <div className="p-3 border-t border-slate-800">
-          <div className={`flex items-center rounded-xl bg-slate-900/80 border border-slate-800 ${
-            isCollapsed ? 'flex-col gap-2 p-2 justify-center' : 'justify-between p-2'
-          }`}>
+          <div className={`flex items-center rounded-xl bg-slate-900/80 border border-slate-800 ${isCollapsed ? 'flex-col gap-2 p-2 justify-center' : 'justify-between p-2'
+            }`}>
             <Link to="/profile" className={`flex items-center gap-2.5 min-w-0 ${isCollapsed ? 'justify-center' : 'flex-1'}`} title={user?.name || 'Meu Perfil'}>
               <div className="w-8 h-8 max-w-[32px] max-h-[32px] rounded-lg overflow-hidden shrink-0 border border-slate-700 bg-slate-800">
                 <img
@@ -188,9 +183,8 @@ export const AppLayout: React.FC = () => {
               onClick={handleLogout}
               title="Encerrar Sessão"
               aria-label="Encerrar Sessão"
-              className={`p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors ${
-                isCollapsed ? '' : 'ml-1'
-              }`}
+              className={`p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors ${isCollapsed ? '' : 'ml-1'
+                }`}
             >
               <LogOut className="w-4 h-4" />
             </button>
