@@ -173,6 +173,11 @@ button {
   cursor: pointer;
 }
 
+.button-transparent {
+  background-color: transparent;
+  border-color: transparent;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -958,6 +963,10 @@ button {
 
 .ml-4 {
   margin-left: 1rem;
+}
+
+.m-3 {
+  margin: 0.75rem;
 }
 
 /* Sizing */
