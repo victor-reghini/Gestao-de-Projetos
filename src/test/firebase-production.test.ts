@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, signInAnonymously } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 import { handler } from '../../netlify/functions/api';
@@ -12,8 +11,7 @@ import {
   DocumentService, 
   SuggestionService, 
   BugReportService, 
-  UserService,
-  slugify 
+  UserService
 } from '../services/dbService';
 
 import { getEnvVar } from '../services/firebase';

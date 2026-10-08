@@ -90,7 +90,7 @@ const corsHeaders = {
   'Content-Type': 'application/json; charset=utf-8'
 };
 
-export const handler: Handler = async (event: HandlerEvent, context: HandlerContext) => {
+export const handler: Handler = async (event: HandlerEvent, _context: HandlerContext) => {
   // Handle CORS preflight
   if (event.httpMethod === 'OPTIONS') {
     return {

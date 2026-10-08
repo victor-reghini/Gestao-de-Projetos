@@ -10,9 +10,7 @@ import {
   Trash2, 
   AlertCircle, 
   Download, 
-  Check, 
-  Sparkles,
-  RefreshCw
+  Sparkles
 } from 'lucide-react';
 
 interface MermaidDiagramViewerProps {

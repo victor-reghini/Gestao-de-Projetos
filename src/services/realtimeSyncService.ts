@@ -33,6 +33,10 @@ export interface ProjectSyncInfo {
 
 // In-memory status tracking
 let currentSyncState: SyncState = 'synced';
+
+export function getCurrentSyncState(): SyncState {
+  return currentSyncState;
+}
 let lastSyncedAt: string = new Date().toISOString();
 let isRtdbConnected = false;
 let syncStatusListeners: ((status: SyncValidationStatus) => void)[] = [];

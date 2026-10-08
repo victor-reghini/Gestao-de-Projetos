@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Task, ProjectColumn, TaskPriority } from '@/types';
 import { TaskService } from '@/services/dbService';
 import { useAuth } from '@/context/AuthContext';
+import { isDoneColumn } from '@/utils/columnUtils';
+import { validateTaskData } from '@/utils/validationUtils';
 import { X, Calendar, Trash2, CheckCircle2 } from 'lucide-react';
 
 interface TaskModalProps {
@@ -54,7 +56,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setColumnId(initialColId);
       setPriority('MEDIA');
       setDueDate('');
-      setConcluded(Boolean(initialCol?.autoComplete || initialCol?.key === 'done' || initialCol?.name.toLowerCase().includes('conclu')));
+      setConcluded(isDoneColumn(initialCol));
     }
     setError(null);
   }, [isOpen, taskToEdit]);
@@ -69,7 +71,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const handleColumnChange = (newColId: string) => {
     setColumnId(newColId);
     const selectedCol = columns.find(c => c.id === newColId);
-    if (selectedCol?.autoComplete || selectedCol?.key === 'done' || selectedCol?.name.toLowerCase().includes('conclu')) {
+    if (isDoneColumn(selectedCol)) {
       setConcluded(true);
     }
   };
@@ -78,14 +80,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) {
-      setError('O título da atividade é obrigatório.');
-      return;
-    }
-
     const targetColumnId = columnId || defaultColumnId || (columns.length > 0 ? columns[0].id : '');
-    if (!targetColumnId) {
-      setError('Selecione uma coluna válida para a atividade.');
+    const validation = validateTaskData({ title, columnId: targetColumnId });
+
+    if (!validation.isValid) {
+      setError(validation.errors.title || validation.errors.columnId || 'Dados inválidos.');
       return;
     }
 

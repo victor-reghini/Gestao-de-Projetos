@@ -21,7 +21,7 @@ import {
   listProjectColumns
 } from '../dataconnect-generated/esm/index.esm.js';
 import { app, auth, rtdb, storage } from '../config/firebase';
-import { dataConnect, dcUpsertTask, dcDeleteTask, dcUpsertColumn, dcUpsertProject } from '../config/dataconnect';
+import { dcUpsertTask, dcDeleteTask, dcUpsertColumn, dcUpsertProject } from '../config/dataconnect';
 import { DataConnectService } from '../services/dataConnectService';
 
 describe('Firebase Data Connect Integration Suite', () => {

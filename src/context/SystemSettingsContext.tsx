@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { SystemSettings } from '@/types';
-import { SystemSettingsService, DEFAULT_SYSTEM_SETTINGS } from '@/services/systemSettingsService';
+import { SystemSettingsService } from '@/services/systemSettingsService';
 import { useAuth } from './AuthContext';
 
 interface SystemSettingsContextType {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Suggestion, ItemStatus } from '@/types';
 import { SuggestionService, TaskService, ColumnService } from '@/services/dbService';
-import { MessageSquarePlus, CheckCircle2, XCircle, Clock, ArrowRight, User, Plus, Layers } from 'lucide-react';
+import { MessageSquarePlus, User, Layers } from 'lucide-react';
 
 interface SuggestionsTabProps {
   projectId: string;

@@ -8,9 +8,7 @@ import {
   ProjectMember,
   ProjectDocument,
   Suggestion,
-  BugReport,
-  Visibility,
-  ProjectStatus
+  BugReport
 } from '@/types';
 import { RealtimeSyncService } from './realtimeSyncService';
 import { CloudSqlService } from './cloudSqlService';
@@ -19,22 +17,12 @@ import {
   getEncryptedLocalData, 
   setEncryptedLocalData, 
   getActiveStorageUserId, 
-  clearUserStorage,
   getAllStoredItemsAcrossUsers 
 } from './storageCrypto';
+import { slugify } from '@/utils/validationUtils';
+import { isDoneColumn, getCompositeColumnKey, generateColumnId } from '@/utils/columnUtils';
 
-// Backward compatibility helpers (no-op since Firestore was removed)
-export function sanitizeForFirestore<T>(data: T): T {
-  return data;
-}
-
-export function safeFirestoreWrite(promise: Promise<any>): void {
-  promise.catch(() => { });
-}
-
-export async function safeFirestoreQuery<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
-  return fallback;
-}
+export { slugify };
 
 const LOCAL_STORAGE_KEY_PREFIX = 'gestao_projetos_db_';
 
@@ -281,19 +269,6 @@ export const initialBugs: BugReport[] = [
     updatedAt: new Date().toISOString()
   }
 ];
-
-// Helper to generate URL-safe slug
-export function slugify(text: string): string {
-  return text
-    .toString()
-    .toLowerCase()
-    .trim()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9 -]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
-}
 
 export function isUserConnected(userId?: string): boolean {
   if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
@@ -606,7 +581,7 @@ export function deduplicateColumns(columns: ProjectColumn[]): ProjectColumn[] {
   for (const c of columns) {
     if (!c || !c.id) continue;
     // Each column belongs to a single specific project! Deduplication MUST be scoped per project:
-    const key = `${c.projectId || ''}:${(c.key || slugify(c.name)).toLowerCase().trim()}`;
+    const key = getCompositeColumnKey(c.projectId || '', c.key || slugify(c.name));
     if (!map.has(key)) {
       map.set(key, c);
     }
@@ -698,7 +673,7 @@ export const ColumnService = {
     try {
       const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
       const projectCols = allCols.filter(c => c.projectId === projectId);
-      const id = `col_${projectId}_${slugify(name)}_${Math.random().toString(36).substring(2, 7)}`;
+      const id = generateColumnId(projectId, slugify(name));
 
       const newCol: ProjectColumn = {
         id,
@@ -910,7 +885,7 @@ export const TaskService = {
       }
 
       const targetCol = allCols.find(c => c.id === targetColId);
-      const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
+      const shouldComplete = isDoneColumn(targetCol);
       const concluded = data.concluded !== undefined ? Boolean(data.concluded) : Boolean(shouldComplete);
 
       const columnTasks = allTasks.filter(t => t.columnId === targetColId && (!data.projectId || t.projectId === data.projectId));
@@ -979,7 +954,7 @@ export const TaskService = {
 
         const targetColId = updates.columnId || 'col-1';
         const targetCol = allCols.find(c => c.id === targetColId);
-        const shouldComplete = targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu');
+        const shouldComplete = isDoneColumn(targetCol);
         const concluded = updates.concluded !== undefined ? Boolean(updates.concluded) : Boolean(shouldComplete);
 
         updatedItem = {
@@ -1008,7 +983,7 @@ export const TaskService = {
             position = destColumnTasks.length;
           }
           const targetCol = allCols.find(c => c.id === updates.columnId);
-          if (targetCol && (targetCol.autoComplete || targetCol.key === 'done' || targetCol.name.toLowerCase().includes('conclu'))) {
+          if (isDoneColumn(targetCol)) {
             concluded = true;
           }
         }
@@ -1087,7 +1062,7 @@ export const TaskService = {
 
       const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
       const targetCol = allCols.find(c => c.id === targetColumnId);
-      const shouldComplete = Boolean(targetCol?.autoComplete || targetCol?.key === 'done' || targetCol?.name.toLowerCase().includes('conclu'));
+      const shouldComplete = isDoneColumn(targetCol);
 
       const otherTasksInTarget = allTasks
         .filter(t => t.columnId === targetColumnId && t.id !== taskId)

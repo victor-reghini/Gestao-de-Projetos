@@ -7,7 +7,6 @@ import {
   DocumentService,
   SuggestionService,
   BugReportService,
-  isUserConnected,
   slugify
 } from '@/services/dbService';
 import { CloudSqlService } from '@/services/cloudSqlService';
@@ -600,6 +599,7 @@ describe('Domain & Business Rules Tests', () => {
         type: 'markdown',
         position: 0
       });
+      expect(doc.id).toBeDefined();
       currentProj = await ProjectService.getById(proj.id);
       expect(new Date(currentProj!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(timeBeforeDoc).getTime());
 
@@ -615,6 +615,7 @@ describe('Domain & Business Rules Tests', () => {
         description: 'Erro 500',
         severity: 'ALTA'
       });
+      expect(bug.id).toBeDefined();
       currentProj = await ProjectService.getById(proj.id);
       expect(new Date(currentProj!.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(timeBeforeBug).getTime());
 
