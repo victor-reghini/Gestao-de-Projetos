@@ -126,7 +126,7 @@ export const PublicProjectPage: React.FC = () => {
           </h1>
 
           <p className="text-base text-slate-300 max-w-3xl leading-relaxed">
-            {project.description}
+            {project.shortDescription}
           </p>
 
           <div className="flex flex-wrap items-center gap-3 pt-2">
@@ -207,7 +207,7 @@ export const PublicProjectPage: React.FC = () => {
         {activeTab === 'overview' && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="md:col-span-2 glass-panel p-6 space-y-4">
-              <h3 className="text-lg font-bold text-white">Sobre a Iniciativa</h3>
+              <h3 className="text-lg font-bold text-white">Sobre o Projeto</h3>
               <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">
                 {project.description}
               </p>
@@ -219,17 +219,17 @@ export const PublicProjectPage: React.FC = () => {
                     {project.links
                       .filter(link => !link.isPrivate)
                       .map((link, idx) => (
-                      <a
-                        key={idx}
-                        href={link.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
-                        <span>{link.title}</span>
-                      </a>
-                    ))}
+                        <a
+                          key={idx}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="btn btn-secondary btn-sm text-xs flex items-center gap-1.5"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5 text-blue-400" />
+                          <span>{link.title}</span>
+                        </a>
+                      ))}
                   </div>
                 </div>
               )}
