@@ -256,7 +256,7 @@ export const ProjectsListPage: React.FC = () => {
             <span className="text-slate-400 shrink-0 font-medium">Stack:</span>
             <button
               onClick={() => setFilterTech('ALL')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${filterTech === 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${filterTech === 'ALL' ? 'bg-blue-600 text-gray-400' : 'bg-slate-800 text-slate-400 hover:text-white no-wrap'
                 }`}
             >
               Todos
@@ -265,7 +265,7 @@ export const ProjectsListPage: React.FC = () => {
               <button
                 key={tech}
                 onClick={() => setFilterTech(tech)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${filterTech === tech ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${filterTech === tech ? 'bg-blue-600 text-gray-400' : 'bg-slate-800 text-slate-300 hover:bg-slate-700 no-wrap'
                   }`}
               >
                 {tech}
