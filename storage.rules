@@ -1,0 +1,30 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // 1. Avatars de Usuários (Leitura pública para visualização em cards e perfis, gravação até 5MB)
+    match /avatars/{fileName} {
+      allow read: if true;
+      allow write: if request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // 2. Screenshots de Bug Reports (Leitura pública e gravação por colaboradores ou visitantes, até 10MB)
+    match /bug-reports/{fileName} {
+      allow read: if true;
+      allow write: if request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    // 3. Documentos e anexos de projetos
+    match /attachments/{projectId}/{fileName} {
+      allow read: if true;
+      allow write: if request.resource.size < 25 * 1024 * 1024;
+    }
+
+    // 4. Regra geral para recursos autenticados
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}

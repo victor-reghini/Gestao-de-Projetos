@@ -55,7 +55,7 @@ mutation UpsertTask(
   $status: String,
   $dueDate: Timestamp,
   $assigneeId: String,
-  $tags: [String],
+  $tags: [String!],
   $progress: Int,
   $coverUrl: String,
   $checklist: Any,
