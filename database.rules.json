@@ -1,0 +1,21 @@
+{
+  "rules": {
+    ".read": true,
+    ".write": true,
+    "projects": {
+      "$projectId": {
+        ".read": true,
+        ".write": true,
+        "tasks": {
+          ".indexOn": ["columnId", "position", "updatedAt", "projectId"]
+        },
+        "columns": {
+          ".indexOn": ["position", "projectId"]
+        },
+        "_syncInfo": {
+          ".indexOn": ["lastSyncAt", "taskCount"]
+        }
+      }
+    }
+  }
+}
