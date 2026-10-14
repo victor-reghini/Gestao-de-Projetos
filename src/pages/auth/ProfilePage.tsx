@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { useSystemSettings } from '@/context/SystemSettingsContext';
 import { UserService } from '@/services/dbService';
-import { User, Save, CheckCircle2, AlertCircle, Key, ExternalLink, UploadCloud, Camera } from 'lucide-react';
+import { User, Save, CheckCircle2, AlertCircle, Key, ExternalLink, UploadCloud, Camera, Paintbrush, Sun, Moon, Laptop } from 'lucide-react';
 import { ImageCropperModal } from '@/components/profile/ImageCropperModal';
 
 export const ProfilePage: React.FC = () => {
   const { user, isDemo, updateUser } = useAuth();
+  const { themeMode, resolvedTheme, setThemeMode } = useSystemSettings();
   const [name, setName] = useState(user?.name || '');
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -199,6 +201,79 @@ export const ProfilePage: React.FC = () => {
               {saving ? 'Salvando...' : 'Salvar Alterações'}
             </button>
           </form>
+
+          {/* Theme & Appearance Preferences */}
+          <div className="mt-10 pt-6 border-t border-slate-800">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                  <Paintbrush className="w-4 h-4 text-indigo-400" /> Preferências de Aparência & Tema
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Configure o tema da interface manualmente ou ative a sincronização automática com o sistema.
+                </p>
+              </div>
+              <span className="badge badge-active text-xs self-start sm:self-center">
+                Ativo: {resolvedTheme === 'light' ? 'Tema Claro' : 'Tema Escuro'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setThemeMode('system')}
+                className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+                  themeMode === 'system'
+                    ? 'bg-blue-600/15 border-blue-500 text-white shadow-md shadow-blue-500/10 ring-1 ring-blue-500'
+                    : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/40'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1.5 text-cyan-400">
+                  <Laptop className="w-4 h-4" />
+                  <span className="font-semibold text-xs text-white">Automático</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Acompanha as configurações de tema do sistema operacional ({resolvedTheme === 'light' ? 'Claro' : 'Escuro'}).
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setThemeMode('light')}
+                className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+                  themeMode === 'light'
+                    ? 'bg-blue-600/15 border-blue-500 text-white shadow-md shadow-blue-500/10 ring-1 ring-blue-500'
+                    : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/40'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1.5 text-amber-400">
+                  <Sun className="w-4 h-4" />
+                  <span className="font-semibold text-xs text-white">Tema Claro</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Interface luminosa, limpa e com alto contraste para ambientes bem iluminados.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setThemeMode('dark')}
+                className={`flex flex-col items-start p-3.5 rounded-xl border text-left transition-all ${
+                  themeMode === 'dark'
+                    ? 'bg-blue-600/15 border-blue-500 text-white shadow-md shadow-blue-500/10 ring-1 ring-blue-500'
+                    : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700 hover:bg-slate-800/40'
+                }`}
+              >
+                <div className="flex items-center gap-2 mb-1.5 text-blue-400">
+                  <Moon className="w-4 h-4" />
+                  <span className="font-semibold text-xs text-white">Tema Escuro</span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-tight">
+                  Interface dark glassmorphism para descanso visual e conforto no uso noturno.
+                </p>
+              </button>
+            </div>
+          </div>
 
           {/* API Keys section */}
           <div className="mt-10 pt-6 border-t border-slate-800">

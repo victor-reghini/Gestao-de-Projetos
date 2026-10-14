@@ -6,6 +6,7 @@ import {
   Paintbrush, 
   Sun, 
   Moon, 
+  Laptop,
   UserPlus, 
   UserX, 
   Database, 
@@ -186,7 +187,23 @@ export const SuperUserPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <button
+                type="button"
+                onClick={() => setTheme('system')}
+                className={`flex flex-col items-center justify-center p-4 rounded-xl border text-center transition-all ${
+                  theme === 'system'
+                    ? 'bg-blue-600/20 border-blue-500 text-white shadow-lg shadow-blue-500/20 ring-1 ring-blue-500'
+                    : 'bg-slate-900/60 border-slate-800 text-slate-400 hover:border-slate-700 hover:text-slate-200'
+                }`}
+              >
+                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center mb-2 text-cyan-400">
+                  <Laptop className="w-5 h-5" />
+                </div>
+                <span className="font-semibold text-sm">Automático (Sistema)</span>
+                <span className="text-[11px] text-slate-500 mt-1">Acompanha preferência do SO</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setTheme('dark')}
@@ -200,7 +217,7 @@ export const SuperUserPage: React.FC = () => {
                   <Moon className="w-5 h-5" />
                 </div>
                 <span className="font-semibold text-sm">Tema Escuro (Dark)</span>
-                <span className="text-[11px] text-slate-500 mt-1">Fundo dark glassmorphism (Padrão)</span>
+                <span className="text-[11px] text-slate-500 mt-1">Fundo dark glassmorphism</span>
               </button>
 
               <button

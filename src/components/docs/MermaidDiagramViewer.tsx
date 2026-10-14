@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
 import { ProjectDocument } from '@/types';
 import { DocumentService } from '@/services/dbService';
+import { useSystemSettings } from '@/context/SystemSettingsContext';
 import { 
   Network, 
   Plus, 
@@ -86,6 +87,7 @@ export const MermaidDiagramViewer: React.FC<MermaidDiagramViewerProps> = ({
     const t = (d.type || '').toLowerCase();
     return t === 'mermaid' || t === 'diagram';
   });
+  const { resolvedTheme } = useSystemSettings();
   const [selectedDocId, setSelectedDocId] = useState<string | null>(diagramDocs[0]?.id || null);
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState('');
@@ -118,11 +120,14 @@ export const MermaidDiagramViewer: React.FC<MermaidDiagramViewerProps> = ({
   useEffect(() => {
     mermaid.initialize({
       startOnLoad: false,
-      theme: 'dark',
+      theme: resolvedTheme === 'light' ? 'default' : 'dark',
       securityLevel: 'loose',
       fontFamily: 'Inter, sans-serif'
     });
-  }, []);
+    if (content) {
+      renderDiagram(content);
+    }
+  }, [resolvedTheme]);
 
   const renderDiagram = async (code: string) => {
     setRenderError(null);

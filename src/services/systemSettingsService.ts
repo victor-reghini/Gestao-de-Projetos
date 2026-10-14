@@ -1,4 +1,4 @@
-import { SystemSettings } from '@/types';
+import { SystemSettings, SystemTheme, ResolvedTheme } from '@/types';
 import { CloudSqlService } from './cloudSqlService';
 
 const STORAGE_KEY = 'gestao_system_settings';
@@ -42,6 +42,27 @@ function adjustColorBrightness(hex: string, percent: number): string {
   return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
 }
 
+export const THEME_PREFERENCE_KEY = 'gestao_theme_preference';
+
+let mediaQueryListenerAttached = false;
+
+export function getSystemOsTheme(): 'dark' | 'light' {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return 'dark';
+  try {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    return mq && mq.matches ? 'dark' : 'light';
+  } catch {
+    return 'dark';
+  }
+}
+
+export function resolveEffectiveTheme(mode: SystemTheme): 'dark' | 'light' {
+  if (mode === 'system') {
+    return getSystemOsTheme();
+  }
+  return mode;
+}
+
 export const SystemSettingsService = {
   getLocalSettings(): SystemSettings {
     try {
@@ -55,16 +76,70 @@ export const SystemSettingsService = {
     return DEFAULT_SYSTEM_SETTINGS;
   },
 
-  applyTheme(settings: SystemSettings) {
+  getUserThemePreference(): SystemTheme | null {
+    try {
+      const stored = localStorage.getItem(THEME_PREFERENCE_KEY);
+      if (stored === 'dark' || stored === 'light' || stored === 'system') {
+        return stored;
+      }
+    } catch {}
+    return null;
+  },
+
+  setUserThemePreference(preference: SystemTheme) {
+    try {
+      localStorage.setItem(THEME_PREFERENCE_KEY, preference);
+    } catch {}
+    const settings = this.getLocalSettings();
+    this.applyTheme(settings, preference);
+  },
+
+  getEffectiveThemeMode(settings?: SystemSettings): SystemTheme {
+    return this.getUserThemePreference() || settings?.theme || 'dark';
+  },
+
+  applyTheme(settings?: SystemSettings, userModeOverride?: SystemTheme | null) {
     if (typeof document === 'undefined') return;
+
+    const currentSettings = settings || this.getLocalSettings();
+    const mode = userModeOverride !== undefined && userModeOverride !== null
+      ? userModeOverride
+      : this.getEffectiveThemeMode(currentSettings);
+    const resolvedTheme = resolveEffectiveTheme(mode);
 
     const root = document.documentElement;
 
     // Theme (Dark / Light)
-    root.setAttribute('data-theme', settings.theme);
+    root.setAttribute('data-theme', resolvedTheme);
+    root.setAttribute('data-theme-mode', mode);
+
+    // Attach OS system change listener if not already attached
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && !mediaQueryListenerAttached) {
+      try {
+        const mq = window.matchMedia('(prefers-color-scheme: dark)');
+        if (mq) {
+          mediaQueryListenerAttached = true;
+          const listener = () => {
+            const activeMode = SystemSettingsService.getEffectiveThemeMode();
+            if (activeMode === 'system') {
+              const newResolved = getSystemOsTheme();
+              root.setAttribute('data-theme', newResolved);
+              window.dispatchEvent(new CustomEvent('gestao_theme_changed', {
+                detail: { mode: 'system', resolvedTheme: newResolved }
+              }));
+            }
+          };
+          if (typeof mq.addEventListener === 'function') {
+            mq.addEventListener('change', listener);
+          } else if (typeof (mq as any).addListener === 'function') {
+            (mq as any).addListener(listener);
+          }
+        }
+      } catch {}
+    }
 
     // Primary Colors
-    const primary = settings.primaryColor || '#2563eb';
+    const primary = currentSettings.primaryColor || '#2563eb';
     const primaryHover = adjustColorBrightness(primary, -12);
     const primaryLight = hexToRgba(primary, 0.18);
     const primaryGlow = hexToRgba(primary, 0.35);
@@ -83,8 +158,8 @@ export const SystemSettingsService = {
     root.style.setProperty('--blue-700', blue700);
 
     // Secondary / Accent Colors
-    if (settings.secondaryColor) {
-      root.style.setProperty('--accent-purple', settings.secondaryColor);
+    if (currentSettings.secondaryColor) {
+      root.style.setProperty('--accent-purple', currentSettings.secondaryColor);
     }
   },
 
