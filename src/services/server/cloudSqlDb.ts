@@ -1,5 +1,5 @@
 import pg from 'pg';
-import { Project, ProjectColumn, Task, Idea, ProjectDocument, Suggestion, BugReport, SystemSettings } from '../../types';
+import { Project, ProjectColumn, Task, Idea, ProjectDocument, Suggestion, BugReport, SystemSettings, SystemTheme } from '../../types';
 
 const { Pool } = pg;
 
@@ -1671,9 +1671,10 @@ export async function fetchCloudSqlSystemSettings(): Promise<SystemSettings> {
       return defaultSettings;
     }
     const row = res.rows[0];
+    const validTheme: SystemTheme = row.theme === 'light' || row.theme === 'system' ? row.theme : 'dark';
     return {
       id: row.id,
-      theme: row.theme === 'light' ? 'light' : 'dark',
+      theme: validTheme,
       primaryColor: row.primary_color || '#2563eb',
       secondaryColor: row.secondary_color || '#8b5cf6',
       allowRegistration: row.allow_registration !== false,
@@ -1702,7 +1703,7 @@ export async function persistCloudSqlSystemSettings(
   }
 
   // 2. Persistir configurações
-  const theme = settings.theme === 'light' ? 'light' : 'dark';
+  const theme: SystemTheme = settings.theme === 'light' || settings.theme === 'system' ? settings.theme : 'dark';
   const primaryColor = settings.primaryColor || '#2563eb';
   const secondaryColor = settings.secondaryColor || '#8b5cf6';
   const allowRegistration = settings.allowRegistration !== false;
@@ -1724,9 +1725,10 @@ export async function persistCloudSqlSystemSettings(
   );
 
   const row = res.rows[0];
+  const savedTheme: SystemTheme = row.theme === 'light' || row.theme === 'system' ? row.theme : 'dark';
   return {
     id: row.id,
-    theme: row.theme === 'light' ? 'light' : 'dark',
+    theme: savedTheme,
     primaryColor: row.primary_color,
     secondaryColor: row.secondary_color,
     allowRegistration: row.allow_registration,

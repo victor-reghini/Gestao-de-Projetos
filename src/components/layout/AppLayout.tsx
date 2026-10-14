@@ -20,6 +20,7 @@ import {
 import { NewProjectModal } from '@/pages/projects/NewProjectModal';
 import { IdeaModal } from '@/pages/ideas/IdeaModal';
 import { useSystemSettings } from '@/context/SystemSettingsContext';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 
 export const AppLayout: React.FC = () => {
   const { user, isDemo, logout } = useAuth();
@@ -177,15 +178,17 @@ export const AppLayout: React.FC = () => {
                 </div>
               )}
             </Link>
-            <button
-              onClick={handleLogout}
-              title="Encerrar Sessão"
-              aria-label="Encerrar Sessão"
-              className={`p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors ${isCollapsed ? '' : 'ml-1'
-                }`}
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <div className={`flex items-center gap-1 ${isCollapsed ? 'flex-col mt-1' : 'ml-1'}`}>
+              <ThemeToggle variant="cycle" />
+              <button
+                onClick={handleLogout}
+                title="Encerrar Sessão"
+                aria-label="Encerrar Sessão"
+                className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -199,6 +202,7 @@ export const AppLayout: React.FC = () => {
           <span className="font-bold text-sm text-white">Gestor de Projetos</span>
         </Link>
         <div className="flex items-center gap-2">
+          <ThemeToggle variant="cycle" />
           <button
             onClick={() => setIsNewProjectOpen(true)}
             className="btn btn-primary btn-sm p-2"

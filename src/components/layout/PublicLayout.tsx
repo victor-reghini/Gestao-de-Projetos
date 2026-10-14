@@ -3,6 +3,7 @@ import { Outlet, Link } from 'react-router-dom';
 import { Layers, LogIn, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useSystemSettings } from '@/context/SystemSettingsContext';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 
 export const PublicLayout: React.FC = () => {
   const { user } = useAuth();
@@ -24,6 +25,7 @@ export const PublicLayout: React.FC = () => {
           </Link>
 
           <div className="flex items-center gap-3">
+            <ThemeToggle variant="dropdown" />
             <Link to="/docs/api" className="text-xs font-semibold text-slate-300 hover:text-white px-3 py-1.5 rounded-lg hover:bg-slate-800 transition-colors hidden sm:inline-flex items-center gap-1.5">
               API REST <ExternalLink className="w-3.5 h-3.5" />
             </Link>

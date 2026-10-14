@@ -34,7 +34,8 @@ export interface User {
   updatedAt: string;
 }
 
-export type SystemTheme = 'dark' | 'light';
+export type SystemTheme = 'dark' | 'light' | 'system';
+export type ResolvedTheme = 'dark' | 'light';
 
 export interface SystemSettings {
   id: string;
