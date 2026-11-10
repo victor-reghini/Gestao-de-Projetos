@@ -29,12 +29,12 @@ Utilizado para **sincronização bidirecional em tempo real** entre abas, navega
 ```json
 {
   "rules": {
-    ".read": true,
-    ".write": true,
+    ".read": "auth != null",
+    ".write": "auth != null",
     "projects": {
       "$projectId": {
-        ".read": true,
-        ".write": true,
+        ".read": "auth != null",
+        ".write": "auth != null",
         "tasks": {
           ".indexOn": ["columnId", "position", "updatedAt", "projectId"]
         },

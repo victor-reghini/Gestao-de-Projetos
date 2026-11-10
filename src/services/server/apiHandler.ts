@@ -36,7 +36,7 @@ import {
   validateProjectPermission,
   validateTaskPermission
 } from './cloudSqlDb';
-import { Project, Task, TaskPriority } from '../../types';
+import { Project, Task, TaskPriority, BugReport } from '../../types';
 
 export interface ApiRequestOptions {
   method: string;
@@ -89,8 +89,13 @@ const RATE_LIMIT_WINDOW = 60 * 1000; // 1 min
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
-  const entry = ipRequestCounts.get(ip);
+  if (ipRequestCounts.size > 500) {
+    for (const [key, val] of ipRequestCounts.entries()) {
+      if (now > val.resetTime) ipRequestCounts.delete(key);
+    }
+  }
 
+  const entry = ipRequestCounts.get(ip);
   if (!entry || now > entry.resetTime) {
     ipRequestCounts.set(ip, { count: 1, resetTime: now + RATE_LIMIT_WINDOW });
     return true;
@@ -148,6 +153,15 @@ function normalizePriority(p?: string): TaskPriority {
   return 'MEDIA';
 }
 
+function isDbConnectionError(err: any): boolean {
+  if (!err) return false;
+  const code = err.code || '';
+  const msg = err.message || '';
+  return code === 'ECONNREFUSED' || code === 'ENETUNREACH' || code === 'ETIMEDOUT' ||
+         msg.includes('ECONNREFUSED') || msg.includes('ENETUNREACH') || msg.includes('ETIMEDOUT') ||
+         msg.includes('connect');
+}
+
 function slugify(text: string): string {
   if (!text) return '';
   return text
@@ -174,7 +188,12 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
     };
   }
 
-  const clientIp = getHeader(headers, 'client-ip') || getHeader(headers, 'x-forwarded-for') || '127.0.0.1';
+  const rawXff = getHeader(headers, 'x-forwarded-for');
+  const firstXff = rawXff ? rawXff.split(',')[0].trim() : undefined;
+  const clientIp = getHeader(headers, 'nf-client-connection-ip') || 
+                   getHeader(headers, 'client-ip') || 
+                   firstXff || 
+                   '127.0.0.1';
 
   // Apply rate limit on public write requests
   if ((httpMethod === 'POST' || httpMethod === 'PUT' || httpMethod === 'PATCH') && !checkRateLimit(clientIp)) {
@@ -380,7 +399,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         }
 
         try {
-          const perm = await validateProjectPermission(project.id, user.id);
+          const perm = await validateProjectPermission(project, user.id);
           if (!perm.allowed) {
             return {
               statusCode: 403,
@@ -442,7 +461,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         try {
           await persistTask(task, user.id);
         } catch (err: any) {
-          if (err?.code === 'ECONNREFUSED' || err?.message?.includes('ECONNREFUSED')) {
+          if (isDbConnectionError(err)) {
             console.warn('[CloudSQL] Database offline, created task with fallback.');
           } else {
             throw err;
@@ -500,7 +519,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         try {
           await persistTask(updatedTask, user.id);
         } catch (err: any) {
-          if (err?.code !== 'ECONNREFUSED' && !err?.message?.includes('ECONNREFUSED')) {
+          if (!isDbConnectionError(err)) {
             throw err;
           }
         }
@@ -543,7 +562,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         try {
           await deleteCloudSqlTask(taskId, user.id);
         } catch (err: any) {
-          if (err?.code !== 'ECONNREFUSED' && !err?.message?.includes('ECONNREFUSED')) {
+          if (!isDbConnectionError(err)) {
             throw err;
           }
         }
@@ -655,16 +674,16 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
 
           // Auto-create default columns for this new project
           const defaultColumns = [
-            { id: `col_${projectId}_backlog`, projectId, name: 'Backlog', key: 'backlog', position: 0, color: '#64748b' },
-            { id: `col_${projectId}_em_andamento`, projectId, name: 'Em Andamento', key: 'em_andamento', position: 1, color: '#3b82f6' },
-            { id: `col_${projectId}_concluido`, projectId, name: 'Concluído', key: 'concluido', position: 2, color: '#10b981' }
+            { id: `col_${projectId}_backlog`, projectId, name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', createdAt: now, updatedAt: now },
+            { id: `col_${projectId}_em_andamento`, projectId, name: 'Em Andamento', key: 'em_andamento', position: 1, color: '#3b82f6', createdAt: now, updatedAt: now },
+            { id: `col_${projectId}_concluido`, projectId, name: 'Concluído', key: 'concluido', position: 2, color: '#10b981', createdAt: now, updatedAt: now }
           ];
 
           for (const col of defaultColumns) {
             await persistColumn(col, user.id);
           }
         } catch (err: any) {
-          if (err?.code === 'ECONNREFUSED' || err?.message?.includes('ECONNREFUSED')) {
+          if (isDbConnectionError(err)) {
             console.warn('[CloudSQL] Database offline, created project with fallback.');
           } else {
             throw err;
@@ -752,7 +771,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
           try {
             await persistProject(updatedProject, user.id);
           } catch (err: any) {
-            if (err?.code !== 'ECONNREFUSED' && !err?.message?.includes('ECONNREFUSED')) {
+            if (!isDbConnectionError(err)) {
               throw err;
             }
           }
@@ -795,7 +814,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
           try {
             await deleteCloudSqlProject(existingProj.id, user.id);
           } catch (err: any) {
-            if (err?.code !== 'ECONNREFUSED' && !err?.message?.includes('ECONNREFUSED')) {
+            if (!isDbConnectionError(err)) {
               throw err;
             }
           }
@@ -896,7 +915,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
           try {
           await persistTask(task, user.id);
         } catch (err: any) {
-          if (err?.code === 'ECONNREFUSED' || err?.message?.includes('ECONNREFUSED')) {
+          if (isDbConnectionError(err)) {
             console.warn('[CloudSQL] Database offline, created task with fallback.');
           } else {
             throw err;
@@ -1002,15 +1021,16 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
             const proj = await fetchCloudSqlProjectByIdOrSlug(slugOrId);
             const projectId = proj ? proj.id : slugOrId;
             const bugId = 'bug_' + Math.random().toString(36).substring(2, 9);
-            const bugReport = {
+            const bugReport: BugReport = {
               id: bugId,
               projectId,
-              projectSlug: slugOrId,
+              authorName: body.authorName || body.reporterName || 'Comunidade',
+              authorEmail: body.authorEmail || body.reporterEmail || null,
               title: body.title,
               description: body.description,
               severity: body.severity || 'MEDIA',
               stepsToReproduce: body.stepsToReproduce || '',
-              status: 'ABERTO' as const,
+              status: 'ABERTO',
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString()
             };
@@ -1052,6 +1072,20 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
     if (segments[0] === 'cloudsql') {
       const action = segments[1];
       const requestingUserId = (rawUserIdHeader || body?.requestingUserId || queryParams.userId) as string | undefined;
+
+      // Mutation actions require user identification
+      const isPublicFeedback = action === 'sync-suggestion' || action === 'sync-bug';
+      if (!isPublicFeedback && httpMethod === 'POST' && !requestingUserId) {
+        return {
+          statusCode: 401,
+          headers: corsHeaders,
+          body: JSON.stringify({
+            success: false,
+            error: 'Não autorizado',
+            message: 'Acesso negado: identificação do usuário obrigatória para sincronização relacional.'
+          })
+        };
+      }
 
       if (action === 'status' && httpMethod === 'GET') {
         const status = await testCloudSqlConnection();

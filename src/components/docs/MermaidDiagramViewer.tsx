@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import mermaid from 'mermaid';
+import DOMPurify from 'dompurify';
 import { ProjectDocument } from '@/types';
 import { DocumentService } from '@/services/dbService';
 import { 
@@ -119,7 +120,7 @@ export const MermaidDiagramViewer: React.FC<MermaidDiagramViewerProps> = ({
     mermaid.initialize({
       startOnLoad: false,
       theme: 'dark',
-      securityLevel: 'loose',
+      securityLevel: 'strict',
       fontFamily: 'Inter, sans-serif'
     });
   }, []);
@@ -134,7 +135,10 @@ export const MermaidDiagramViewer: React.FC<MermaidDiagramViewerProps> = ({
     try {
       const renderId = 'mermaid-svg-' + Math.random().toString(36).substring(2, 9);
       const { svg } = await mermaid.render(renderId, code);
-      setSvgContent(svg);
+      const cleanSvg = DOMPurify.sanitize(svg, {
+        USE_PROFILES: { svg: true, svgFilters: true }
+      });
+      setSvgContent(cleanSvg);
     } catch (err: any) {
       console.warn('Mermaid syntax render error:', err);
       setRenderError(err.message || 'Erro de sintaxe no diagrama Mermaid.');

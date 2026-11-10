@@ -7,15 +7,15 @@ const { Pool } = pg;
 let pool: pg.Pool | null = null;
 
 export function getCloudSqlConfig() {
-  const host = process.env.PGHOST || process.env.VITE_PGHOST || '34.181.161.180';
-  const user = process.env.PGUSER || process.env.VITE_PGUSER || 'postgres';
-  const password = process.env.PGPASSWORD || process.env.VITE_PGPASSWORD || 'SenhaPostgres1234GestaoDeProjetos';
-  const database = process.env.PGDATABASE || process.env.VITE_PGDATABASE || 'gestao-projetos-ea44c-database';
-  const port = parseInt(process.env.PGPORT || process.env.VITE_PGPORT || '5432', 10);
+  const host = process.env.PGHOST;
+  const user = process.env.PGUSER || 'postgres';
+  const password = process.env.PGPASSWORD;
+  const database = process.env.PGDATABASE;
+  const port = parseInt(process.env.PGPORT || '5432', 10);
   const ssl = process.env.PGSSL === 'false' ? false : { rejectUnauthorized: false };
-  const connectionString = process.env.DATABASE_URL || process.env.VITE_DATABASE_URL;
+  const connectionString = process.env.DATABASE_URL;
 
-  const isConfigured = Boolean((host && password) || connectionString);
+  const isConfigured = Boolean((host && password && database) || connectionString);
 
   return {
     isConfigured,
@@ -460,7 +460,9 @@ export async function validateProjectPermission(
   projectIdOrEntity: string | any,
   requestingUserId?: string | null
 ): Promise<{ allowed: boolean; reason?: string }> {
-  if (!requestingUserId) return { allowed: true };
+  if (!requestingUserId) {
+    return { allowed: false, reason: 'Acesso negado: identificação do usuário obrigatória.' };
+  }
 
   const isSuper = await checkCloudSqlSuperUser(requestingUserId);
   if (isSuper) return { allowed: true };
@@ -477,23 +479,37 @@ export async function validateProjectPermission(
   }
 
   const p = getPool();
-  if (!p) return { allowed: true };
+  if (!p) {
+    const memProj = inMemoryProjects.get(projectIdOrEntity);
+    if (memProj && memProj.ownerId && memProj.ownerId !== requestingUserId) {
+      const isMember = memProj.members?.some((m: any) => m.userId === requestingUserId && m.role !== 'viewer');
+      if (!isMember) return { allowed: false, reason: 'Acesso negado: você não tem permissão para alterar este projeto.' };
+    }
+    return { allowed: true };
+  }
 
   try {
-    const projRes = await p.query('SELECT owner_id FROM "public"."project" WHERE id = $1', [projectIdOrEntity]);
+    const projRes = await p.query('SELECT owner_id, members FROM "public"."project" WHERE id = $1', [projectIdOrEntity]);
     if (projRes.rows.length === 0) {
       return { allowed: true };
     }
 
-    const ownerId = projRes.rows[0].owner_id;
+    const row = projRes.rows[0];
+    const ownerId = row.owner_id;
     if (ownerId === requestingUserId) {
+      return { allowed: true };
+    }
+
+    const members = row.members || [];
+    const isMember = Array.isArray(members) && members.some((m: any) => m.userId === requestingUserId && m.role !== 'viewer');
+    if (isMember) {
       return { allowed: true };
     }
 
     return { allowed: false, reason: 'Acesso negado: você não tem permissão para alterar este projeto.' };
   } catch (err: any) {
     console.warn('[CloudSQL] validateProjectPermission error:', err.message);
-    return { allowed: true };
+    return { allowed: false, reason: 'Erro na validação de permissão: ' + err.message };
   }
 }
 
@@ -501,24 +517,32 @@ export async function validateTaskPermission(
   task: Task,
   requestingUserId?: string | null
 ): Promise<{ allowed: boolean; reason?: string }> {
-  if (!requestingUserId) return { allowed: true };
+  if (!requestingUserId) {
+    return { allowed: false, reason: 'Acesso negado: identificação do usuário obrigatória.' };
+  }
+
+  const isSuper = await checkCloudSqlSuperUser(requestingUserId);
+  if (isSuper) return { allowed: true };
+
+  if (task.createdById === requestingUserId || task.assigneeId === requestingUserId) {
+    return { allowed: true };
+  }
+
+  if (task.projectId) {
+    const projPerm = await validateProjectPermission(task.projectId, requestingUserId);
+    if (projPerm.allowed) return { allowed: true };
+  }
 
   const p = getPool();
-  if (!p) return { allowed: true };
-
-  try {
-    const isSuper = await checkCloudSqlSuperUser(requestingUserId);
-    if (isSuper) return { allowed: true };
-
-    if (task.createdById === requestingUserId || task.assigneeId === requestingUserId) {
+  if (!p) {
+    const memTask = inMemoryTasks.get(task.id);
+    if (memTask && (memTask.createdById === requestingUserId || memTask.assigneeId === requestingUserId)) {
       return { allowed: true };
     }
+    return { allowed: false, reason: 'Acesso negado: você não tem permissão para alterar esta atividade.' };
+  }
 
-    if (task.projectId) {
-      const projPerm = await validateProjectPermission(task.projectId, requestingUserId);
-      if (projPerm.allowed) return { allowed: true };
-    }
-
+  try {
     const taskRes = await p.query('SELECT project_id, created_by_id, assignee_id FROM "public"."task" WHERE id = $1', [task.id]);
     if (taskRes.rows.length > 0) {
       const row = taskRes.rows[0];
@@ -534,7 +558,7 @@ export async function validateTaskPermission(
     return { allowed: false, reason: 'Acesso negado: você não tem permissão para alterar esta atividade.' };
   } catch (err: any) {
     console.warn('[CloudSQL] validateTaskPermission error:', err.message);
-    return { allowed: true };
+    return { allowed: false, reason: 'Erro na validação de permissão: ' + err.message };
   }
 }
 
@@ -1791,6 +1815,10 @@ export async function syncUserToCloudSql(user: { id: string; name: string; email
 
 const inMemoryTokens = new Map<string, { id: string; name: string; email: string; isSuperUser: boolean }>();
 
+function hashApiToken(token: string): string {
+  return crypto.createHash('sha256').update(token.trim()).digest('hex');
+}
+
 export async function ensureApiTokenSchema(): Promise<void> {
   const p = getPool();
   if (!p) return;
@@ -1798,6 +1826,8 @@ export async function ensureApiTokenSchema(): Promise<void> {
     await p.query(`
       ALTER TABLE "public"."user" 
       ADD COLUMN IF NOT EXISTS api_token TEXT UNIQUE;
+      ALTER TABLE "public"."user" 
+      ADD COLUMN IF NOT EXISTS api_token_hash TEXT UNIQUE;
     `);
   } catch (err: any) {
     console.warn('[CloudSQL] ensureApiTokenSchema warning:', err.message);
@@ -1819,6 +1849,11 @@ export async function getUserByApiToken(token: string): Promise<{ id: string; na
     };
   }
 
+  const tokenHash = hashApiToken(cleanToken);
+
+  if (inMemoryTokens.has(tokenHash)) {
+    return inMemoryTokens.get(tokenHash)!;
+  }
   if (inMemoryTokens.has(cleanToken)) {
     return inMemoryTokens.get(cleanToken)!;
   }
@@ -1829,8 +1864,8 @@ export async function getUserByApiToken(token: string): Promise<{ id: string; na
   try {
     await ensureApiTokenSchema();
     const res = await p.query(
-      `SELECT id, name, email, is_super_user, api_token FROM "public"."user" WHERE api_token = $1 LIMIT 1`,
-      [cleanToken]
+      `SELECT id, name, email, is_super_user FROM "public"."user" WHERE api_token_hash = $1 OR api_token = $2 LIMIT 1`,
+      [tokenHash, cleanToken]
     );
     if (res.rows.length === 0) return null;
     const row = res.rows[0];
@@ -1840,11 +1875,11 @@ export async function getUserByApiToken(token: string): Promise<{ id: string; na
       email: row.email || '',
       isSuperUser: Boolean(row.is_super_user)
     };
-    inMemoryTokens.set(cleanToken, userObj);
+    inMemoryTokens.set(tokenHash, userObj);
     return userObj;
   } catch (err: any) {
     console.warn('[CloudSQL] getUserByApiToken error:', err.message);
-    return inMemoryTokens.get(cleanToken) || null;
+    return inMemoryTokens.get(tokenHash) || inMemoryTokens.get(cleanToken) || null;
   }
 }
 
@@ -1852,7 +1887,7 @@ export async function getUserApiToken(userId: string): Promise<string | null> {
   if (!userId) return null;
 
   for (const [tok, u] of inMemoryTokens.entries()) {
-    if (u.id === userId) return tok;
+    if (u.id === userId && tok.startsWith('gp_live_')) return tok;
   }
 
   const p = getPool();
@@ -1877,7 +1912,7 @@ export async function getUserApiToken(userId: string): Promise<string | null> {
   } catch (err: any) {
     console.warn('[CloudSQL] getUserApiToken error:', err.message);
     for (const [tok, u] of inMemoryTokens.entries()) {
-      if (u.id === userId) return tok;
+      if (u.id === userId && tok.startsWith('gp_live_')) return tok;
     }
     return null;
   }
@@ -1892,12 +1927,15 @@ export async function generateUserApiToken(userId: string, requestingUserId?: st
   }
 
   const token = 'gp_live_' + crypto.randomBytes(24).toString('hex');
-  inMemoryTokens.set(token, {
+  const tokenHash = hashApiToken(token);
+  const userObj = {
     id: userId,
     name: 'Victor Reghini',
     email: `${userId}@example.com`,
     isSuperUser: true
-  });
+  };
+  inMemoryTokens.set(tokenHash, userObj);
+  inMemoryTokens.set(token, userObj);
 
   const p = getPool();
   if (!p) return token;
@@ -1905,12 +1943,13 @@ export async function generateUserApiToken(userId: string, requestingUserId?: st
   try {
     await ensureApiTokenSchema();
     await p.query(
-      `INSERT INTO "public"."user" (id, name, email, api_token, updated_at)
+      `INSERT INTO "public"."user" (id, name, email, api_token_hash, updated_at)
        VALUES ($1, 'Usuário', $1 || '@example.com', $2, NOW())
        ON CONFLICT (id) DO UPDATE SET 
-         api_token = EXCLUDED.api_token,
+         api_token_hash = EXCLUDED.api_token_hash,
+         api_token = NULL,
          updated_at = NOW()`,
-      [userId, token]
+      [userId, tokenHash]
     );
     return token;
   } catch (err: any) {
@@ -1937,7 +1976,7 @@ export async function revokeUserApiToken(userId: string, requestingUserId?: stri
   try {
     await ensureApiTokenSchema();
     await p.query(
-      `UPDATE "public"."user" SET api_token = NULL, updated_at = NOW() WHERE id = $1`,
+      `UPDATE "public"."user" SET api_token = NULL, api_token_hash = NULL, updated_at = NOW() WHERE id = $1`,
       [userId]
     );
   } catch (err: any) {

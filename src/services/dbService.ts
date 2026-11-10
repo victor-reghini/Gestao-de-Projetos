@@ -1669,6 +1669,14 @@ export const BugReportService = {
   },
 
   async uploadScreenshot(file: File): Promise<string> {
+    const isTestRuntime = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    if (isTestRuntime) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+    }
     try {
       const storageRef = ref(storage, `bug-reports/${Date.now()}_${file.name}`);
       const snapshot = await uploadBytes(storageRef, file);
@@ -1722,6 +1730,14 @@ export const MemberService = {
 // --- USER PROFILE & AVATAR SERVICE ---
 export const UserService = {
   async uploadAvatar(userId: string, file: File): Promise<string> {
+    const isTestRuntime = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+    if (isTestRuntime) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(file);
+      });
+    }
     try {
       const storageRef = ref(storage, `avatars/${userId}_${Date.now()}_${file.name}`);
       const snapshot = await uploadBytes(storageRef, file);

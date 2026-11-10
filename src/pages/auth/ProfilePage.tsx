@@ -17,10 +17,7 @@ import {
   Eye, 
   EyeOff, 
   Trash2, 
-  Terminal,
-  Send,
-  FolderPlus,
-  Edit3
+  Terminal
 } from 'lucide-react';
 import { ImageCropperModal } from '@/components/profile/ImageCropperModal';
 
@@ -51,14 +48,14 @@ export const ProfilePage: React.FC = () => {
           if (token) {
             setApiToken(token);
           } else {
-            const local = localStorage.getItem('gestao_user_api_token_' + user.id);
-            if (local) setApiToken(local);
+            const session = sessionStorage.getItem('gestao_user_api_token_' + user.id);
+            if (session) setApiToken(session);
           }
         }
       } catch {
         if (isMounted) {
-          const local = localStorage.getItem('gestao_user_api_token_' + user.id);
-          if (local) setApiToken(local);
+          const session = sessionStorage.getItem('gestao_user_api_token_' + user.id);
+          if (session) setApiToken(session);
         }
       } finally {
         if (isMounted) setLoadingToken(false);
@@ -77,7 +74,8 @@ export const ProfilePage: React.FC = () => {
       if (!token) {
         token = 'gp_live_' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
       }
-      localStorage.setItem('gestao_user_api_token_' + user.id, token);
+      sessionStorage.setItem('gestao_user_api_token_' + user.id, token);
+      localStorage.removeItem('gestao_user_api_token_' + user.id); // clean legacy plain-text key
       setApiToken(token);
       setShowToken(true);
       setStatusMsg({ type: 'success', text: 'Novo Token de API gerado com sucesso! Guarde-o em segurança.' });
@@ -97,6 +95,7 @@ export const ProfilePage: React.FC = () => {
     setStatusMsg(null);
     try {
       await CloudSqlService.revokeUserApiToken(user.id);
+      sessionStorage.removeItem('gestao_user_api_token_' + user.id);
       localStorage.removeItem('gestao_user_api_token_' + user.id);
       setApiToken(null);
       setStatusMsg({ type: 'success', text: 'Token de API revogado com sucesso.' });

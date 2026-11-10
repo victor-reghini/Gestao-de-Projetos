@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { handleApiRequest } from '../services/server/apiHandler';
-import { getUserByApiToken, generateUserApiToken, getUserApiToken } from '../services/server/cloudSqlDb';
+import { getUserByApiToken } from '../services/server/cloudSqlDb';
 import { CloudSqlService } from '../services/cloudSqlService';
 
 if (typeof localStorage === 'undefined') {

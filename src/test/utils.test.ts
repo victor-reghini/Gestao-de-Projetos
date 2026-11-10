@@ -4,7 +4,6 @@ import {
   shouldAutoCompleteTask, 
   getPriorityBadgeClass, 
   getPriorityLabel, 
-  PRIORITY_CONFIG,
   DEFAULT_TASK_PRIORITY 
 } from '@/utils/taskUtils';
 import { 

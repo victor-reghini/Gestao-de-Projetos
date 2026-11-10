@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { ProjectDocument } from '@/types';
 import { DocumentService } from '@/services/dbService';
 import { Edit3, Save, Trash2, Plus, FileText } from 'lucide-react';
@@ -147,7 +148,7 @@ export const MarkdownDocViewer: React.FC<MarkdownDocViewerProps> = ({
     // Paragraphs
     html = html.replace(/\n\n/gim, '<p class="my-3 text-slate-300 leading-relaxed"></p>');
 
-    return html;
+    return DOMPurify.sanitize(html);
   };
 
   return (
