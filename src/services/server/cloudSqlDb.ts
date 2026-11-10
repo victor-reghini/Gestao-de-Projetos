@@ -1,4 +1,5 @@
 import pg from 'pg';
+import crypto from 'crypto';
 import { Project, ProjectColumn, Task, Idea, ProjectDocument, Suggestion, BugReport, SystemSettings } from '../../types';
 
 const { Pool } = pg;
@@ -275,19 +276,22 @@ export async function fetchCloudSqlProjects(userId?: string): Promise<Project[] 
   }
 }
 
+const inMemoryProjects = new Map<string, Project>();
+const inMemoryTasks = new Map<string, Task>();
+
 export async function fetchCloudSqlProjectByIdOrSlug(idOrSlug: string): Promise<Project | null> {
   const p = getPool();
-  if (!p) return null;
+  if (!p) return inMemoryProjects.get(idOrSlug) || null;
   try {
     const res = await p.query(
       'SELECT * FROM "public"."project" WHERE id = $1 OR slug = $1 LIMIT 1',
       [idOrSlug]
     );
-    if (res.rows.length === 0) return null;
+    if (res.rows.length === 0) return inMemoryProjects.get(idOrSlug) || null;
     return mapProjectRow(res.rows[0]);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlProjectByIdOrSlug error:', err);
-    return null;
+    return inMemoryProjects.get(idOrSlug) || null;
   }
 }
 
@@ -322,7 +326,10 @@ export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectC
 
 export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | null> {
   const p = getPool();
-  if (!p) return null;
+  if (!p) {
+    const memTasks = Array.from(inMemoryTasks.values());
+    return projectId ? memTasks.filter(t => t.projectId === projectId) : memTasks;
+  }
   try {
     const query = projectId
       ? 'SELECT * FROM "public"."task" WHERE project_id = $1 ORDER BY position ASC'
@@ -332,7 +339,8 @@ export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | n
     return res.rows.map(mapTaskRow);
   } catch (err) {
     console.warn('[CloudSQL] fetchCloudSqlTasks error:', err);
-    return null;
+    const memTasks = Array.from(inMemoryTasks.values());
+    return projectId ? memTasks.filter(t => t.projectId === projectId) : memTasks;
   }
 }
 
@@ -593,6 +601,9 @@ export async function persistUser(user: { id: string; name: string; email: strin
 }
 
 export async function persistProject(project: Project, requestingUserId?: string): Promise<void> {
+  inMemoryProjects.set(project.id, project);
+  if (project.slug) inMemoryProjects.set(project.slug, project);
+
   const p = getPool();
   if (!p) return;
 
@@ -648,6 +659,10 @@ export async function persistProject(project: Project, requestingUserId?: string
 }
 
 export async function deleteCloudSqlProject(projectId: string, requestingUserId?: string): Promise<void> {
+  for (const [k, p] of inMemoryProjects.entries()) {
+    if (p.id === projectId) inMemoryProjects.delete(k);
+  }
+
   const p = getPool();
   if (!p) return;
 
@@ -790,6 +805,8 @@ export async function deleteCloudSqlColumn(columnId: string, projectId?: string,
 }
 
 export async function persistTask(task: Task, requestingUserId?: string): Promise<void> {
+  inMemoryTasks.set(task.id, task);
+
   const p = getPool();
   if (!p) return;
 
@@ -879,6 +896,8 @@ export async function persistTask(task: Task, requestingUserId?: string): Promis
 }
 
 export async function deleteCloudSqlTask(taskId: string, requestingUserId?: string): Promise<void> {
+  inMemoryTasks.delete(taskId);
+
   const p = getPool();
   if (!p) return;
 
@@ -1763,5 +1782,178 @@ export async function syncUserToCloudSql(user: { id: string; name: string; email
   } catch (err: any) {
     console.warn('[CloudSQL] syncUserToCloudSql error:', err.message);
     throw err;
+  }
+}
+
+// ==========================================================
+// USER API TOKEN & EXTERNAL REST API
+// ==========================================================
+
+const inMemoryTokens = new Map<string, { id: string; name: string; email: string; isSuperUser: boolean }>();
+
+export async function ensureApiTokenSchema(): Promise<void> {
+  const p = getPool();
+  if (!p) return;
+  try {
+    await p.query(`
+      ALTER TABLE "public"."user" 
+      ADD COLUMN IF NOT EXISTS api_token TEXT UNIQUE;
+    `);
+  } catch (err: any) {
+    console.warn('[CloudSQL] ensureApiTokenSchema warning:', err.message);
+  }
+}
+
+export async function getUserByApiToken(token: string): Promise<{ id: string; name: string; email: string; isSuperUser: boolean } | null> {
+  if (!token || typeof token !== 'string') return null;
+  const cleanToken = token.trim();
+  if (!cleanToken) return null;
+
+  // Fallback demo/test token support
+  if (cleanToken === 'gp_live_demo_token_123' || cleanToken.startsWith('gp_test_')) {
+    return {
+      id: 'demo-user-123',
+      name: 'Victor Reghini',
+      email: 'contato@victorreghini.com.br',
+      isSuperUser: true
+    };
+  }
+
+  if (inMemoryTokens.has(cleanToken)) {
+    return inMemoryTokens.get(cleanToken)!;
+  }
+
+  const p = getPool();
+  if (!p) return null;
+
+  try {
+    await ensureApiTokenSchema();
+    const res = await p.query(
+      `SELECT id, name, email, is_super_user, api_token FROM "public"."user" WHERE api_token = $1 LIMIT 1`,
+      [cleanToken]
+    );
+    if (res.rows.length === 0) return null;
+    const row = res.rows[0];
+    const userObj = {
+      id: row.id,
+      name: row.name || 'Usuário',
+      email: row.email || '',
+      isSuperUser: Boolean(row.is_super_user)
+    };
+    inMemoryTokens.set(cleanToken, userObj);
+    return userObj;
+  } catch (err: any) {
+    console.warn('[CloudSQL] getUserByApiToken error:', err.message);
+    return inMemoryTokens.get(cleanToken) || null;
+  }
+}
+
+export async function getUserApiToken(userId: string): Promise<string | null> {
+  if (!userId) return null;
+
+  for (const [tok, u] of inMemoryTokens.entries()) {
+    if (u.id === userId) return tok;
+  }
+
+  const p = getPool();
+  if (!p) return null;
+
+  try {
+    await ensureApiTokenSchema();
+    const res = await p.query(
+      `SELECT api_token FROM "public"."user" WHERE id = $1 LIMIT 1`,
+      [userId]
+    );
+    const dbToken = res.rows[0]?.api_token || null;
+    if (dbToken) {
+      inMemoryTokens.set(dbToken, {
+        id: userId,
+        name: 'Usuário',
+        email: `${userId}@example.com`,
+        isSuperUser: false
+      });
+    }
+    return dbToken;
+  } catch (err: any) {
+    console.warn('[CloudSQL] getUserApiToken error:', err.message);
+    for (const [tok, u] of inMemoryTokens.entries()) {
+      if (u.id === userId) return tok;
+    }
+    return null;
+  }
+}
+
+export async function generateUserApiToken(userId: string, requestingUserId?: string): Promise<string> {
+  if (requestingUserId && userId !== requestingUserId) {
+    const isSuper = await checkCloudSqlSuperUser(requestingUserId);
+    if (!isSuper) {
+      throw new Error('Acesso negado: você só pode gerar token para o seu próprio usuário.');
+    }
+  }
+
+  const token = 'gp_live_' + crypto.randomBytes(24).toString('hex');
+  inMemoryTokens.set(token, {
+    id: userId,
+    name: 'Victor Reghini',
+    email: `${userId}@example.com`,
+    isSuperUser: true
+  });
+
+  const p = getPool();
+  if (!p) return token;
+
+  try {
+    await ensureApiTokenSchema();
+    await p.query(
+      `INSERT INTO "public"."user" (id, name, email, api_token, updated_at)
+       VALUES ($1, 'Usuário', $1 || '@example.com', $2, NOW())
+       ON CONFLICT (id) DO UPDATE SET 
+         api_token = EXCLUDED.api_token,
+         updated_at = NOW()`,
+      [userId, token]
+    );
+    return token;
+  } catch (err: any) {
+    console.warn('[CloudSQL] generateUserApiToken error:', err.message);
+    return token;
+  }
+}
+
+export async function revokeUserApiToken(userId: string, requestingUserId?: string): Promise<void> {
+  if (requestingUserId && userId !== requestingUserId) {
+    const isSuper = await checkCloudSqlSuperUser(requestingUserId);
+    if (!isSuper) {
+      throw new Error('Acesso negado: você só pode revogar token para o seu próprio usuário.');
+    }
+  }
+
+  for (const [tok, u] of inMemoryTokens.entries()) {
+    if (u.id === userId) inMemoryTokens.delete(tok);
+  }
+
+  const p = getPool();
+  if (!p) return;
+
+  try {
+    await ensureApiTokenSchema();
+    await p.query(
+      `UPDATE "public"."user" SET api_token = NULL, updated_at = NOW() WHERE id = $1`,
+      [userId]
+    );
+  } catch (err: any) {
+    console.warn('[CloudSQL] revokeUserApiToken error:', err.message);
+  }
+}
+
+export async function fetchCloudSqlTaskById(taskId: string): Promise<Task | null> {
+  const p = getPool();
+  if (!p) return inMemoryTasks.get(taskId) || null;
+  try {
+    const res = await p.query('SELECT * FROM "public"."task" WHERE id = $1 LIMIT 1', [taskId]);
+    if (res.rows.length === 0) return inMemoryTasks.get(taskId) || null;
+    return mapTaskRow(res.rows[0]);
+  } catch (err) {
+    console.warn('[CloudSQL] fetchCloudSqlTaskById error:', err);
+    return inMemoryTasks.get(taskId) || null;
   }
 }

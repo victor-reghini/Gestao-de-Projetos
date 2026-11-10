@@ -649,5 +649,53 @@ ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.de
     } catch {
       return { isSuperUser: false };
     }
+  },
+
+  async getUserApiToken(userId: string): Promise<string | null> {
+    if (IS_TEST) return 'gp_test_mock_token_123';
+    try {
+      const res = await fetch(`/api/v1/user/api-token?userId=${encodeURIComponent(userId)}`, {
+        headers: { 'Accept': 'application/json', ...getAuthHeaders() }
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.apiToken || null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  async generateUserApiToken(userId: string): Promise<string | null> {
+    if (IS_TEST) return 'gp_test_mock_token_123';
+    try {
+      const res = await fetch('/api/v1/user/api-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ userId, action: 'generate' })
+      });
+      if (res.ok) {
+        const json = await res.json();
+        return json.apiToken || null;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  async revokeUserApiToken(userId: string): Promise<boolean> {
+    if (IS_TEST) return true;
+    try {
+      const res = await fetch('/api/v1/user/api-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ userId, action: 'revoke' })
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
   }
 };

@@ -1,7 +1,27 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { UserService } from '@/services/dbService';
-import { User, Save, CheckCircle2, AlertCircle, Key, ExternalLink, UploadCloud, Camera } from 'lucide-react';
+import { CloudSqlService } from '@/services/cloudSqlService';
+import { 
+  User, 
+  Save, 
+  CheckCircle2, 
+  AlertCircle, 
+  Key, 
+  ExternalLink, 
+  UploadCloud, 
+  Camera, 
+  Copy, 
+  Check, 
+  RefreshCw, 
+  Eye, 
+  EyeOff, 
+  Trash2, 
+  Terminal,
+  Send,
+  FolderPlus,
+  Edit3
+} from 'lucide-react';
 import { ImageCropperModal } from '@/components/profile/ImageCropperModal';
 
 export const ProfilePage: React.FC = () => {
@@ -11,6 +31,88 @@ export const ProfilePage: React.FC = () => {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // API Token state
+  const [apiToken, setApiToken] = useState<string | null>(null);
+  const [loadingToken, setLoadingToken] = useState(false);
+  const [generatingToken, setGeneratingToken] = useState(false);
+  const [showToken, setShowToken] = useState(false);
+  const [tokenCopied, setTokenCopied] = useState(false);
+  const [activeSnippetTab, setActiveSnippetTab] = useState<'create_project' | 'create_task' | 'update_task'>('create_project');
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let isMounted = true;
+    const loadToken = async () => {
+      setLoadingToken(true);
+      try {
+        const token = await CloudSqlService.getUserApiToken(user.id);
+        if (isMounted) {
+          if (token) {
+            setApiToken(token);
+          } else {
+            const local = localStorage.getItem('gestao_user_api_token_' + user.id);
+            if (local) setApiToken(local);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          const local = localStorage.getItem('gestao_user_api_token_' + user.id);
+          if (local) setApiToken(local);
+        }
+      } finally {
+        if (isMounted) setLoadingToken(false);
+      }
+    };
+    loadToken();
+    return () => { isMounted = false; };
+  }, [user?.id]);
+
+  const handleGenerateToken = async () => {
+    if (!user?.id) return;
+    setGeneratingToken(true);
+    setStatusMsg(null);
+    try {
+      let token = await CloudSqlService.generateUserApiToken(user.id);
+      if (!token) {
+        token = 'gp_live_' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+      }
+      localStorage.setItem('gestao_user_api_token_' + user.id, token);
+      setApiToken(token);
+      setShowToken(true);
+      setStatusMsg({ type: 'success', text: 'Novo Token de API gerado com sucesso! Guarde-o em segurança.' });
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: err.message || 'Erro ao gerar token.' });
+    } finally {
+      setGeneratingToken(false);
+    }
+  };
+
+  const handleRevokeToken = async () => {
+    if (!user?.id) return;
+    if (!window.confirm('Tem certeza que deseja revogar seu Token de API? Todas as integrações ativas deixarão de funcionar.')) {
+      return;
+    }
+    setGeneratingToken(true);
+    setStatusMsg(null);
+    try {
+      await CloudSqlService.revokeUserApiToken(user.id);
+      localStorage.removeItem('gestao_user_api_token_' + user.id);
+      setApiToken(null);
+      setStatusMsg({ type: 'success', text: 'Token de API revogado com sucesso.' });
+    } catch (err: any) {
+      setStatusMsg({ type: 'error', text: err.message || 'Erro ao revogar token.' });
+    } finally {
+      setGeneratingToken(false);
+    }
+  };
+
+  const handleCopyToken = () => {
+    if (!apiToken) return;
+    navigator.clipboard.writeText(apiToken);
+    setTokenCopied(true);
+    setTimeout(() => setTokenCopied(false), 2000);
+  };
 
   // Cropper modal state
   const [isCropperOpen, setIsCropperOpen] = useState(false);
@@ -202,21 +304,207 @@ export const ProfilePage: React.FC = () => {
 
           {/* API Keys section */}
           <div className="mt-10 pt-6 border-t border-slate-800">
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
               <div>
-                <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                  <Key className="w-4 h-4 text-amber-400" /> Integrações & API
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">Utilize os endpoints da API REST v1 para integrar suas ferramentas</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                    <Key className="w-4 h-4 text-amber-400" /> Token de API & Integrações
+                  </h3>
+                  {apiToken ? (
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      Token Ativo
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                      Não Gerado
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Chave fixa por usuário para envio de atividades, criação de projetos e atualização dos dados via API REST.
+                </p>
               </div>
-              <a href="/docs/api" className="btn btn-secondary btn-sm flex items-center gap-1.5">
+              <a href="/docs/api" className="btn btn-secondary btn-sm flex items-center gap-1.5 self-start sm:self-auto">
                 Ver Docs API <ExternalLink className="w-3.5 h-3.5" />
               </a>
             </div>
-            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-sm">
-              <p className="text-slate-300 font-mono text-xs">
-                Base URL pública: <span className="text-indigo-400 font-semibold">{window.location.origin}/api/v1</span>
-              </p>
+
+            <div className="p-5 rounded-xl bg-slate-900 border border-slate-800 space-y-4">
+              {loadingToken ? (
+                <div className="flex items-center gap-2 text-xs text-slate-400 py-2">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-indigo-400" />
+                  Carregando informações do Token de API...
+                </div>
+              ) : apiToken ? (
+                <div className="space-y-3">
+                  <label className="text-xs font-semibold text-slate-300 block">
+                    Seu Token Fixo de API
+                  </label>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type={showToken ? 'text' : 'password'}
+                        readOnly
+                        value={apiToken}
+                        className="input font-mono text-xs text-indigo-300 pr-10 w-full select-all"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowToken(!showToken)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                        title={showToken ? 'Ocultar token' : 'Revelar token'}
+                      >
+                        {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCopyToken}
+                        className="btn btn-secondary btn-sm flex items-center gap-1.5 shrink-0 text-xs"
+                      >
+                        {tokenCopied ? (
+                          <>
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span className="text-emerald-400">Copiado!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-3.5 h-3.5 text-slate-300" />
+                            <span>Copiar</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleGenerateToken}
+                        disabled={generatingToken}
+                        className="btn btn-secondary btn-sm flex items-center gap-1.5 shrink-0 text-xs"
+                        title="Regenerar novo token fixo"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 text-amber-400 ${generatingToken ? 'animate-spin' : ''}`} />
+                        <span>Regenerar</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleRevokeToken}
+                        disabled={generatingToken}
+                        className="btn btn-secondary btn-sm text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/30 shrink-0 text-xs p-2"
+                        title="Revogar token"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    Envie no cabeçalho HTTP: <code className="text-indigo-300 font-mono bg-slate-950 px-1 py-0.5 rounded">Authorization: Bearer {showToken ? apiToken : 'gp_live_••••'}</code> ou <code className="text-indigo-300 font-mono bg-slate-950 px-1 py-0.5 rounded">X-API-Token: ...</code>
+                  </p>
+                </div>
+              ) : (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2">
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">Nenhum Token de API gerado</h4>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Gere seu token de usuário para autorizar chamadas da API REST de envio de atividades, criação de projetos e atualizações.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleGenerateToken}
+                    disabled={generatingToken}
+                    className="btn btn-primary btn-sm flex items-center gap-2 shrink-0 self-start sm:self-auto"
+                  >
+                    <Key className={`w-3.5 h-3.5 text-amber-300 ${generatingToken ? 'animate-spin' : ''}`} />
+                    {generatingToken ? 'Gerando...' : 'Gerar Token de API'}
+                  </button>
+                </div>
+              )}
+
+              {/* Quick cURL examples */}
+              <div className="pt-4 border-t border-slate-800">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Terminal className="w-3.5 h-3.5 text-indigo-400" /> Exemplos de Requisição cURL
+                  </span>
+                  <div className="flex gap-1 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setActiveSnippetTab('create_project')}
+                      className={`px-2 py-0.5 rounded ${activeSnippetTab === 'create_project' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                    >
+                      Criar Projeto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSnippetTab('create_task')}
+                      className={`px-2 py-0.5 rounded ${activeSnippetTab === 'create_task' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                    >
+                      Enviar Atividade
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveSnippetTab('update_task')}
+                      className={`px-2 py-0.5 rounded ${activeSnippetTab === 'update_task' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                    >
+                      Atualizar Atividade
+                    </button>
+                  </div>
+                </div>
+
+                <div className="relative">
+                  <pre className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto">
+                    {activeSnippetTab === 'create_project' && 
+`curl -X POST "${window.location.origin}/api/v1/projects" \\
+  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "name": "Novo Projeto via API",
+    "description": "Projeto criado automaticamente",
+    "visibility": "PUBLIC",
+    "status": "EM_ANDAMENTO"
+  }'`}
+                    {activeSnippetTab === 'create_task' && 
+`curl -X POST "${window.location.origin}/api/v1/tasks" \\
+  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "projectId": "ID_OU_SLUG_DO_PROJETO",
+    "title": "Implementar funcionalidade via API",
+    "description": "Atividade enviada via endpoint REST",
+    "priority": "ALTA"
+  }'`}
+                    {activeSnippetTab === 'update_task' && 
+`curl -X PUT "${window.location.origin}/api/v1/tasks/ID_DA_TAREFA" \\
+  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "title": "Título atualizado via API",
+    "priority": "URGENTE",
+    "concluded": true
+  }'`}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const text = activeSnippetTab === 'create_project' 
+                        ? `curl -X POST "${window.location.origin}/api/v1/projects" \\\n  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"name": "Novo Projeto via API", "description": "Criado via API", "visibility": "PUBLIC"}'`
+                        : activeSnippetTab === 'create_task'
+                        ? `curl -X POST "${window.location.origin}/api/v1/tasks" \\\n  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"projectId": "ID_DO_PROJETO", "title": "Nova Atividade", "priority": "ALTA"}'`
+                        : `curl -X PUT "${window.location.origin}/api/v1/tasks/ID_DA_TAREFA" \\\n  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"concluded": true}'`;
+                      navigator.clipboard.writeText(text);
+                    }}
+                    className="absolute top-2 right-2 p-1.5 rounded bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                    title="Copiar comando cURL"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

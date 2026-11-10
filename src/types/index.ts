@@ -30,6 +30,7 @@ export interface User {
   email: string;
   avatarUrl?: string;
   isSuperUser?: boolean;
+  apiToken?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -8,22 +8,125 @@ import {
   Zap, 
   Globe, 
   Terminal, 
-  CheckCircle2
+  CheckCircle2,
+  Key
 } from 'lucide-react';
 
 interface EndpointDoc {
-  method: 'GET' | 'POST';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH';
   path: string;
   description: string;
+  requiresAuth?: boolean;
   sampleBody?: any;
   sampleResponse: any;
 }
 
 const ENDPOINTS: EndpointDoc[] = [
   {
+    method: 'POST',
+    path: '/api/v1/projects',
+    description: 'Cria um novo projeto via API. Associa o usuário dono através do Token e inicializa as colunas padrão no Kanban.',
+    requiresAuth: true,
+    sampleBody: {
+      name: "Novo Projeto Automatizado",
+      description: "Projeto gerenciado via pipeline ou integração externa.",
+      shortDescription: "Resumo do projeto automatizado",
+      visibility: "PUBLIC",
+      status: "EM_ANDAMENTO",
+      technologies: ["Node.js", "Docker", "PostgreSQL"]
+    },
+    sampleResponse: {
+      success: true,
+      message: "Projeto criado com sucesso via API!",
+      data: {
+        id: "proj_1720000000_abc",
+        ownerId: "user-123",
+        ownerName: "Victor Reghini",
+        name: "Novo Projeto Automatizado",
+        slug: "novo-projeto-automatizado",
+        visibility: "PUBLIC",
+        status: "EM_ANDAMENTO",
+        createdAt: "2026-11-09T18:00:00.000Z"
+      }
+    }
+  },
+  {
+    method: 'PUT',
+    path: '/api/v1/projects/:slug',
+    description: 'Atualiza dados de um projeto existente via API (nome, descrição, status, visibilidade, etc.). Requer Token do proprietário ou membro.',
+    requiresAuth: true,
+    sampleBody: {
+      name: "Sistema de Gestão v2",
+      description: "Descrição atualizada via endpoint REST.",
+      status: "CONCLUIDO"
+    },
+    sampleResponse: {
+      success: true,
+      message: "Projeto atualizado com sucesso via API!",
+      data: {
+        id: "proj-1",
+        name: "Sistema de Gestão v2",
+        slug: "sistema-gestao-projetos",
+        status: "CONCLUIDO",
+        updatedAt: "2026-11-09T18:05:00.000Z"
+      }
+    }
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/tasks',
+    description: 'Envia uma nova atividade (tarefa) para um projeto via API. Mapeia automaticamente para o Backlog se columnId for omitido.',
+    requiresAuth: true,
+    sampleBody: {
+      projectId: "sistema-gestao-projetos",
+      title: "Realizar deploy contínuo em ambiente de staging",
+      description: "Pipeline configurado via GitHub Actions.",
+      priority: "ALTA",
+      dueDate: "2026-11-15T23:59:59.000Z"
+    },
+    sampleResponse: {
+      success: true,
+      message: "Atividade criada com sucesso via API!",
+      data: {
+        id: "task_1720000000_xyz",
+        projectId: "proj-1",
+        columnId: "col_proj-1_backlog",
+        title: "Realizar deploy contínuo em ambiente de staging",
+        priority: "ALTA",
+        position: 3,
+        concluded: false,
+        createdById: "user-123",
+        createdAt: "2026-11-09T18:00:00.000Z"
+      }
+    }
+  },
+  {
+    method: 'PUT',
+    path: '/api/v1/tasks/:id',
+    description: 'Atualiza o estado, título, coluna, prioridade ou conclusão de uma atividade existente via API.',
+    requiresAuth: true,
+    sampleBody: {
+      title: "Realizar deploy contínuo em staging [Concluído]",
+      priority: "URGENTE",
+      concluded: true
+    },
+    sampleResponse: {
+      success: true,
+      message: "Atividade atualizada com sucesso via API!",
+      data: {
+        id: "task-101",
+        title: "Realizar deploy contínuo em staging [Concluído]",
+        priority: "URGENTE",
+        concluded: true,
+        updatedAt: "2026-11-09T18:10:00.000Z"
+      }
+    }
+  },
+  {
     method: 'GET',
     path: '/api/v1/projects/:slug',
     description: 'Obtém os dados públicos do projeto especificado pelo slug.',
+    requiresAuth: false,
     sampleResponse: {
       success: true,
       data: {
@@ -143,11 +246,22 @@ export const ApiDocsPage: React.FC = () => {
 
   const currentUrl = `${window.location.origin}${selectedEndpoint.path.replace(':slug', slugInput)}`;
 
-  const generateCurl = () => {
-    if (selectedEndpoint.method === 'GET') {
-      return `curl -X GET "${currentUrl}" \\\n  -H "Accept: application/json"`;
+  const getMethodBadgeClass = (m: string) => {
+    switch (m) {
+      case 'GET': return 'bg-emerald-500/20 text-emerald-300';
+      case 'POST': return 'bg-blue-500/20 text-blue-300';
+      case 'PUT': return 'bg-amber-500/20 text-amber-300';
+      case 'PATCH': return 'bg-purple-500/20 text-purple-300';
+      default: return 'bg-slate-700 text-slate-300';
     }
-    return `curl -X POST "${currentUrl}" \\\n  -H "Content-Type: application/json" \\\n  -d '${customBody.replace(/\n/g, '')}'`;
+  };
+
+  const generateCurl = () => {
+    const authLine = selectedEndpoint.requiresAuth ? ` \\\n  -H "Authorization: Bearer SEU_API_TOKEN"` : '';
+    if (selectedEndpoint.method === 'GET') {
+      return `curl -X GET "${currentUrl}" \\\n  -H "Accept: application/json"${authLine}`;
+    }
+    return `curl -X ${selectedEndpoint.method} "${currentUrl}" \\\n  -H "Content-Type: application/json"${authLine} \\\n  -d '${customBody.replace(/\n/g, '')}'`;
   };
 
   const copyCurl = () => {
@@ -206,17 +320,21 @@ export const ApiDocsPage: React.FC = () => {
           Integre suas aplicações, webhooks e formulários de suporte externos diretamente aos seus projetos cadastrados. Protegido com rate limiting, validação de tipos e CORS configurado.
         </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-3">
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-2.5 text-xs">
-            <ShieldCheck className="w-4 h-4 text-emerald-400" />
-            <span className="text-slate-300">Rate Limiting Ativo (60 req/min)</span>
+            <Key className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="text-slate-300">Validação via Token Fixo (Bearer ou X-API-Token)</span>
           </div>
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-2.5 text-xs">
-            <Globe className="w-4 h-4 text-blue-400" />
+            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="text-slate-300">Rate Limiting Ativo (120 req/min)</span>
+          </div>
+          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-2.5 text-xs">
+            <Globe className="w-4 h-4 text-blue-400 shrink-0" />
             <span className="text-slate-300">CORS Habilitado (Qualquer Origem)</span>
           </div>
           <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 flex items-center gap-2.5 text-xs">
-            <Zap className="w-4 h-4 text-amber-400" />
+            <Zap className="w-4 h-4 text-purple-400 shrink-0" />
             <span className="text-slate-300">Resposta Padrão JSON Envelope</span>
           </div>
         </div>
@@ -239,13 +357,18 @@ export const ApiDocsPage: React.FC = () => {
                   : 'bg-slate-900/40 border-slate-800 hover:bg-slate-900/80 hover:border-slate-700'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono ${
-                  ep.method === 'GET' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
-                }`}>
-                  {ep.method}
-                </span>
-                <span className="font-mono text-xs text-white truncate font-medium">{ep.path}</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded font-mono shrink-0 ${getMethodBadgeClass(ep.method)}`}>
+                    {ep.method}
+                  </span>
+                  <span className="font-mono text-xs text-white truncate font-medium">{ep.path}</span>
+                </div>
+                {ep.requiresAuth && (
+                  <span className="text-[9px] px-1.5 py-0.2 rounded font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20 shrink-0">
+                    Token
+                  </span>
+                )}
               </div>
               <p className="text-[11px] text-slate-400 line-clamp-2">{ep.description}</p>
             </button>
@@ -256,12 +379,15 @@ export const ApiDocsPage: React.FC = () => {
         <div className="lg:col-span-8 glass-panel p-6 space-y-6">
           <div>
             <div className="flex items-center gap-2.5 mb-2">
-              <span className={`text-xs font-bold px-2.5 py-1 rounded font-mono ${
-                selectedEndpoint.method === 'GET' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300'
-              }`}>
+              <span className={`text-xs font-bold px-2.5 py-1 rounded font-mono ${getMethodBadgeClass(selectedEndpoint.method)}`}>
                 {selectedEndpoint.method}
               </span>
               <h2 className="text-lg font-bold text-white font-mono">{selectedEndpoint.path}</h2>
+              {selectedEndpoint.requiresAuth && (
+                <span className="text-[10px] px-2 py-0.5 rounded font-semibold bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                  <Key className="w-3 h-3" /> Requer Token Fixo
+                </span>
+              )}
             </div>
             <p className="text-xs text-slate-300">{selectedEndpoint.description}</p>
           </div>
@@ -270,13 +396,13 @@ export const ApiDocsPage: React.FC = () => {
           <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
             <label className="text-xs font-semibold text-white block">Parâmetros da Requisição:</label>
             <div className="flex items-center gap-3">
-              <span className="font-mono text-xs text-blue-300">:slug =</span>
+              <span className="font-mono text-xs text-blue-300">:slug / :id =</span>
               <input
                 type="text"
                 value={slugInput}
                 onChange={(e) => setSlugInput(e.target.value)}
                 className="input text-xs font-mono max-w-xs"
-                placeholder="slug-do-projeto"
+                placeholder="slug-ou-id"
               />
             </div>
           </div>
@@ -300,8 +426,8 @@ export const ApiDocsPage: React.FC = () => {
             </pre>
           </div>
 
-          {/* Request Payload (if POST) */}
-          {selectedEndpoint.method === 'POST' && (
+          {/* Request Payload (if POST, PUT, PATCH) */}
+          {(selectedEndpoint.method === 'POST' || selectedEndpoint.method === 'PUT' || selectedEndpoint.method === 'PATCH') && (
             <div>
               <label className="text-xs font-semibold text-slate-400 block mb-2">
                 Corpo da Requisição (JSON Payload):
