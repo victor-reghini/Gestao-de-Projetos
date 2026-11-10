@@ -35,6 +35,7 @@ export const ProfilePage: React.FC = () => {
   const [generatingToken, setGeneratingToken] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [tokenCopied, setTokenCopied] = useState(false);
+  const [curlCopied, setCurlCopied] = useState(false);
   const [activeSnippetTab, setActiveSnippetTab] = useState<'create_project' | 'create_task' | 'update_task'>('create_project');
 
   useEffect(() => {
@@ -111,6 +112,47 @@ export const ProfilePage: React.FC = () => {
     navigator.clipboard.writeText(apiToken);
     setTokenCopied(true);
     setTimeout(() => setTokenCopied(false), 2000);
+  };
+
+  const getCurlSnippet = (tab: 'create_project' | 'create_task' | 'update_task') => {
+    const origin = window.location.origin;
+    const token = apiToken || 'SEU_API_TOKEN';
+    if (tab === 'create_project') {
+      return `curl -X POST "${origin}/api/v1/projects" \\
+  -H "Authorization: Bearer ${token}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "name": "Novo Projeto via API",
+    "description": "Projeto criado automaticamente",
+    "visibility": "PUBLIC",
+    "status": "EM_ANDAMENTO"
+  }'`;
+    }
+    if (tab === 'create_task') {
+      return `curl -X POST "${origin}/api/v1/tasks" \\
+  -H "Authorization: Bearer ${token}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "projectId": "ID_OU_SLUG_DO_PROJETO",
+    "title": "Implementar funcionalidade via API",
+    "description": "Atividade enviada via endpoint REST",
+    "priority": "ALTA"
+  }'`;
+    }
+    return `curl -X PUT "${origin}/api/v1/tasks/ID_DA_TAREFA" \\
+  -H "Authorization: Bearer ${token}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "title": "Título atualizado via API",
+    "priority": "URGENTE",
+    "concluded": true
+  }'`;
+  };
+
+  const handleCopyCurl = () => {
+    navigator.clipboard.writeText(getCurlSnippet(activeSnippetTab));
+    setCurlCopied(true);
+    setTimeout(() => setCurlCopied(false), 2000);
   };
 
   // Cropper modal state
@@ -339,25 +381,34 @@ export const ProfilePage: React.FC = () => {
                   <label className="text-xs font-semibold text-slate-300 block">
                     Seu Token Fixo de API
                   </label>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <div className="relative flex-1">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                    <div className="relative flex-1 min-w-0">
                       <input
                         type={showToken ? 'text' : 'password'}
                         readOnly
                         value={apiToken}
-                        className="input font-mono text-xs text-indigo-300 pr-10 w-full select-all"
+                        className="input font-mono text-xs text-indigo-300 w-full select-all"
+                        style={{ paddingRight: '2.5rem' }}
                       />
                       <button
                         type="button"
                         onClick={() => setShowToken(!showToken)}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                        style={{
+                          position: 'absolute',
+                          right: '0.625rem',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          background: 'transparent',
+                          border: 'none',
+                        }}
+                        className="text-slate-400 hover:text-white transition-colors p-1 flex items-center justify-center cursor-pointer"
                         title={showToken ? 'Ocultar token' : 'Revelar token'}
                       >
                         {showToken ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <button
                         type="button"
                         onClick={handleCopyToken}
@@ -366,7 +417,7 @@ export const ProfilePage: React.FC = () => {
                         {tokenCopied ? (
                           <>
                             <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            <span className="text-emerald-400">Copiado!</span>
+                            <span className="text-emerald-400 font-medium">Copiado!</span>
                           </>
                         ) : (
                           <>
@@ -391,7 +442,7 @@ export const ProfilePage: React.FC = () => {
                         type="button"
                         onClick={handleRevokeToken}
                         disabled={generatingToken}
-                        className="btn btn-secondary btn-sm text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/30 shrink-0 text-xs p-2"
+                        className="btn btn-secondary btn-sm text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/30 shrink-0 text-xs px-2.5"
                         title="Revogar token"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -425,30 +476,54 @@ export const ProfilePage: React.FC = () => {
               )}
 
               {/* Quick cURL examples */}
-              <div className="pt-4 border-t border-slate-800">
-                <div className="flex items-center justify-between mb-2">
+              <div className="pt-4 border-t border-slate-800 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
                   <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                     <Terminal className="w-3.5 h-3.5 text-indigo-400" /> Exemplos de Requisição cURL
                   </span>
-                  <div className="flex gap-1 text-[11px]">
+                  <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-lg border border-slate-800 text-[11px] self-start sm:self-auto">
                     <button
                       type="button"
                       onClick={() => setActiveSnippetTab('create_project')}
-                      className={`px-2 py-0.5 rounded ${activeSnippetTab === 'create_project' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                      style={{
+                        background: activeSnippetTab === 'create_project' ? 'var(--blue-600, #4f46e5)' : 'transparent',
+                        border: 'none',
+                      }}
+                      className={`px-2.5 py-1 rounded font-medium transition-all cursor-pointer ${
+                        activeSnippetTab === 'create_project'
+                          ? 'text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                      }`}
                     >
                       Criar Projeto
                     </button>
                     <button
                       type="button"
                       onClick={() => setActiveSnippetTab('create_task')}
-                      className={`px-2 py-0.5 rounded ${activeSnippetTab === 'create_task' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                      style={{
+                        background: activeSnippetTab === 'create_task' ? 'var(--blue-600, #4f46e5)' : 'transparent',
+                        border: 'none',
+                      }}
+                      className={`px-2.5 py-1 rounded font-medium transition-all cursor-pointer ${
+                        activeSnippetTab === 'create_task'
+                          ? 'text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                      }`}
                     >
                       Enviar Atividade
                     </button>
                     <button
                       type="button"
                       onClick={() => setActiveSnippetTab('update_task')}
-                      className={`px-2 py-0.5 rounded ${activeSnippetTab === 'update_task' ? 'bg-indigo-600 text-white font-medium' : 'text-slate-400 hover:text-white'}`}
+                      style={{
+                        background: activeSnippetTab === 'update_task' ? 'var(--blue-600, #4f46e5)' : 'transparent',
+                        border: 'none',
+                      }}
+                      className={`px-2.5 py-1 rounded font-medium transition-all cursor-pointer ${
+                        activeSnippetTab === 'update_task'
+                          ? 'text-white shadow-sm'
+                          : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
+                      }`}
                     >
                       Atualizar Atividade
                     </button>
@@ -456,51 +531,31 @@ export const ProfilePage: React.FC = () => {
                 </div>
 
                 <div className="relative">
-                  <pre className="p-3 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto">
-                    {activeSnippetTab === 'create_project' && 
-`curl -X POST "${window.location.origin}/api/v1/projects" \\
-  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "name": "Novo Projeto via API",
-    "description": "Projeto criado automaticamente",
-    "visibility": "PUBLIC",
-    "status": "EM_ANDAMENTO"
-  }'`}
-                    {activeSnippetTab === 'create_task' && 
-`curl -X POST "${window.location.origin}/api/v1/tasks" \\
-  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "projectId": "ID_OU_SLUG_DO_PROJETO",
-    "title": "Implementar funcionalidade via API",
-    "description": "Atividade enviada via endpoint REST",
-    "priority": "ALTA"
-  }'`}
-                    {activeSnippetTab === 'update_task' && 
-`curl -X PUT "${window.location.origin}/api/v1/tasks/ID_DA_TAREFA" \\
-  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "title": "Título atualizado via API",
-    "priority": "URGENTE",
-    "concluded": true
-  }'`}
+                  <pre className="p-3.5 pr-24 rounded-lg bg-slate-950 border border-slate-800 text-[11px] font-mono text-slate-300 overflow-x-auto leading-relaxed">
+                    {getCurlSnippet(activeSnippetTab)}
                   </pre>
                   <button
                     type="button"
-                    onClick={() => {
-                      const text = activeSnippetTab === 'create_project' 
-                        ? `curl -X POST "${window.location.origin}/api/v1/projects" \\\n  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"name": "Novo Projeto via API", "description": "Criado via API", "visibility": "PUBLIC"}'`
-                        : activeSnippetTab === 'create_task'
-                        ? `curl -X POST "${window.location.origin}/api/v1/tasks" \\\n  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"projectId": "ID_DO_PROJETO", "title": "Nova Atividade", "priority": "ALTA"}'`
-                        : `curl -X PUT "${window.location.origin}/api/v1/tasks/ID_DA_TAREFA" \\\n  -H "Authorization: Bearer ${apiToken || 'SEU_API_TOKEN'}" \\\n  -H "Content-Type: application/json" \\\n  -d '{"concluded": true}'`;
-                      navigator.clipboard.writeText(text);
+                    onClick={handleCopyCurl}
+                    style={{
+                      position: 'absolute',
+                      top: '0.625rem',
+                      right: '0.625rem',
                     }}
-                    className="absolute top-2 right-2 p-1.5 rounded bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 transition-colors"
+                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/60 shadow-sm transition-all text-[11px] cursor-pointer"
                     title="Copiar comando cURL"
                   >
-                    <Copy className="w-3.5 h-3.5" />
+                    {curlCopied ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="text-emerald-400 font-medium">Copiado!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5" />
+                        <span>Copiar</span>
+                      </>
+                    )}
                   </button>
                 </div>
               </div>
