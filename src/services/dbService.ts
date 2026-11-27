@@ -600,8 +600,15 @@ export const ColumnService = {
           // Projeto novo no banco sem colunas criadas ainda
           return await this.createDefaultColumns(projectId);
         }
+        // Banco indisponível: nunca criar colunas padrão no servidor
+        return deduplicateColumns(
+          getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId)
+        );
       } catch (err) {
         console.warn('Falha ao buscar colunas do banco de dados:', err);
+        return deduplicateColumns(
+          getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId)
+        );
       }
     }
 
@@ -622,6 +629,23 @@ export const ColumnService = {
     const existing = allCols.filter(c => c.projectId === projectId);
     if (existing.length > 0) {
       return deduplicateColumns(existing);
+    }
+
+    if (isUserConnected()) {
+      try {
+        const remoteCols = await CloudSqlService.fetchColumns(projectId);
+        if (remoteCols === null) {
+          return [];
+        }
+        if (remoteCols.length > 0) {
+          const finalCols = deduplicateColumns(remoteCols);
+          const otherCols = allCols.filter(c => c.projectId !== projectId);
+          setLocalData('columns', [...otherCols, ...finalCols]);
+          return finalCols;
+        }
+      } catch {
+        return [];
+      }
     }
 
     const defaults = [
@@ -659,16 +683,38 @@ export const ColumnService = {
   async create(projectId: string, name: string, color = '#6366f1', autoComplete = false): Promise<ProjectColumn> {
     RealtimeSyncService.beginSync();
     try {
-      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-      const projectCols = allCols.filter(c => c.projectId === projectId);
-      const id = generateColumnId(projectId, slugify(name));
+      let allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+      let projectCols = allCols.filter(c => c.projectId === projectId);
+
+      if (isUserConnected() && projectCols.length === 0) {
+        const remoteCols = await CloudSqlService.fetchColumns(projectId);
+        if (remoteCols && remoteCols.length > 0) {
+          projectCols = deduplicateColumns(remoteCols);
+          const otherCols = allCols.filter(c => c.projectId !== projectId);
+          allCols = [...otherCols, ...projectCols];
+          setLocalData('columns', allCols);
+        }
+      }
+
+      const normalizedKey = slugify(name);
+      const hasDuplicate = projectCols.some(
+        c => slugify(c.name) === normalizedKey || (c.key || '').toLowerCase().trim() === normalizedKey
+      );
+      if (hasDuplicate) {
+        throw new Error('Já existe uma coluna com este nome neste projeto.');
+      }
+
+      const nextPosition = projectCols.length > 0
+        ? Math.max(...projectCols.map(c => c.position ?? 0)) + 1
+        : 0;
+      const id = generateColumnId(projectId, normalizedKey);
 
       const newCol: ProjectColumn = {
         id,
         projectId,
         name,
-        key: slugify(name),
-        position: projectCols.length,
+        key: normalizedKey,
+        position: nextPosition,
         color,
         autoComplete,
         createdAt: new Date().toISOString(),

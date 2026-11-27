@@ -52,7 +52,7 @@ export function getPool(): pg.Pool | null {
       pool = new Pool({
         connectionString: config.connectionString,
         ssl: config.ssl,
-        max: 5,
+        max: 3,
         connectionTimeoutMillis: 10000,
         idleTimeoutMillis: 20000
       });
@@ -64,7 +64,7 @@ export function getPool(): pg.Pool | null {
         user: config.user,
         password: config.password,
         ssl: config.ssl,
-        max: 5,
+        max: 3,
         connectionTimeoutMillis: 10000,
         idleTimeoutMillis: 20000
       });
@@ -343,8 +343,11 @@ export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectC
 export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | null> {
   const p = getPool();
   if (!p) {
-    const memTasks = Array.from(inMemoryTasks.values());
-    return projectId ? memTasks.filter(t => t.projectId === projectId) : memTasks;
+    if (process.env.NODE_ENV === 'test') {
+      const memTasks = Array.from(inMemoryTasks.values());
+      return projectId ? memTasks.filter(t => t.projectId === projectId) : memTasks;
+    }
+    return null;
   }
   try {
     const query = projectId
@@ -354,9 +357,8 @@ export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | n
     const res = await p.query(query, params);
     return res.rows.map(mapTaskRow);
   } catch (err) {
-    console.warn('[CloudSQL] fetchCloudSqlTasks error:', err);
-    const memTasks = Array.from(inMemoryTasks.values());
-    return projectId ? memTasks.filter(t => t.projectId === projectId) : memTasks;
+    console.warn('[NeonDB] fetchCloudSqlTasks error:', err);
+    return null;
   }
 }
 
@@ -769,6 +771,26 @@ export async function persistColumn(column: ProjectColumn, requestingUserId?: st
          ON CONFLICT (id) DO NOTHING`,
         [column.projectId]
       );
+    }
+
+    // Prevent duplicate columns with same normalized key or name under another ID in the same project
+    const idCheck = await p.query(
+      'SELECT id FROM "public"."project_column" WHERE id = $1 AND project_id = $2 LIMIT 1',
+      [column.id, column.projectId]
+    );
+    if (idCheck.rows.length === 0) {
+      const normalizedKey = (column.key || column.name || '').trim();
+      const normalizedName = (column.name || '').trim();
+      const dupCheck = await p.query(
+        `SELECT id FROM "public"."project_column"
+         WHERE project_id = $1
+           AND (LOWER(TRIM(key)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) = LOWER(TRIM($3)))
+         LIMIT 1`,
+        [column.projectId, normalizedKey, normalizedName]
+      );
+      if (dupCheck.rows.length > 0) {
+        return;
+      }
     }
 
     await p.query(
@@ -1284,8 +1306,27 @@ export async function syncAllToCloudSql(data: {
       );
     }
 
-    // 2. Columns
+    // 2. Columns (deduplicate by project_id + key/name and remap any duplicate column IDs for tasks)
+    const colIdMap = new Map<string, string>();
     for (const col of (data.columns || [])) {
+      const idCheck = await client.query(
+        'SELECT id FROM "public"."project_column" WHERE id = $1 AND project_id = $2 LIMIT 1',
+        [col.id, col.projectId]
+      );
+      if (idCheck.rows.length === 0) {
+        const dupCheck = await client.query(
+          `SELECT id FROM "public"."project_column"
+           WHERE project_id = $1
+             AND (LOWER(TRIM(key)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) = LOWER(TRIM($3)))
+           LIMIT 1`,
+          [col.projectId, (col.key || col.name || '').trim(), (col.name || '').trim()]
+        );
+        if (dupCheck.rows.length > 0) {
+          colIdMap.set(col.id, dupCheck.rows[0].id);
+          continue;
+        }
+      }
+
       await client.query(
         `INSERT INTO "public"."project_column" 
          (id, project_id, name, key, position, color, auto_complete, created_at, updated_at)
@@ -1322,6 +1363,8 @@ export async function syncAllToCloudSql(data: {
         );
       }
 
+      const resolvedColumnId = colIdMap.get(task.columnId) || task.columnId;
+
       await client.query(
         `INSERT INTO "public"."task" 
          (id, project_id, column_id, title, description, priority, position, due_date, concluded, created_by_id, created_by_name, created_at, updated_at)
@@ -1338,7 +1381,7 @@ export async function syncAllToCloudSql(data: {
         [
           task.id,
           task.projectId,
-          task.columnId,
+          resolvedColumnId,
           task.title,
           task.description || '',
           task.priority || 'MEDIA',

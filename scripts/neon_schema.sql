@@ -225,6 +225,7 @@ CREATE INDEX IF NOT EXISTS "bug_report_projectId_idx" ON public.bug_report USING
 CREATE INDEX IF NOT EXISTS "idea_convertedProjectId_idx" ON public.idea USING btree (converted_project_id);
 CREATE INDEX IF NOT EXISTS "idea_ownerId_idx" ON public.idea USING btree (owner_id);
 CREATE INDEX IF NOT EXISTS "project_column_projectId_idx" ON public.project_column USING btree (project_id);
+CREATE UNIQUE INDEX IF NOT EXISTS "project_column_project_id_key_unique" ON public.project_column (project_id, LOWER(TRIM(key)));
 CREATE INDEX IF NOT EXISTS "project_document_projectId_idx" ON public.project_document USING btree (project_id);
 CREATE INDEX IF NOT EXISTS "project_member_projectId_idx" ON public.project_member USING btree (project_id);
 CREATE INDEX IF NOT EXISTS "project_member_userId_idx" ON public.project_member USING btree (user_id);

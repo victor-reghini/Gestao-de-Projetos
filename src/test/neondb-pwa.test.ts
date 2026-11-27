@@ -1,9 +1,10 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { getCloudSqlConfig } from '@/services/server/cloudSqlDb';
+import { getCloudSqlConfig, fetchCloudSqlTasks } from '@/services/server/cloudSqlDb';
+import { handleApiRequest } from '@/services/server/apiHandler';
 import { CloudSqlService } from '@/services/cloudSqlService';
-import { ProjectService, IdeaService } from '@/services/dbService';
+import { ProjectService, IdeaService, ColumnService } from '@/services/dbService';
 
 describe('NeonDB Configuration & PWA Assets', () => {
   const originalDbUrl = process.env.DATABASE_URL;
@@ -86,6 +87,71 @@ describe('NeonDB Configuration & PWA Assets', () => {
       process.env.NODE_ENV = origEnv;
       projSpy.mockRestore();
       ideaSpy.mockRestore();
+    }
+  });
+
+  it('returns null from fetchCloudSqlTasks and 503 from /api/v1/cloudsql/tasks when DB is unavailable in production', async () => {
+    const origEnv = process.env.NODE_ENV;
+    const origNetlifyUrl = process.env.NETLIFY_DATABASE_URL;
+    const origUnpooled = process.env.DATABASE_URL_UNPOOLED;
+    process.env.NODE_ENV = 'production';
+    delete process.env.DATABASE_URL;
+    delete process.env.NETLIFY_DATABASE_URL;
+    delete process.env.DATABASE_URL_UNPOOLED;
+    delete process.env.PGHOST;
+
+    try {
+      const tasks = await fetchCloudSqlTasks('proj-1');
+      expect(tasks).toBeNull();
+
+      const res = await handleApiRequest({
+        method: 'GET',
+        path: '/api/v1/cloudsql/tasks',
+        headers: {},
+        queryParams: { projectId: 'proj-1' }
+      });
+      expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.body).data).toBeNull();
+    } finally {
+      process.env.NODE_ENV = origEnv;
+      if (origNetlifyUrl !== undefined) process.env.NETLIFY_DATABASE_URL = origNetlifyUrl;
+      if (origUnpooled !== undefined) process.env.DATABASE_URL_UNPOOLED = origUnpooled;
+    }
+  });
+
+  it('prevents duplicate column creation and never recreates default columns when DB fails or already has columns', async () => {
+    localStorage.clear();
+    sessionStorage.setItem('gestao_demo_user', JSON.stringify({ id: 'demo-user-123' }));
+    const origEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+
+    const existingCols = [
+      { id: 'col-1', projectId: 'proj-dup-guard', name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', createdAt: '', updatedAt: '' }
+    ];
+    const syncColSpy = vi.spyOn(CloudSqlService, 'syncColumn').mockResolvedValue(true);
+    const fetchColsSpy = vi.spyOn(CloudSqlService, 'fetchColumns').mockResolvedValueOnce(null);
+
+    try {
+      // 1. DB unavailable (fetchColumns returns null) -> must not create defaults on server
+      const onErrorCols = await ColumnService.getByProject('proj-dup-guard');
+      expect(onErrorCols).toEqual([]);
+      expect(syncColSpy).not.toHaveBeenCalled();
+
+      // 2. createDefaultColumns sees existing remote columns -> returns them without recreating defaults
+      fetchColsSpy.mockResolvedValueOnce(existingCols as any);
+      const fromRemote = await ColumnService.createDefaultColumns('proj-dup-guard');
+      expect(fromRemote.map(c => c.id)).toEqual(['col-1']);
+      expect(syncColSpy).not.toHaveBeenCalled();
+
+      // 3. ColumnService.create rejects duplicate column name within the same project
+      await expect(
+        ColumnService.create('proj-dup-guard', 'Backlog')
+      ).rejects.toThrow(/Já existe uma coluna com este nome/);
+    } finally {
+      process.env.NODE_ENV = origEnv;
+      sessionStorage.clear();
+      syncColSpy.mockRestore();
+      fetchColsSpy.mockRestore();
     }
   });
 });
