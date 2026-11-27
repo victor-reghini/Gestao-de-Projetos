@@ -110,7 +110,7 @@ export const PublicProjectPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-fade-in space-y-8">
       {/* Hero Banner */}
-      <div className="p-8 rounded-3xl bg-gradient-to-br from-blue-950/40 via-slate-900 to-slate-900 border border-slate-800 shadow-2xl relative overflow-hidden">
+      <div className="public-hero-banner p-8 rounded-3xl bg-gradient-to-br from-blue-950/40 via-slate-900 to-slate-900 border border-slate-800 shadow-2xl relative overflow-hidden">
         <div className="relative z-10 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="badge badge-public flex items-center gap-1">

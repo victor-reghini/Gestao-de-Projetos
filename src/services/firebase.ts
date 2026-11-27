@@ -1,7 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
-import { getDatabase } from 'firebase/database';
 
 // Cache para fallback de valores presentes nos documentos .env
 let envFileCache: Record<string, string> | null = null;
@@ -92,14 +91,12 @@ const firebaseConfig = {
   projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID', 'gestao-projetos-ea44c'),
   storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET', 'gestao-projetos-ea44c.firebasestorage.app'),
   messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID', '947089271740'),
-  appId: getEnvVar('VITE_FIREBASE_APP_ID', '1:947089271740:web:97823942e9df0e58cf59b9'),
-  databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL', 'https://gestao-projetos-ea44c-default-rtdb.firebaseio.com')
+  appId: getEnvVar('VITE_FIREBASE_APP_ID', '1:947089271740:web:97823942e9df0e58cf59b9')
 };
 
-// Initialize Firebase App singleton
+// Initialize Firebase App singleton (Auth & Storage only)
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
-export const rtdb = getDatabase(app);
 export const googleProvider = new GoogleAuthProvider();
 

@@ -76,7 +76,7 @@ export const SuperUserPage: React.FC = () => {
           <h1 className="text-2xl font-bold text-white mb-2">Acesso Restrito ao Super Usuário</h1>
           <p className="text-slate-400 max-w-md mx-auto text-sm mb-6">
             Esta área de configuração global requer permissões de Super Usuário concedidas exclusivamente 
-            na tabela <code className="text-rose-300 font-mono bg-slate-900 px-2 py-0.5 rounded">user</code> do banco de dados Cloud SQL.
+            na tabela <code className="text-rose-300 font-mono bg-slate-900 px-2 py-0.5 rounded">user</code> do banco de dados NeonDB.
           </p>
           <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-left font-mono text-xs text-slate-400 mb-6 max-w-lg mx-auto">
             <p className="text-slate-500 mb-1">// Validação ativa no PostgreSQL:</p>
@@ -129,7 +129,7 @@ export const SuperUserPage: React.FC = () => {
               <ShieldCheck className="w-6 h-6" />
             </div>
             <h1 className="text-2xl font-bold text-white tracking-tight">Painel do Super Usuário</h1>
-            <span className="badge badge-primary text-xs px-2.5 py-1">Cloud SQL DB</span>
+            <span className="badge badge-primary text-xs px-2.5 py-1">NeonDB (PostgreSQL)</span>
           </div>
           <p className="text-sm text-slate-400">
             Definição de tema global, paleta de cores e controle de publicação (permissão de novos cadastros).
@@ -453,7 +453,7 @@ export const SuperUserPage: React.FC = () => {
 
             <div className="pt-2 border-t border-slate-800">
               <p className="text-[11px] text-slate-400 font-semibold mb-1 flex items-center gap-1.5">
-                <Terminal className="w-3.5 h-3.5 text-slate-400" /> Promover usuário via Cloud SQL Studio:
+                <Terminal className="w-3.5 h-3.5 text-slate-400" /> Promover usuário via Neon SQL Editor:
               </p>
               <pre className="p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-[11px] text-blue-300 font-mono overflow-x-auto">
 {`UPDATE "public"."user"

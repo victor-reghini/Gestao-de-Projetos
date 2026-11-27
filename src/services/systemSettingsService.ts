@@ -63,6 +63,12 @@ export const SystemSettingsService = {
     // Theme (Dark / Light)
     root.setAttribute('data-theme', settings.theme);
 
+    // Sync PWA theme-color meta tag
+    const themeMeta = document.querySelector('meta[name="theme-color"]');
+    if (themeMeta) {
+      themeMeta.setAttribute('content', settings.theme === 'light' ? '#ffffff' : '#0f172a');
+    }
+
     // Primary Colors
     const primary = settings.primaryColor || '#2563eb';
     const primaryHover = adjustColorBrightness(primary, -12);

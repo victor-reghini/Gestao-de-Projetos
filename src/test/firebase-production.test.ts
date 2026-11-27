@@ -1,16 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { initializeApp, getApps } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
-import { getDatabase } from 'firebase/database';
 import { handler } from '../../netlify/functions/api';
-import { 
-  ProjectService, 
-  TaskService, 
-  ColumnService, 
-  IdeaService, 
-  DocumentService, 
-  SuggestionService, 
-  BugReportService, 
+import {
+  ProjectService,
+  TaskService,
+  ColumnService,
+  IdeaService,
+  DocumentService,
+  SuggestionService,
+  BugReportService,
   UserService
 } from '../services/dbService';
 
@@ -22,13 +22,12 @@ const firebaseConfig = {
   projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID'),
   storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET'),
   messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID'),
-  appId: getEnvVar('VITE_FIREBASE_APP_ID'),
-  databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL')
+  appId: getEnvVar('VITE_FIREBASE_APP_ID')
 };
 
 describe('Firebase & Production Integration Test Suite', () => {
   const app = getApps().length > 0 ? getApps()[0] : initializeApp(firebaseConfig);
-  const rtdb = getDatabase(app);
+  const auth = getAuth(app);
   const storage = getStorage(app);
 
   describe('1. Firebase Configuration & Instance Verification', () => {
@@ -38,8 +37,8 @@ describe('Firebase & Production Integration Test Suite', () => {
       expect(app.options.storageBucket).toBe('gestao-projetos-ea44c.firebasestorage.app');
     });
 
-    it('initializes Realtime Database and Storage instances correctly', () => {
-      expect(rtdb.app.name).toBe(app.name);
+    it('initializes Auth and Storage instances correctly', () => {
+      expect(auth.app.name).toBe(app.name);
       expect(storage.app.name).toBe(app.name);
     });
   });
@@ -48,7 +47,7 @@ describe('Firebase & Production Integration Test Suite', () => {
     it('uploads a test avatar and generates a valid download URL', async () => {
       const testContent = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]); // PNG header bytes
       const testFile = new File([testContent], 'avatar-test.png', { type: 'image/png' });
-      
+
       const avatarUrl = await UserService.uploadAvatar('test-user-integ', testFile);
       expect(avatarUrl).toBeDefined();
       expect(typeof avatarUrl).toBe('string');
@@ -257,8 +256,8 @@ describe('Firebase & Production Integration Test Suite', () => {
 
       // Convert to project
       const convertedProject = await IdeaService.convertToProject(
-        idea.id, 
-        'test-user-prod', 
+        idea.id,
+        'test-user-prod',
         'Test Production User'
       );
 

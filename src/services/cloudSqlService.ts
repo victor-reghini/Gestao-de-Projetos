@@ -5,6 +5,7 @@ export interface CloudSqlStatus {
   connected: boolean;
   configured: boolean;
   message: string;
+  host?: string;
   counts?: {
     projects: number;
     columns: number;
@@ -42,13 +43,13 @@ export const CloudSqlService = {
       return {
         connected: false,
         configured: false,
-        message: 'API do Cloud SQL não respondeu.'
+        message: 'API do NeonDB não respondeu.'
       };
     } catch {
       return {
         connected: false,
         configured: false,
-        message: 'Servidor local sem conexão com Cloud SQL.'
+        message: 'Servidor local sem conexão com NeonDB.'
       };
     }
   },
@@ -469,8 +470,8 @@ export const CloudSqlService = {
   }): string {
     const lines: string[] = [
       '--',
-      '-- SCRIPT DE CARGA PARA GOOGLE CLOUD SQL (Cloud SQL Studio)',
-      `-- Instância: gestao-projetos-ea44c-instance (Database: gestao-projetos-ea44c-database)`,
+      '-- SCRIPT DE CARGA PARA NEONDB (Neon SQL Editor)',
+      '-- Banco: PostgreSQL Serverless (NeonDB)',
       `-- Gerado em: ${new Date().toISOString()}`,
       '--',
       'BEGIN;',

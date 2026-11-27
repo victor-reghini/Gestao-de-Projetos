@@ -1,5 +1,0 @@
-{
-  "type": "module",
-  "main": "index.esm.js",
-  "types": "index.d.ts"
-}

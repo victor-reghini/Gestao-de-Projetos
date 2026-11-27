@@ -306,7 +306,7 @@ export const ApiDocsPage: React.FC = () => {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 animate-fade-in space-y-8">
       {/* Top Banner */}
-      <div className="p-8 rounded-3xl bg-gradient-to-r from-blue-950/50 via-slate-900 to-slate-900 border border-blue-500/25 shadow-xl space-y-3">
+      <div className="public-hero-banner p-8 rounded-3xl bg-gradient-to-r from-blue-950/50 via-slate-900 to-slate-900 border border-blue-500/25 shadow-xl space-y-3">
         <div className="flex items-center gap-2">
           <span className="p-2 rounded-xl bg-blue-500/20 text-blue-400">
             <Code2 className="w-6 h-6" />
@@ -395,7 +395,7 @@ export const ApiDocsPage: React.FC = () => {
           {/* Dynamic Parameters */}
           <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
             <label className="text-xs font-semibold text-white block">Parâmetros da Requisição:</label>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <span className="font-mono text-xs text-blue-300">:slug / :id =</span>
               <input
                 type="text"

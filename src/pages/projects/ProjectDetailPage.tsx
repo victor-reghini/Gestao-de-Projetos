@@ -196,15 +196,15 @@ export const ProjectDetailPage: React.FC = () => {
   return (
     <div className="page-wrapper animate-fade-in space-y-6">
       {/* Breadcrumb & Quick Actions */}
-      <div className="flex items-center justify-between text-xs text-slate-400">
-        <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+        <div className="flex items-center gap-1.5 min-w-0">
           <Link to="/projects" className="hover:text-blue-400 transition-colors">Projetos</Link>
-          <ChevronRight className="w-3.5 h-3.5" />
+          <ChevronRight className="w-3.5 h-3.5 shrink-0" />
           <span className="text-slate-200 font-medium truncate max-w-xs">{project.name}</span>
         </div>
 
         {project.visibility === 'PUBLIC' && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={copyPublicUrl}
               className="btn btn-secondary btn-sm py-1 px-2.5 text-xs flex items-center gap-1.5 text-slate-300"
@@ -225,7 +225,7 @@ export const ProjectDetailPage: React.FC = () => {
       </div>
 
       {/* Project Header Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-blue-950/40 via-slate-900 to-slate-900 border border-slate-800 shadow-xl">
+      <div className="project-banner p-6 rounded-2xl bg-gradient-to-r from-blue-950/40 via-slate-900 to-slate-900 border border-slate-800 shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1.5 max-w-3xl">
             <div className="flex items-center gap-2.5 flex-wrap">

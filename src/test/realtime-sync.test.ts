@@ -20,8 +20,8 @@ describe('Firebase Realtime Database & Sync Cache Architecture Tests', () => {
       const status = RealtimeSyncService.getCurrentStatus();
       expect(status.state).toBe('synced');
       expect(status.pendingChangesCount).toBe(0);
-      expect(status.source).toBe('realtime');
-      expect(status.message).toContain('Realtime Database');
+      expect(status.source).toBe('neondb');
+      expect(status.message).toContain('NeonDB');
     });
 
     it('detects online status using isBrowserOnline helper', () => {

@@ -1,18 +1,9 @@
-import { 
-  ref as rtdbRef, 
-  set as rtdbSet, 
-  get as rtdbGet, 
-  update as rtdbUpdate, 
-  remove as rtdbRemove, 
-  onValue as rtdbOnValue, 
-  off as rtdbOff,
-  DataSnapshot
-} from 'firebase/database';
-import { rtdb } from './firebase';
 import { Task, ProjectColumn, SyncState, SyncValidationStatus } from '@/types';
+import { CloudSqlService } from './cloudSqlService';
 
 const IS_TEST = typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
 const SYNC_QUEUE_KEY = 'gestao_offline_sync_queue';
+const BROADCAST_CHANNEL_NAME = 'gestao_projetos_sync';
 
 export interface SyncQueueItem {
   id: string;
@@ -31,17 +22,55 @@ export interface ProjectSyncInfo {
   clientVersion: string;
 }
 
-// In-memory status tracking
 let currentSyncState: SyncState = 'synced';
 
 export function getCurrentSyncState(): SyncState {
   return currentSyncState;
 }
+
 let lastSyncedAt: string = new Date().toISOString();
-let isRtdbConnected = false;
 let syncStatusListeners: ((status: SyncValidationStatus) => void)[] = [];
 let activeSyncCount = 0;
 let lastSyncError = false;
+
+type BoardListener = (data: { tasks?: Task[]; columns?: ProjectColumn[]; syncInfo?: ProjectSyncInfo }) => void;
+const boardListeners = new Map<string, Set<BoardListener>>();
+
+let broadcastChannel: BroadcastChannel | null = null;
+function getBroadcastChannel(): BroadcastChannel | null {
+  if (IS_TEST || typeof BroadcastChannel === 'undefined') return null;
+  if (!broadcastChannel) {
+    try {
+      broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+      broadcastChannel.onmessage = (event) => {
+        const msg = event.data;
+        if (!msg || !msg.projectId) return;
+        const listeners = boardListeners.get(msg.projectId);
+        if (!listeners) return;
+        listeners.forEach((cb) => {
+          try {
+            cb({
+              tasks: msg.tasks,
+              columns: msg.columns,
+              syncInfo: msg.syncInfo
+            });
+          } catch {}
+        });
+      };
+    } catch {
+      broadcastChannel = null;
+    }
+  }
+  return broadcastChannel;
+}
+
+function postBoardBroadcast(projectId: string, data: { tasks?: Task[]; columns?: ProjectColumn[]; syncInfo?: ProjectSyncInfo }): void {
+  const ch = getBroadcastChannel();
+  if (!ch) return;
+  try {
+    ch.postMessage({ projectId, ...data });
+  } catch {}
+}
 
 // Dynamically update site favicon (green, orange, red)
 export function updateFavicon(statusColor: 'green' | 'orange' | 'red'): void {
@@ -76,7 +105,6 @@ export function endSync(hasError = false): void {
   notifyStatusChange();
 }
 
-// Helper to determine network state
 export function isBrowserOnline(): boolean {
   if (typeof navigator === 'undefined') return true;
   return navigator.onLine !== false;
@@ -94,7 +122,6 @@ export function isSlowConnection(): boolean {
   return false;
 }
 
-// Queue management in localStorage for offline & slow connection resilience
 export function getSyncQueue(): SyncQueueItem[] {
   try {
     const raw = localStorage.getItem(SYNC_QUEUE_KEY);
@@ -122,37 +149,36 @@ export function enqueueSync(item: Omit<SyncQueueItem, 'id' | 'timestamp'>): void
   saveSyncQueue(queue);
 }
 
-// Notify subscribers about current sync status
 function notifyStatusChange(): void {
   const queue = getSyncQueue();
   const totalPending = queue.length + activeSyncCount;
 
   let state: SyncState = 'synced';
-  let message = 'Sincronizado com Realtime Database';
-  let source: 'realtime' | 'cloudsql' | 'localStorage' = 'realtime';
+  let message = 'Sincronizado com NeonDB (PostgreSQL)';
+  let source: SyncValidationStatus['source'] = 'neondb';
 
   if (!isBrowserOnline()) {
     state = 'offline';
-    message = totalPending > 0 
+    message = totalPending > 0
       ? `Modo Offline (${totalPending} alteração pendente salva no navegador)`
       : 'Modo Offline (Dados salvos no navegador)';
     source = 'localStorage';
   } else if (lastSyncError) {
     state = 'offline';
-    message = 'Erro ao sincronizar com o banco de dados';
-    source = 'cloudsql';
+    message = 'Erro ao sincronizar com o NeonDB';
+    source = 'neondb';
   } else if (isSlowConnection()) {
     state = 'slow_connection';
     message = 'Conexão Lenta (Operando via cache local com sincronização)';
     source = 'localStorage';
   } else if (totalPending > 0) {
     state = 'syncing';
-    message = `Sincronizando ${totalPending} alteração(ões)...`;
-    source = 'cloudsql';
+    message = `Sincronizando ${totalPending} alteração(ões) com NeonDB...`;
+    source = 'neondb';
   } else {
     state = 'synced';
-    message = 'Sincronizado via Realtime Database';
-    source = 'realtime';
+    message = 'Sincronizado com NeonDB (PostgreSQL)';
+    source = 'neondb';
   }
 
   currentSyncState = state;
@@ -170,7 +196,6 @@ function notifyStatusChange(): void {
     } catch {}
   });
 
-  // Dynamic favicon update
   let faviconColor: 'green' | 'orange' | 'red' = 'green';
   if (!isBrowserOnline() || lastSyncError) {
     faviconColor = 'red';
@@ -182,8 +207,9 @@ function notifyStatusChange(): void {
   updateFavicon(faviconColor);
 }
 
-// Initialize connection listeners in browser
 if (typeof window !== 'undefined' && !IS_TEST) {
+  getBroadcastChannel();
+
   window.addEventListener('online', () => {
     notifyStatusChange();
     RealtimeSyncService.processSyncQueue();
@@ -192,77 +218,11 @@ if (typeof window !== 'undefined' && !IS_TEST) {
   window.addEventListener('offline', () => {
     notifyStatusChange();
   });
-
-  try {
-    const connectedRef = rtdbRef(rtdb, '.info/connected');
-    rtdbOnValue(connectedRef, (snap: DataSnapshot) => {
-      isRtdbConnected = snap.val() === true;
-      if (isRtdbConnected) {
-        RealtimeSyncService.processSyncQueue();
-      }
-      notifyStatusChange();
-    });
-  } catch {}
-}
-
-// Safe async wrapper for RTDB writes
-async function safeRtdbWrite(promise: Promise<any>, timeoutMs = 2500): Promise<void> {
-  if (IS_TEST) return;
-  try {
-    const timer = new Promise<void>((_, reject) => 
-      setTimeout(() => reject(new Error('RTDB write timeout')), timeoutMs)
-    );
-    await Promise.race([promise, timer]);
-    lastSyncedAt = new Date().toISOString();
-    notifyStatusChange();
-  } catch (err) {
-    // If write fails or times out, keep calm; fallback handles it
-  }
-}
-
-// Safe async wrapper for RTDB queries
-async function safeRtdbGet<T>(refPath: string, fallback: T, timeoutMs = 2000): Promise<T> {
-  if (IS_TEST) return fallback;
-  if (!isBrowserOnline()) return fallback;
-
-  try {
-    const timer = new Promise<T>((resolve) => setTimeout(() => resolve(fallback), timeoutMs));
-    const query = async () => {
-      const snap = await rtdbGet(rtdbRef(rtdb, refPath));
-      if (snap.exists()) {
-        return snap.val() as T;
-      }
-      return fallback;
-    };
-    return await Promise.race([query(), timer]);
-  } catch {
-    return fallback;
-  }
-}
-
-// Convert Firestore/Local tasks to RTDB dictionary format
-function listToDict<T extends { id: string }>(items: T[]): Record<string, T> {
-  const dict: Record<string, T> = {};
-  for (const item of items) {
-    if (item && item.id) {
-      dict[item.id] = item;
-    }
-  }
-  return dict;
-}
-
-// Convert RTDB dictionary back to sorted list
-function dictToList<T extends { id: string }>(data: any): T[] {
-  if (!data) return [];
-  if (Array.isArray(data)) return data.filter(Boolean);
-  return Object.values(data).filter(Boolean) as T[];
 }
 
 export const RealtimeSyncService = {
-  // Subscribe to live Sync Status updates (used by UI badge)
   subscribeSyncStatus(callback: (status: SyncValidationStatus) => void): () => void {
     syncStatusListeners.push(callback);
-    // Emit initial status
     callback(RealtimeSyncService.getCurrentStatus());
     return () => {
       syncStatusListeners = syncStatusListeners.filter(l => l !== callback);
@@ -285,27 +245,27 @@ export const RealtimeSyncService = {
     const queue = getSyncQueue();
     const totalPending = queue.length + activeSyncCount;
     let state: SyncState = 'synced';
-    let message = 'Sincronizado via Realtime Database';
-    let source: 'realtime' | 'cloudsql' | 'localStorage' = 'realtime';
+    let message = 'Sincronizado com NeonDB (PostgreSQL)';
+    let source: SyncValidationStatus['source'] = 'neondb';
 
     if (!isBrowserOnline()) {
       state = 'offline';
-      message = totalPending > 0 
+      message = totalPending > 0
         ? `Modo Offline (${totalPending} alteração pendente salva no navegador)`
         : 'Modo Offline (Dados salvos no navegador)';
       source = 'localStorage';
     } else if (lastSyncError) {
       state = 'offline';
-      message = 'Erro ao sincronizar com o banco de dados';
-      source = 'cloudsql';
+      message = 'Erro ao sincronizar com o NeonDB';
+      source = 'neondb';
     } else if (isSlowConnection()) {
       state = 'slow_connection';
       message = 'Conexão Lenta (Operando via cache local com sincronização)';
       source = 'localStorage';
     } else if (totalPending > 0) {
       state = 'syncing';
-      message = `Sincronizando ${totalPending} alteração(ões)...`;
-      source = 'cloudsql';
+      message = `Sincronizando ${totalPending} alteração(ões) com NeonDB...`;
+      source = 'neondb';
     }
 
     return {
@@ -317,59 +277,33 @@ export const RealtimeSyncService = {
     };
   },
 
-  // Real-time synchronization subscription for a specific project's Kanban board
+  // Cross-tab live synchronization via BroadcastChannel (no Firebase RTDB required)
   subscribeProjectKanban(
-    projectId: string, 
-    onUpdate: (data: { tasks: Task[]; columns: ProjectColumn[]; syncInfo?: ProjectSyncInfo }) => void
+    projectId: string,
+    onUpdate: (data: { tasks?: Task[]; columns?: ProjectColumn[]; syncInfo?: ProjectSyncInfo }) => void
   ): () => void {
     if (IS_TEST || typeof window === 'undefined') {
       return () => {};
     }
 
-    const projectRef = rtdbRef(rtdb, `projects/${projectId}`);
-    
-    const callback = (snapshot: DataSnapshot) => {
-      if (snapshot.exists()) {
-        const val = snapshot.val();
-        const tasks = dictToList<Task>(val.tasks || {}).sort((a, b) => a.position - b.position);
-        const rawCols = dictToList<ProjectColumn>(val.columns || {});
-        const colMap = new Map<string, ProjectColumn>();
-        for (const c of rawCols) {
-          if (!c || !c.id) continue;
-          const key = `${c.projectId || projectId}:${(c.key || c.name || '').toLowerCase().trim()}`;
-          if (!colMap.has(key)) {
-            colMap.set(key, c);
-          }
-        }
-        const columns = Array.from(colMap.values()).sort((a, b) => a.position - b.position);
-        const syncInfo = val._syncInfo as ProjectSyncInfo | undefined;
-
-        if (syncInfo?.lastSyncAt) {
-          lastSyncedAt = syncInfo.lastSyncAt;
-        }
-
-        onUpdate({ tasks, columns, syncInfo });
-        notifyStatusChange();
-      }
-    };
-
-    try {
-      rtdbOnValue(projectRef, callback);
-    } catch (e) {
-      console.warn('Realtime subscription warning:', e);
+    getBroadcastChannel();
+    if (!boardListeners.has(projectId)) {
+      boardListeners.set(projectId, new Set());
     }
+    boardListeners.get(projectId)!.add(onUpdate);
 
     return () => {
-      try {
-        rtdbOff(projectRef, 'value', callback);
-      } catch {}
+      const set = boardListeners.get(projectId);
+      if (set) {
+        set.delete(onUpdate);
+        if (set.size === 0) boardListeners.delete(projectId);
+      }
     };
   },
 
-  // Validate sync status between local storage and Realtime Database
   async validateProjectSync(
-    projectId: string, 
-    localTasks: Task[], 
+    projectId: string,
+    localTasks: Task[],
     localColumns: ProjectColumn[]
   ): Promise<{
     isValid: boolean;
@@ -386,40 +320,36 @@ export const RealtimeSyncService = {
     }
 
     try {
-      const snap = await safeRtdbGet<any>(`projects/${projectId}`, null);
-      if (!snap) {
-        // RTDB does not have this project yet; push local as initial cache
-        await RealtimeSyncService.syncFullProjectBoard(projectId, localColumns, localTasks);
+      const [remoteCols, remoteTasks] = await Promise.all([
+        CloudSqlService.fetchColumns(projectId),
+        CloudSqlService.fetchTasks(projectId)
+      ]);
+
+      if (!remoteCols || !remoteTasks) {
         return {
           isValid: true,
-          message: 'Cache do Realtime Database inicializado'
+          message: 'Validação em fallback local'
         };
       }
 
-      const remoteTasks = dictToList<Task>(snap.tasks || {});
-      const rawRemoteCols = dictToList<ProjectColumn>(snap.columns || {});
-      const colMap = new Map<string, ProjectColumn>();
-      for (const c of rawRemoteCols) {
-        if (!c || !c.id) continue;
-        const key = `${c.projectId || projectId}:${(c.key || c.name || '').toLowerCase().trim()}`;
-        if (!colMap.has(key)) {
-          colMap.set(key, c);
-        }
-      }
-      const remoteColumns = Array.from(colMap.values()).sort((a, b) => a.position - b.position);
-      const syncInfo = snap._syncInfo as ProjectSyncInfo | undefined;
-
-      const isTaskCountMatch = remoteTasks.length === localTasks.length;
-      const isColCountMatch = remoteColumns.length === localColumns.length;
+      const sortedCols = [...remoteCols].sort((a, b) => a.position - b.position);
+      const sortedTasks = [...remoteTasks].sort((a, b) => a.position - b.position);
+      const isMatch = sortedTasks.length === localTasks.length && sortedCols.length === localColumns.length;
 
       return {
-        isValid: isTaskCountMatch && isColCountMatch,
-        remoteTasks: remoteTasks.sort((a, b) => a.position - b.position),
-        remoteColumns: remoteColumns.sort((a, b) => a.position - b.position),
-        syncInfo,
-        message: isTaskCountMatch && isColCountMatch
-          ? 'Quadro Kanban validado e sincronizado com Realtime Database'
-          : 'Divergência detectada; sincronizando com Realtime Database'
+        isValid: isMatch,
+        remoteTasks: sortedTasks,
+        remoteColumns: sortedCols,
+        syncInfo: {
+          lastSyncAt: new Date().toISOString(),
+          taskCount: sortedTasks.length,
+          columnCount: sortedCols.length,
+          lastAction: 'validate_sync',
+          clientVersion: '1.0.0'
+        },
+        message: isMatch
+          ? 'Quadro Kanban validado e sincronizado com NeonDB'
+          : 'Divergência detectada; sincronizando com NeonDB'
       };
     } catch {
       return {
@@ -429,10 +359,8 @@ export const RealtimeSyncService = {
     }
   },
 
-  // Sync entire Kanban board (tasks + columns + syncInfo) to Realtime Database
   async syncFullProjectBoard(projectId: string, columns: ProjectColumn[], tasks: Task[]): Promise<void> {
     if (IS_TEST) return;
-
     const syncInfo: ProjectSyncInfo = {
       lastSyncAt: new Date().toISOString(),
       taskCount: tasks.length,
@@ -440,26 +368,11 @@ export const RealtimeSyncService = {
       lastAction: 'sync_full_board',
       clientVersion: '1.0.0'
     };
-
-    const payload = {
-      columns: listToDict(columns),
-      tasks: listToDict(tasks),
-      _syncInfo: syncInfo
-    };
-
-    if (!isBrowserOnline() || isSlowConnection()) {
-      enqueueSync({
-        type: 'task_update',
-        projectId,
-        payload
-      });
-      return;
-    }
-
-    await safeRtdbWrite(rtdbSet(rtdbRef(rtdb, `projects/${projectId}`), payload));
+    postBoardBroadcast(projectId, { columns, tasks, syncInfo });
+    lastSyncedAt = syncInfo.lastSyncAt;
+    notifyStatusChange();
   },
 
-  // Sync a single task to Realtime Database
   async syncTask(task: Task, action: string = 'update_task'): Promise<void> {
     if (IS_TEST) return;
 
@@ -472,22 +385,20 @@ export const RealtimeSyncService = {
       return;
     }
 
-    const taskRef = rtdbRef(rtdb, `projects/${task.projectId}/tasks/${task.id}`);
-    const syncInfoRef = rtdbRef(rtdb, `projects/${task.projectId}/_syncInfo`);
-
-    await safeRtdbWrite(
-      Promise.all([
-        rtdbSet(taskRef, task),
-        rtdbUpdate(syncInfoRef, {
-          lastSyncAt: new Date().toISOString(),
-          lastAction: action,
-          lastUpdatedBy: task.createdByName || 'Usuário'
-        })
-      ])
-    );
+    lastSyncedAt = new Date().toISOString();
+    postBoardBroadcast(task.projectId, {
+      syncInfo: {
+        lastSyncAt: lastSyncedAt,
+        taskCount: 0,
+        columnCount: 0,
+        lastAction: action,
+        lastUpdatedBy: task.createdByName || 'Usuário',
+        clientVersion: '1.0.0'
+      }
+    });
+    notifyStatusChange();
   },
 
-  // Sync task move / status change
   async syncTaskMove(projectId: string, tasksToUpdate: Task[]): Promise<void> {
     if (IS_TEST) return;
 
@@ -500,17 +411,10 @@ export const RealtimeSyncService = {
       return;
     }
 
-    const updates: Record<string, any> = {};
-    for (const t of tasksToUpdate) {
-      updates[`tasks/${t.id}`] = t;
-    }
-    updates['_syncInfo/lastSyncAt'] = new Date().toISOString();
-    updates['_syncInfo/lastAction'] = 'move_task';
-
-    await safeRtdbWrite(rtdbUpdate(rtdbRef(rtdb, `projects/${projectId}`), updates));
+    lastSyncedAt = new Date().toISOString();
+    notifyStatusChange();
   },
 
-  // Delete task from Realtime Database
   async deleteTask(projectId: string, taskId: string): Promise<void> {
     if (IS_TEST) return;
 
@@ -523,21 +427,10 @@ export const RealtimeSyncService = {
       return;
     }
 
-    const taskRef = rtdbRef(rtdb, `projects/${projectId}/tasks/${taskId}`);
-    const syncInfoRef = rtdbRef(rtdb, `projects/${projectId}/_syncInfo`);
-
-    await safeRtdbWrite(
-      Promise.all([
-        rtdbRemove(taskRef),
-        rtdbUpdate(syncInfoRef, {
-          lastSyncAt: new Date().toISOString(),
-          lastAction: 'delete_task'
-        })
-      ])
-    );
+    lastSyncedAt = new Date().toISOString();
+    notifyStatusChange();
   },
 
-  // Sync columns to Realtime Database
   async syncColumns(projectId: string, columns: ProjectColumn[], action: string = 'update_columns'): Promise<void> {
     if (IS_TEST) return;
 
@@ -550,22 +443,20 @@ export const RealtimeSyncService = {
       return;
     }
 
-    const columnsRef = rtdbRef(rtdb, `projects/${projectId}/columns`);
-    const syncInfoRef = rtdbRef(rtdb, `projects/${projectId}/_syncInfo`);
-
-    await safeRtdbWrite(
-      Promise.all([
-        rtdbSet(columnsRef, listToDict(columns)),
-        rtdbUpdate(syncInfoRef, {
-          lastSyncAt: new Date().toISOString(),
-          columnCount: columns.length,
-          lastAction: action
-        })
-      ])
-    );
+    lastSyncedAt = new Date().toISOString();
+    postBoardBroadcast(projectId, {
+      columns,
+      syncInfo: {
+        lastSyncAt: lastSyncedAt,
+        taskCount: 0,
+        columnCount: columns.length,
+        lastAction: action,
+        clientVersion: '1.0.0'
+      }
+    });
+    notifyStatusChange();
   },
 
-  // Delete column from Realtime Database
   async deleteColumn(projectId: string, columnId: string): Promise<void> {
     if (IS_TEST) return;
 
@@ -578,11 +469,10 @@ export const RealtimeSyncService = {
       return;
     }
 
-    const colRef = rtdbRef(rtdb, `projects/${projectId}/columns/${columnId}`);
-    await safeRtdbWrite(rtdbRemove(colRef));
+    lastSyncedAt = new Date().toISOString();
+    notifyStatusChange();
   },
 
-  // Drain and process queued changes once connection is restored
   async processSyncQueue(): Promise<void> {
     if (IS_TEST || !isBrowserOnline() || isSlowConnection()) return;
 
@@ -595,28 +485,38 @@ export const RealtimeSyncService = {
 
     for (const item of queue) {
       try {
+        let ok = true;
         switch (item.type) {
           case 'task_create':
           case 'task_update':
-            await RealtimeSyncService.syncTask(item.payload, item.type);
+            ok = await CloudSqlService.syncTask(item.payload);
             break;
           case 'task_move':
-            await RealtimeSyncService.syncTaskMove(item.projectId, item.payload);
+            if (Array.isArray(item.payload)) {
+              const results = await Promise.all(item.payload.map((t: Task) => CloudSqlService.syncTask(t)));
+              ok = results.every(Boolean);
+            }
             break;
           case 'task_delete':
-            await RealtimeSyncService.deleteTask(item.projectId, item.payload.taskId);
+            ok = await CloudSqlService.deleteTask(item.payload.taskId);
             break;
           case 'col_create':
           case 'col_update':
           case 'col_reorder':
           case 'col_defaults':
-            await RealtimeSyncService.syncColumns(item.projectId, item.payload, item.type);
+            if (Array.isArray(item.payload)) {
+              const results = await Promise.all(item.payload.map((c: ProjectColumn) => CloudSqlService.syncColumn(c)));
+              ok = results.every(Boolean);
+            }
             break;
           case 'col_delete':
-            await RealtimeSyncService.deleteColumn(item.projectId, item.payload.columnId);
+            ok = await CloudSqlService.deleteColumn(item.payload.columnId, item.projectId);
             break;
         }
-      } catch (err) {
+        if (!ok) {
+          remainingQueue.push(item);
+        }
+      } catch {
         remainingQueue.push(item);
       }
     }

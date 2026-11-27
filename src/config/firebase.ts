@@ -1,3 +1,3 @@
-export { app, auth, storage, rtdb, googleProvider } from '../services/firebase';
+export { app, auth, storage, googleProvider } from '../services/firebase';
 import { app } from '../services/firebase';
 export default app;

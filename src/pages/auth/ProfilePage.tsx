@@ -265,7 +265,7 @@ export const ProfilePage: React.FC = () => {
         </div>
 
         {/* Edit Form */}
-        <div className="lg:col-span-2 glass-panel p-8">
+        <div className="lg:col-span-2 glass-panel p-8 profile-card-panel">
           <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
             <User className="w-5 h-5 text-indigo-400" /> Dados Pessoais
           </h2>
@@ -307,7 +307,7 @@ export const ProfilePage: React.FC = () => {
 
             <div className="form-group">
               <label className="form-label" htmlFor="profile-avatar">URL da Imagem de Perfil</label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <input
                   id="profile-avatar"
                   type="url"
@@ -481,7 +481,7 @@ export const ProfilePage: React.FC = () => {
                   <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
                     <Terminal className="w-3.5 h-3.5 text-indigo-400" /> Exemplos de Requisição cURL
                   </span>
-                  <div className="flex items-center gap-1.5 p-1 bg-slate-950 rounded-lg border border-slate-800 text-[11px] self-start sm:self-auto">
+                  <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-950 rounded-lg border border-slate-800 text-[11px] self-start sm:self-auto">
                     <button
                       type="button"
                       onClick={() => setActiveSnippetTab('create_project')}

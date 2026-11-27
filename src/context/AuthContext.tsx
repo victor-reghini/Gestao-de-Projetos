@@ -51,7 +51,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Check if demo user is active in session
     const savedDemo = sessionStorage.getItem('gestao_demo_user');
     if (savedDemo) {
-      setUser(JSON.parse(savedDemo));
+      const parsedDemo = JSON.parse(savedDemo);
+      const effectiveUser =
+        parsedDemo?.id === 'demo-user-123' && PROD_TEST_USER.id !== 'demo-user-123'
+          ? PROD_TEST_USER
+          : parsedDemo;
+      if (effectiveUser !== parsedDemo) {
+        sessionStorage.setItem('gestao_demo_user', JSON.stringify(effectiveUser));
+      }
+      setUser(effectiveUser);
       setIsDemo(true);
       setLoading(false);
       return;
