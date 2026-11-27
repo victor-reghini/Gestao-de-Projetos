@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { getCloudSqlConfig, fetchCloudSqlTasks } from '@/services/server/cloudSqlDb';
+import { getEnvVar } from '@/services/firebase';
 import { handleApiRequest } from '@/services/server/apiHandler';
 import { CloudSqlService } from '@/services/cloudSqlService';
 import { ProjectService, IdeaService, ColumnService } from '@/services/dbService';
@@ -152,6 +153,20 @@ describe('NeonDB Configuration & PWA Assets', () => {
       sessionStorage.clear();
       syncColSpy.mockRestore();
       fetchColsSpy.mockRestore();
+    }
+  });
+
+  it('ignores placeholder env values and strips surrounding quotes in getEnvVar', () => {
+    const origPlaceholder = process.env.VITE_TEST_FIREBASE_KEY;
+    try {
+      process.env.VITE_TEST_FIREBASE_KEY = 'your_firebase_api_key';
+      expect(getEnvVar('VITE_TEST_FIREBASE_KEY', 'AIzaFallback')).toBe('AIzaFallback');
+
+      process.env.VITE_TEST_FIREBASE_KEY = ' "AIzaQuoted" ';
+      expect(getEnvVar('VITE_TEST_FIREBASE_KEY', 'AIzaFallback')).toBe('AIzaQuoted');
+    } finally {
+      if (origPlaceholder === undefined) delete process.env.VITE_TEST_FIREBASE_KEY;
+      else process.env.VITE_TEST_FIREBASE_KEY = origPlaceholder;
     }
   });
 });

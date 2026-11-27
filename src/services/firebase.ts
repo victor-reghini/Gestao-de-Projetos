@@ -56,6 +56,18 @@ function getEnvFileFallback(key: string): string {
 
 let envDocCacheLoaded = false;
 
+function sanitizeEnvValue(raw?: unknown): string {
+  if (typeof raw !== 'string') return '';
+  let val = raw.trim();
+  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+    val = val.slice(1, -1).trim();
+  }
+  if (!val || /^(your_|placeholder|changeme$)/i.test(val)) {
+    return '';
+  }
+  return val;
+}
+
 /**
  * Obtém o valor de configuração seguindo a nova regra de negócio:
  * - Valor padrão: Variáveis de ambiente (process.env no Node/Netlify ou import.meta.env no Vite)
@@ -64,19 +76,21 @@ let envDocCacheLoaded = false;
 export const getEnvVar = (key: string, customFallback?: string): string => {
   // 1. Valor padrão: Variáveis de ambiente do host/sistema
   try {
-    if (typeof process !== 'undefined' && process?.env && process.env[key]) {
-      return process.env[key]!;
+    if (typeof process !== 'undefined' && process?.env) {
+      const fromProcess = sanitizeEnvValue(process.env[key]);
+      if (fromProcess) return fromProcess;
     }
   } catch {}
 
   try {
-    if (typeof import.meta !== 'undefined' && import.meta?.env && import.meta.env[key]) {
-      return import.meta.env[key];
+    if (typeof import.meta !== 'undefined' && import.meta?.env) {
+      const fromMeta = sanitizeEnvValue(import.meta.env[key]);
+      if (fromMeta) return fromMeta;
     }
   } catch {}
 
   // 2. Fallback: Valor presente nos documentos .env
-  const fromEnvDoc = getEnvFileFallback(key);
+  const fromEnvDoc = sanitizeEnvValue(getEnvFileFallback(key));
   if (fromEnvDoc) {
     return fromEnvDoc;
   }
