@@ -12,12 +12,11 @@ import {
 } from '@/types';
 import { RealtimeSyncService } from './realtimeSyncService';
 import { CloudSqlService } from './cloudSqlService';
-import { DataConnectService } from './dataConnectService';
-import { 
-  getEncryptedLocalData, 
-  setEncryptedLocalData, 
-  getActiveStorageUserId, 
-  getAllStoredItemsAcrossUsers 
+import {
+  getEncryptedLocalData,
+  setEncryptedLocalData,
+  getActiveStorageUserId,
+  getAllStoredItemsAcrossUsers
 } from './storageCrypto';
 import { slugify } from '@/utils/validationUtils';
 import { isDoneColumn, getCompositeColumnKey, generateColumnId } from '@/utils/columnUtils';
@@ -205,7 +204,7 @@ O **Gestor de Projetos e Ideias** foi concebido com os seguintes pilares:
 
 1. **Frontend:** React + Vite + TypeScript.
 2. **Backend/API:** Serverless Netlify Functions disponibilizando endpoints REST em \`/api/v1\`.
-3. **Persistência:** Google Cloud SQL (PostgreSQL) com sincronização em tempo real via Realtime Database.
+3. **Persistência:** NeonDB (PostgreSQL) com fila offline e sincronização entre abas.
 4. **Armazenamento:** Firebase Storage para anexos e imagens.
 
 ## Diagrama de Fluxo de Dados
@@ -223,10 +222,9 @@ Consulte a aba de diagramas para visualizar a topologia completa dos serviços.
     content: `graph TD
     Client[Browser / Usuário] -->|HTTPS SPA| Netlify[Netlify CDN]
     Client -->|Auth| FirebaseAuth[Firebase Auth]
-    Client -->|WebSocket Live Sync| RTDB[Firebase Realtime Database]
-    Client -->|Persistência Relacional| CloudSQL[Google Cloud SQL PostgreSQL]
+    Client -->|Persistência Relacional| NeonDB[NeonDB PostgreSQL]
     ExternalApp[Aplicações Externas] -->|REST API v1| NetlifyFunctions[Netlify Functions /api/v1]
-    NetlifyFunctions -->|Persistência| CloudSQL
+    NetlifyFunctions -->|Persistência| NeonDB
     Client -->|Upload Anexos| Storage[Firebase Storage]
 `,
     position: 1,
@@ -327,9 +325,6 @@ export const ProjectService = {
         const remote = await CloudSqlService.fetchProjects(userId);
         if (remote !== null) {
           setLocalData('projects', remote, userId);
-          if (userId) {
-            return remote.filter(p => p.ownerId === userId || p.members?.some(m => m.userId === userId));
-          }
           return remote;
         }
       } catch (err) {
@@ -449,9 +444,8 @@ export const ProjectService = {
       const updated = [newProject, ...existing];
       setLocalData('projects', updated);
 
-      // Persist to Google Cloud SQL & Data Connect
+      // Persist to NeonDB
       await CloudSqlService.syncProject(newProject);
-      DataConnectService.syncProject(newProject).catch(() => { });
 
       await ColumnService.createDefaultColumns(id);
       RealtimeSyncService.endSync();
@@ -503,9 +497,8 @@ export const ProjectService = {
       list[index] = updatedItem;
       setLocalData('projects', list, currentUid || undefined);
 
-      // Persist to Google Cloud SQL & Data Connect
+      // Persist to NeonDB
       await CloudSqlService.syncProject(updatedItem);
-      DataConnectService.syncProject(updatedItem).catch(() => { });
       RealtimeSyncService.endSync();
       return updatedItem;
     } catch (err) {
@@ -532,9 +525,8 @@ export const ProjectService = {
     list[index] = updatedItem;
     setLocalData('projects', list);
 
-    // Persist to Google Cloud SQL & Data Connect
+    // Persist to NeonDB
     CloudSqlService.syncProject(updatedItem).catch(() => { });
-    DataConnectService.syncProject(updatedItem).catch(() => { });
     return updatedItem;
   },
 
@@ -565,9 +557,8 @@ export const ProjectService = {
       const filtered = list.filter(p => p.id !== id);
       setLocalData('projects', filtered, currentUid || undefined);
 
-      // Persist deletion to Google Cloud SQL & Data Connect
+      // Persist deletion to NeonDB
       await CloudSqlService.deleteProject(id);
-      DataConnectService.deleteProject(id).catch(() => { });
       RealtimeSyncService.endSync();
     } catch (err) {
       RealtimeSyncService.endSync(true);
@@ -609,8 +600,15 @@ export const ColumnService = {
           // Projeto novo no banco sem colunas criadas ainda
           return await this.createDefaultColumns(projectId);
         }
+        // Banco indisponível: nunca criar colunas padrão no servidor
+        return deduplicateColumns(
+          getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId)
+        );
       } catch (err) {
         console.warn('Falha ao buscar colunas do banco de dados:', err);
+        return deduplicateColumns(
+          getLocalData<ProjectColumn>('columns', initialColumns).filter(c => c.projectId === projectId)
+        );
       }
     }
 
@@ -633,6 +631,23 @@ export const ColumnService = {
       return deduplicateColumns(existing);
     }
 
+    if (isUserConnected()) {
+      try {
+        const remoteCols = await CloudSqlService.fetchColumns(projectId);
+        if (remoteCols === null) {
+          return [];
+        }
+        if (remoteCols.length > 0) {
+          const finalCols = deduplicateColumns(remoteCols);
+          const otherCols = allCols.filter(c => c.projectId !== projectId);
+          setLocalData('columns', [...otherCols, ...finalCols]);
+          return finalCols;
+        }
+      } catch {
+        return [];
+      }
+    }
+
     const defaults = [
       { name: 'Backlog', key: 'backlog', position: 0, color: '#64748b', autoComplete: false },
       { name: 'Em Execução', key: 'in_progress', position: 1, color: '#6366f1', autoComplete: false },
@@ -653,14 +668,11 @@ export const ColumnService = {
 
     setLocalData('columns', [...allCols, ...newCols]);
 
-    // Sync to Realtime DB and Google Cloud SQL
+    // Sync to NeonDB
     RealtimeSyncService.beginSync();
     try {
       await Promise.all(newCols.map(c => CloudSqlService.syncColumn(c)));
       await RealtimeSyncService.syncColumns(projectId, newCols, 'col_defaults');
-      for (const c of newCols) {
-        DataConnectService.syncColumn(c).catch(() => { });
-      }
       RealtimeSyncService.endSync();
     } catch {
       RealtimeSyncService.endSync(true);
@@ -671,16 +683,38 @@ export const ColumnService = {
   async create(projectId: string, name: string, color = '#6366f1', autoComplete = false): Promise<ProjectColumn> {
     RealtimeSyncService.beginSync();
     try {
-      const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
-      const projectCols = allCols.filter(c => c.projectId === projectId);
-      const id = generateColumnId(projectId, slugify(name));
+      let allCols = getLocalData<ProjectColumn>('columns', initialColumns);
+      let projectCols = allCols.filter(c => c.projectId === projectId);
+
+      if (isUserConnected() && projectCols.length === 0) {
+        const remoteCols = await CloudSqlService.fetchColumns(projectId);
+        if (remoteCols && remoteCols.length > 0) {
+          projectCols = deduplicateColumns(remoteCols);
+          const otherCols = allCols.filter(c => c.projectId !== projectId);
+          allCols = [...otherCols, ...projectCols];
+          setLocalData('columns', allCols);
+        }
+      }
+
+      const normalizedKey = slugify(name);
+      const hasDuplicate = projectCols.some(
+        c => slugify(c.name) === normalizedKey || (c.key || '').toLowerCase().trim() === normalizedKey
+      );
+      if (hasDuplicate) {
+        throw new Error('Já existe uma coluna com este nome neste projeto.');
+      }
+
+      const nextPosition = projectCols.length > 0
+        ? Math.max(...projectCols.map(c => c.position ?? 0)) + 1
+        : 0;
+      const id = generateColumnId(projectId, normalizedKey);
 
       const newCol: ProjectColumn = {
         id,
         projectId,
         name,
-        key: slugify(name),
-        position: projectCols.length,
+        key: normalizedKey,
+        position: nextPosition,
         color,
         autoComplete,
         createdAt: new Date().toISOString(),
@@ -692,10 +726,9 @@ export const ColumnService = {
       // Update project updatedAt
       ProjectService.touch(projectId).catch(() => { });
 
-      // Sync to Realtime DB and Google Cloud SQL
+      // Sync to NeonDB
       await CloudSqlService.syncColumn(newCol);
       await RealtimeSyncService.syncColumns(projectId, [...projectCols, newCol], 'col_create');
-      DataConnectService.syncColumn(newCol).catch(() => { });
       RealtimeSyncService.endSync();
       return newCol;
     } catch (err) {
@@ -724,11 +757,10 @@ export const ColumnService = {
         ProjectService.touch(allCols[index].projectId).catch(() => { });
       }
 
-      // Sync to Realtime DB and Google Cloud SQL
+      // Sync to NeonDB
       const projCols = allCols.filter(c => c.projectId === allCols[index].projectId);
       await CloudSqlService.syncColumn(allCols[index]);
       await RealtimeSyncService.syncColumns(allCols[index].projectId, projCols, 'col_update');
-      DataConnectService.syncColumn(allCols[index]).catch(() => { });
       RealtimeSyncService.endSync();
       return allCols[index];
     } catch (err) {
@@ -758,12 +790,9 @@ export const ColumnService = {
       // Update project updatedAt
       ProjectService.touch(projectId).catch(() => { });
 
-      // Sync to Realtime DB and Google Cloud SQL
+      // Sync to NeonDB
       await Promise.all(reordered.map(c => CloudSqlService.syncColumn(c)));
       await RealtimeSyncService.syncColumns(projectId, reordered, 'col_reorder');
-      for (const c of reordered) {
-        DataConnectService.syncColumn(c).catch(() => { });
-      }
       RealtimeSyncService.endSync();
       return reordered;
     } catch (err) {
@@ -804,7 +833,6 @@ export const ColumnService = {
           if (t.columnId === columnId && (!targetProjectId || t.projectId === targetProjectId)) {
             const moved = { ...t, columnId: fallbackColumnId, position: nextPos++, updatedAt: new Date().toISOString() };
             CloudSqlService.syncTask(moved).catch(() => { });
-            DataConnectService.syncTask(moved).catch(() => { });
             return moved;
           }
           return t;
@@ -824,7 +852,6 @@ export const ColumnService = {
         ProjectService.touch(targetProjectId).catch(() => { });
       }
       await CloudSqlService.deleteColumn(columnId, targetProjectId, fallbackColumnId);
-      DataConnectService.deleteColumn(columnId).catch(() => { });
       RealtimeSyncService.endSync();
     } catch (err) {
       RealtimeSyncService.endSync(true);
@@ -913,10 +940,9 @@ export const TaskService = {
         ProjectService.touch(newTask.projectId).catch(() => { });
       }
 
-      // Persist to Cloud SQL and Realtime Database
+      // Persist to NeonDB
       const success = await CloudSqlService.syncTask(newTask);
       await RealtimeSyncService.syncTask(newTask, 'task_create');
-      DataConnectService.syncTask(newTask).catch(() => { });
 
       RealtimeSyncService.endSync(!success && isUserConnected());
       return newTask;
@@ -1025,10 +1051,9 @@ export const TaskService = {
         ProjectService.touch(updatedItem.projectId).catch(() => { });
       }
 
-      // Persist to Cloud SQL and Realtime Database
+      // Persist to NeonDB
       const success = await CloudSqlService.syncTask(updatedItem);
       await RealtimeSyncService.syncTask(updatedItem, 'task_update');
-      DataConnectService.syncTask(updatedItem).catch(() => { });
 
       RealtimeSyncService.endSync(!success && isUserConnected());
       return updatedItem;
@@ -1095,12 +1120,9 @@ export const TaskService = {
         ProjectService.touch(task.projectId).catch(() => { });
       }
 
-      // Persist to Cloud SQL and Realtime Database awaiting completion
+      // Persist to NeonDB awaiting completion
       const results = await Promise.all(updatedColumnTasks.map(t => CloudSqlService.syncTask(t)));
       await RealtimeSyncService.syncTaskMove(task.projectId, updatedColumnTasks);
-      for (const t of updatedColumnTasks) {
-        DataConnectService.syncTask(t).catch(() => { });
-      }
 
       const allOk = results.every(Boolean);
       RealtimeSyncService.endSync(!allOk && isUserConnected());
@@ -1145,7 +1167,6 @@ export const TaskService = {
         ProjectService.touch(taskToDelete.projectId).catch(() => { });
       }
       const success = await CloudSqlService.deleteTask(id);
-      DataConnectService.deleteTask(id).catch(() => { });
 
       RealtimeSyncService.endSync(!success && isUserConnected());
     } catch (err) {
@@ -1165,9 +1186,6 @@ export const IdeaService = {
         const remote = await CloudSqlService.fetchIdeas(userId);
         if (remote !== null) {
           setLocalData('ideas', remote, userId);
-          if (userId) {
-            return remote.filter(i => i.ownerId === userId);
-          }
           return remote;
         }
       } catch (err) {

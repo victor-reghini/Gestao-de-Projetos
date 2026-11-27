@@ -21,7 +21,7 @@ export interface SyncValidationStatus {
   lastSyncedAt?: string;
   pendingChangesCount: number;
   message: string;
-  source: 'realtime' | 'cloudsql' | 'localStorage';
+  source: 'neondb' | 'realtime' | 'cloudsql' | 'localStorage';
 }
 
 export interface User {

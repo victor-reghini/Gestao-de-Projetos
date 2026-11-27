@@ -24,12 +24,16 @@ import { ColumnModal } from './NewColumnModal';
 import { SyncModal } from '@/components/sync/SyncModal';
 import { PriorityBadge } from '@/components/common/PriorityBadge';
 import { isDoneColumn } from '@/utils/columnUtils';
+import { useIsMobile } from '@/utils/useIsMobile';
 
 interface KanbanTaskCardProps {
   task: Task;
   taskIndex: number;
   columnId: string;
   isReadOnly: boolean;
+  isMobile?: boolean;
+  columnsList?: ProjectColumn[];
+  onQuickMoveTask?: (task: Task, targetColumnId: string) => void;
   isDragging: boolean;
   isDropTarget: boolean;
   draggedTaskId: string | null;
@@ -46,6 +50,9 @@ const KanbanTaskCard = React.memo<KanbanTaskCardProps>(({
   taskIndex,
   columnId,
   isReadOnly,
+  isMobile = false,
+  columnsList = [],
+  onQuickMoveTask,
   isDragging,
   isDropTarget,
   draggedTaskId,
@@ -127,6 +134,29 @@ const KanbanTaskCard = React.memo<KanbanTaskCardProps>(({
           {task.createdByName ? task.createdByName.split(' ')[0] : 'Autor'}
         </span>
       </div>
+
+      {isMobile && !isReadOnly && columnsList.length > 1 && onQuickMoveTask && (
+        <div
+          className="mt-2.5 pt-2 border-t border-slate-700/40 flex items-center justify-between gap-2"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <span className="text-[11px] text-slate-400 shrink-0">Mover para:</span>
+          <select
+            aria-label={`Mover ${task.title} para coluna`}
+            value={task.columnId}
+            onChange={(e) => {
+              if (e.target.value !== task.columnId) {
+                onQuickMoveTask(task, e.target.value);
+              }
+            }}
+            className="bg-slate-900 border border-slate-700 text-slate-200 rounded-lg px-2 py-1 text-xs flex-1 min-w-0 outline-none"
+          >
+            {columnsList.map((col) => (
+              <option key={col.id} value={col.id}>{col.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
     </div>
   );
 });
@@ -137,6 +167,9 @@ interface KanbanColumnProps {
   colIndex: number;
   totalColumns: number;
   isReadOnly: boolean;
+  isMobile?: boolean;
+  columnsList?: ProjectColumn[];
+  onQuickMoveTask?: (task: Task, targetColumnId: string) => void;
   isEditingColumns: boolean;
   isOver: boolean;
   draggedTaskId: string | null;
@@ -163,6 +196,9 @@ const KanbanColumn = React.memo<KanbanColumnProps>(({
   colIndex,
   totalColumns,
   isReadOnly,
+  isMobile = false,
+  columnsList = [],
+  onQuickMoveTask,
   isEditingColumns,
   isOver,
   draggedTaskId,
@@ -187,7 +223,7 @@ const KanbanColumn = React.memo<KanbanColumnProps>(({
       onDragOver={(e) => onDragOver(e, column.id)}
       onDragLeave={() => onDragLeave(column.id)}
       onDrop={(e) => onDrop(e, column.id)}
-      className={`w-80 shrink-0 flex flex-col rounded-2xl bg-slate-900 border transition-all duration-150 ${isOver ? 'border-blue-500 bg-slate-800/90 ring-2 ring-blue-500/20' : 'border-slate-800'
+      className={`${isMobile ? 'w-full' : 'w-80 shrink-0'} flex flex-col rounded-2xl bg-slate-900 border transition-all duration-150 ${isOver ? 'border-blue-500 bg-slate-800/90 ring-2 ring-blue-500/20' : 'border-slate-800'
         }`}
     >
       {/* Column Header */}
@@ -259,7 +295,7 @@ const KanbanColumn = React.memo<KanbanColumnProps>(({
       </div>
 
       {/* Tasks Cards List */}
-      <div className="p-3 flex-1 space-y-2.5 min-h-[140px] overflow-y-auto max-h-[calc(100vh-320px)]">
+      <div className={`p-3 flex-1 space-y-2.5 min-h-[140px] ${isMobile ? '' : 'overflow-y-auto max-h-[calc(100vh-320px)]'}`}>
         {tasks.map((task, taskIndex) => (
           <KanbanTaskCard
             key={task.id}
@@ -267,6 +303,9 @@ const KanbanColumn = React.memo<KanbanColumnProps>(({
             taskIndex={taskIndex}
             columnId={column.id}
             isReadOnly={isReadOnly}
+            isMobile={isMobile}
+            columnsList={columnsList}
+            onQuickMoveTask={onQuickMoveTask}
             isDragging={draggedTaskId === task.id}
             isDropTarget={dragOverTaskId === task.id}
             draggedTaskId={draggedTaskId}
@@ -308,6 +347,7 @@ interface KanbanBoardProps {
 }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly = false, onProjectUpdate }) => {
+  const isMobile = useIsMobile();
   const [columns, setColumns] = useState<ProjectColumn[]>(() => {
     const allCols = getLocalData<ProjectColumn>('columns', initialColumns);
     const projCols = allCols.filter(c => c.projectId === projectId);
@@ -351,6 +391,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
   const [dragOverColumnId, setDragOverColumnId] = useState<string | null>(null);
   const [draggedColumnId, setDraggedColumnId] = useState<string | null>(null);
   const [dragOverColumnTargetId, setDragOverColumnTargetId] = useState<string | null>(null);
+
+  // Active column selector for mobile tabbed view
+  const [activeMobileColumnId, setActiveMobileColumnId] = useState<string>('');
+
+  useEffect(() => {
+    const sorted = [...columns].sort((a, b) => a.position - b.position);
+    if (sorted.length > 0 && (!activeMobileColumnId || !sorted.some(c => c.id === activeMobileColumnId))) {
+      setActiveMobileColumnId(sorted[0].id);
+    }
+  }, [columns, activeMobileColumnId]);
 
   const loadKanban = async () => {
     try {
@@ -611,6 +661,31 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     onProjectUpdate?.();
   };
 
+  const handleQuickMoveTask = React.useCallback(async (task: Task, targetColumnId: string) => {
+    if (isReadOnly || task.columnId === targetColumnId) return;
+    const targetCol = columns.find(c => c.id === targetColumnId);
+    const shouldComplete = isDoneColumn(targetCol);
+    const destinationTasks = tasks
+      .filter(t => t.columnId === targetColumnId && t.id !== task.id)
+      .sort((a, b) => a.position - b.position);
+    const newPosition = destinationTasks.length;
+
+    setTasks(prev => prev.map(t =>
+      t.id === task.id
+        ? {
+            ...t,
+            columnId: targetColumnId,
+            position: newPosition,
+            concluded: shouldComplete ? true : (t.concluded ?? false),
+            updatedAt: new Date().toISOString()
+          }
+        : t
+    ));
+
+    await TaskService.move(task.id, targetColumnId, newPosition);
+    onProjectUpdate?.();
+  }, [columns, isReadOnly, onProjectUpdate, tasks]);
+
   // Column Actions
   const handleDeleteColumn = async (columnId: string) => {
     if (columns.length <= 1) {
@@ -720,8 +795,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
     <div className="space-y-4 animate-fade-in">
       {/* Top Filter Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-xl bg-slate-900 border border-slate-800">
-        <div className="flex flex-wrap items-center gap-2 flex-1">
-          <div className="relative min-w-[200px] flex-1 max-w-sm">
+        <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+          <div className="relative w-full sm:w-auto sm:min-w-[200px] flex-1 max-w-sm">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -760,7 +835,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
                   ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
                   : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
               }`}
-            title={`${syncStatus.message} • Clique para gerenciar sincronização com Cloud SQL`}
+            title={`${syncStatus.message} • Clique para gerenciar sincronização com NeonDB`}
           >
             {syncStatus.state === 'synced' && (
               <>
@@ -872,42 +947,109 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ projectId, isReadOnly 
         </div>
       </div>
 
-      {/* Columns Horizontal Board */}
-      <div className="flex gap-4 overflow-x-auto pb-6 pt-1 items-start min-h-[560px]">
-        {[...columns].sort((a, b) => a.position - b.position).map((column, colIndex, sortedColumns) => {
-          const colTasks = tasksByColumnId[column.id] || [];
-          const isOver = dragOverColumnId === column.id || dragOverColumnTargetId === column.id;
+      {/* Columns Board: Tabbed single-column view on mobile, horizontal board on desktop */}
+      {isMobile ? (
+        <div className="space-y-3">
+          <div className="mobile-kanban-tabs" role="tablist" aria-label="Colunas do Kanban">
+            {[...columns].sort((a, b) => a.position - b.position).map((col) => {
+              const count = (tasksByColumnId[col.id] || []).length;
+              const isActive = col.id === activeMobileColumnId;
+              return (
+                <button
+                  key={col.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => setActiveMobileColumnId(col.id)}
+                  className={`mobile-kanban-tab ${isActive ? 'active' : ''}`}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: col.color || '#3b82f6' }}
+                  />
+                  <span className="truncate">{col.name}</span>
+                  <span className="mobile-kanban-tab-count">{count}</span>
+                </button>
+              );
+            })}
+          </div>
 
-          return (
-            <KanbanColumn
-              key={column.id}
-              column={column}
-              tasks={colTasks}
-              colIndex={colIndex}
-              totalColumns={sortedColumns.length}
-              isReadOnly={isReadOnly}
-              isEditingColumns={isEditingColumns}
-              isOver={isOver}
-              draggedTaskId={draggedTaskId}
-              dragOverTaskId={dragOverTaskId}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onColumnDragStart={handleColumnDragStart}
-              onMoveColumn={handleMoveColumn}
-              onEditColumn={handleEditColumn}
-              onDeleteColumn={handleDeleteColumn}
-              onAddTask={handleAddTask}
-              onTaskDragStart={handleDragStart}
-              onTaskDragOver={handleTaskDragOver}
-              onTaskDragLeave={handleTaskDragLeave}
-              onDropOnTask={handleDropOnTask}
-              onTaskClick={handleTaskClick}
-              onToggleTaskConcluded={handleToggleTaskConcluded}
-            />
-          );
-        })}
-      </div>
+          {(() => {
+            const sortedColumns = [...columns].sort((a, b) => a.position - b.position);
+            const activeIdx = sortedColumns.findIndex(c => c.id === activeMobileColumnId);
+            const activeCol = activeIdx >= 0 ? sortedColumns[activeIdx] : sortedColumns[0];
+            if (!activeCol) return null;
+            const colTasks = tasksByColumnId[activeCol.id] || [];
+            return (
+              <KanbanColumn
+                key={activeCol.id}
+                column={activeCol}
+                tasks={colTasks}
+                colIndex={activeIdx >= 0 ? activeIdx : 0}
+                totalColumns={sortedColumns.length}
+                isReadOnly={isReadOnly}
+                isMobile={true}
+                columnsList={sortedColumns}
+                onQuickMoveTask={handleQuickMoveTask}
+                isEditingColumns={isEditingColumns}
+                isOver={false}
+                draggedTaskId={draggedTaskId}
+                dragOverTaskId={dragOverTaskId}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onColumnDragStart={handleColumnDragStart}
+                onMoveColumn={handleMoveColumn}
+                onEditColumn={handleEditColumn}
+                onDeleteColumn={handleDeleteColumn}
+                onAddTask={handleAddTask}
+                onTaskDragStart={handleDragStart}
+                onTaskDragOver={handleTaskDragOver}
+                onTaskDragLeave={handleTaskDragLeave}
+                onDropOnTask={handleDropOnTask}
+                onTaskClick={handleTaskClick}
+                onToggleTaskConcluded={handleToggleTaskConcluded}
+              />
+            );
+          })()}
+        </div>
+      ) : (
+        <div className="flex gap-4 overflow-x-auto pb-6 pt-1 items-start min-h-[560px]">
+          {[...columns].sort((a, b) => a.position - b.position).map((column, colIndex, sortedColumns) => {
+            const colTasks = tasksByColumnId[column.id] || [];
+            const isOver = dragOverColumnId === column.id || dragOverColumnTargetId === column.id;
+
+            return (
+              <KanbanColumn
+                key={column.id}
+                column={column}
+                tasks={colTasks}
+                colIndex={colIndex}
+                totalColumns={sortedColumns.length}
+                isReadOnly={isReadOnly}
+                isEditingColumns={isEditingColumns}
+                isOver={isOver}
+                draggedTaskId={draggedTaskId}
+                dragOverTaskId={dragOverTaskId}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onColumnDragStart={handleColumnDragStart}
+                onMoveColumn={handleMoveColumn}
+                onEditColumn={handleEditColumn}
+                onDeleteColumn={handleDeleteColumn}
+                onAddTask={handleAddTask}
+                onTaskDragStart={handleDragStart}
+                onTaskDragOver={handleTaskDragOver}
+                onTaskDragLeave={handleTaskDragLeave}
+                onDropOnTask={handleDropOnTask}
+                onTaskClick={handleTaskClick}
+                onToggleTaskConcluded={handleToggleTaskConcluded}
+              />
+            );
+          })}
+        </div>
+      )}
 
       {/* Modals */}
       {isTaskModalOpen && (

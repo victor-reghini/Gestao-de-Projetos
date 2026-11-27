@@ -15,15 +15,18 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
-  ShieldCheck
+  ShieldCheck,
+  Download
 } from 'lucide-react';
 import { NewProjectModal } from '@/pages/projects/NewProjectModal';
 import { IdeaModal } from '@/pages/ideas/IdeaModal';
 import { useSystemSettings } from '@/context/SystemSettingsContext';
+import { usePwaInstall } from '@/utils/usePwaInstall';
 
 export const AppLayout: React.FC = () => {
   const { user, isDemo, logout } = useAuth();
   const { isSuperUser } = useSystemSettings();
+  const { canInstall, promptInstall } = usePwaInstall();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isNewProjectOpen, setIsNewProjectOpen] = useState(false);
   const [isNewIdeaOpen, setIsNewIdeaOpen] = useState(false);
@@ -60,6 +63,13 @@ export const AppLayout: React.FC = () => {
     ...(isSuperUser ? [{ to: '/admin/configuracoes', label: 'Super Usuário', icon: ShieldCheck }] : [])
   ];
 
+  const mobileBottomItems = [
+    { to: '/projects', label: 'Projetos', icon: FolderKanban },
+    { to: '/dashboard', label: 'Início', icon: LayoutDashboard },
+    { to: '/ideas', label: 'Ideias', icon: Lightbulb },
+    { to: '/profile', label: 'Perfil', icon: UserIcon }
+  ];
+
   return (
     <div className="app-container">
       {/* Sidebar for Desktop */}
@@ -91,15 +101,15 @@ export const AppLayout: React.FC = () => {
 
         {/* Action Buttons */}
         <div className={`p-3 space-y-2 ${isCollapsed ? 'flex flex-col items-center' : ''}`}>
-          <button
+          {!isCollapsed && <button
             onClick={() => setIsNewProjectOpen(true)}
             className={`btn btn-primary ${isCollapsed ? 'p-2.5 w-10 h-10' : 'w-full justify-start py-2.5'}`}
             title="Novo Projeto"
             aria-label="Novo Projeto"
           >
             <Plus className="w-4 h-4 shrink-0" />
-            {!isCollapsed && <span>Novo Projeto</span>}
-          </button>
+            <span>Novo Projeto</span>
+          </button>}
           <button
             onClick={() => setIsNewIdeaOpen(true)}
             className={`btn btn-secondary ${isCollapsed ? 'p-2.5 w-10 h-10' : 'w-full justify-start py-2 text-xs text-slate-300'}`}
@@ -191,56 +201,108 @@ export const AppLayout: React.FC = () => {
       </aside>
 
       {/* Mobile Header */}
-      <header className="md:hidden flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800">
-        <Link to="/dashboard" className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+      <header className="md:hidden mobile-top-header">
+        <Link to="/dashboard" className="flex items-center gap-2.5 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shrink-0 shadow-sm">
             <Layers className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-sm text-white">Gestor de Projetos</span>
+          <span className="font-bold text-sm text-white truncate">Gestor de Projetos</span>
         </Link>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsNewProjectOpen(true)}
-            className="btn btn-primary btn-sm p-2"
-          >
-            <Plus className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => setMobileOpen(!mobileOpen)}
-            className="p-2 text-slate-400 hover:text-white"
-          >
-            {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-          </button>
-        </div>
       </header>
-
 
       {/* Mobile Drawer */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-50 bg-slate-950/95 p-6 flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-6">
+        <div
+          className="md:hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-md p-5 flex flex-col justify-between overflow-y-auto"
+          style={{ paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom))', paddingTop: 'calc(1.25rem + env(safe-area-inset-top))' }}
+        >
+          <div className="space-y-5">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-800">
               <span className="font-bold text-lg text-white">Menu Principal</span>
-              <button onClick={() => setMobileOpen(false)} className="p-2 text-slate-400">
+              <button
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                className="mobile-icon-btn text-slate-400 hover:text-white rounded-lg"
+                aria-label="Fechar menu"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <nav className="space-y-2">
+
+            {/* User summary in drawer */}
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-900 border border-slate-800">
+              <div className="w-10 h-10 rounded-xl overflow-hidden border border-slate-700 bg-slate-800 shrink-0">
+                <img
+                  src={user?.avatarUrl || `https://api.dicebear.com/7.x/bottts/svg?seed=${user?.id || 'demo'}`}
+                  alt={user?.name || 'User'}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-white truncate">{user?.name}</p>
+                <p className="text-xs text-slate-400 truncate">{user?.email}</p>
+              </div>
+            </div>
+
+            {/* Quick actions */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  setIsNewProjectOpen(true);
+                }}
+                className="btn btn-primary w-full justify-center text-xs"
+              >
+                <Plus className="w-4 h-4" /> Novo Projeto
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileOpen(false);
+                  setIsNewIdeaOpen(true);
+                }}
+                className="btn btn-secondary w-full justify-center text-xs text-amber-300"
+              >
+                <Lightbulb className="w-4 h-4 text-amber-400" /> Nova Ideia
+              </button>
+            </div>
+
+            {canInstall && (
+              <button
+                type="button"
+                onClick={async () => {
+                  await promptInstall();
+                  setMobileOpen(false);
+                }}
+                className="btn btn-secondary w-full justify-center text-xs border-blue-500/40 text-blue-300"
+              >
+                <Download className="w-4 h-4 text-blue-400" /> Instalar Aplicativo (PWA)
+              </button>
+            )}
+
+            <nav className="space-y-1.5">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-3 p-3 rounded-xl text-base font-medium text-slate-200 hover:bg-slate-800"
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3.5 py-3 rounded-xl text-base font-medium transition-colors ${isActive
+                      ? 'bg-blue-600/20 text-blue-400 border border-blue-500/40'
+                      : 'text-slate-200 hover:bg-slate-800'
+                    }`
+                  }
                 >
-                  <item.icon className="w-5 h-5 text-blue-400" />
-                  {item.label}
+                  <item.icon className="w-5 h-5 text-blue-400 shrink-0" />
+                  <span>{item.label}</span>
                 </NavLink>
               ))}
             </nav>
           </div>
-          <div className="pt-6 border-t border-slate-800">
+          <div className="pt-5 border-t border-slate-800">
             <button
+              type="button"
               onClick={handleLogout}
               className="btn btn-danger w-full justify-center"
             >
@@ -254,6 +316,34 @@ export const AppLayout: React.FC = () => {
       <main className="main-content">
         <Outlet />
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden mobile-bottom-nav" aria-label="Navegação mobile">
+        <button
+          type="button"
+          onClick={() => setMobileOpen(true)}
+          className="mobile-bottom-nav-item"
+          aria-label="Abrir menu"
+        >
+          <Menu className="w-5 h-5" />
+          <span>Menu</span>
+        </button>
+        {mobileBottomItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `mobile-bottom-nav-item ${isActive ? 'active' : ''}`
+              }
+            >
+              <Icon className="w-5 h-5" />
+              <span>{item.label}</span>
+            </NavLink>
+          );
+        })}
+      </nav>
 
       {/* New Project Modal */}
       {isNewProjectOpen && (

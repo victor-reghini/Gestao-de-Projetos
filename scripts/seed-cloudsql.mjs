@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Automatically load .env if process.env.PGPASSWORD is not set
+// Automatically load .env if DATABASE_URL_UNPOOLED / DATABASE_URL is not set
 function loadEnv() {
   const envPath = path.join(__dirname, '..', '.env');
   if (fs.existsSync(envPath)) {
@@ -30,50 +30,49 @@ function loadEnv() {
 }
 loadEnv();
 
-const host = process.env.PGHOST;
-const port = parseInt(process.env.PGPORT || '5432', 10);
-const database = process.env.PGDATABASE || 'gestao-projetos-ea44c-database';
-const user = process.env.PGUSER || 'postgres';
-const password = process.env.PGPASSWORD;
+const connectionString = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
 
-if (!host || !password) {
-  console.log('\n⚠️  PGHOST ou PGPASSWORD não definido no .env.');
-  console.log('💡 Defina as variáveis no arquivo .env antes de executar o seed.\n');
+if (!connectionString) {
+  console.log('\n⚠️  DATABASE_URL ou DATABASE_URL_UNPOOLED não definida no .env.');
+  console.log('💡 Defina a string de conexão do NeonDB no arquivo .env antes de executar o seed.\n');
   process.exit(0);
 }
 
 const client = new pg.Client({
-  host,
-  port,
-  database,
-  user,
-  password,
+  connectionString,
   ssl: { rejectUnauthorized: false },
   connectionTimeoutMillis: 10000
 });
 
 async function main() {
   try {
-    console.log(`🔌 Conectando ao Cloud SQL em ${host}:${port}/${database}...`);
+    const host = new URL(connectionString).hostname;
+    console.log(`🔌 Conectando ao NeonDB em ${host}...`);
     await client.connect();
     console.log('✅ Conexão estabelecida com sucesso!');
+
+    const schemaPath = path.join(__dirname, 'neon_schema.sql');
+    if (fs.existsSync(schemaPath)) {
+      const schemaSql = fs.readFileSync(schemaPath, 'utf8');
+      console.log('🛠️  Garantindo schema no NeonDB...');
+      await client.query(schemaSql);
+    }
 
     const sqlPath = path.join(__dirname, 'cloudsql_insert_all_data.sql');
     const sql = fs.readFileSync(sqlPath, 'utf8');
 
-    console.log('🚀 Executando inserção dos dados...');
+    console.log('🚀 Executando carga de dados iniciais...');
     const res = await client.query(sql);
 
-    // If result is an array of results, log the last query (verification summary)
     const lastRes = Array.isArray(res) ? res[res.length - 1] : res;
     if (lastRes && lastRes.rows) {
-      console.log('\n📊 Resumo dos dados inseridos no Cloud SQL:');
+      console.log('\n📊 Resumo dos dados no NeonDB:');
       console.table(lastRes.rows);
     }
 
-    console.log('🎉 Todos os dados foram inseridos com sucesso no Google Cloud SQL!');
+    console.log('🎉 Todos os dados foram aplicados com sucesso no NeonDB!');
   } catch (err) {
-    console.error('❌ Erro ao executar carga no Cloud SQL:', err.message);
+    console.error('❌ Erro ao executar carga no NeonDB:', err.message);
   } finally {
     await client.end();
   }

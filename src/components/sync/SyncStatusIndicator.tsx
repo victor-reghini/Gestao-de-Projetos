@@ -54,12 +54,12 @@ export const SyncStatusIndicator: React.FC<SyncStatusIndicatorProps> = ({
   // 🟡 Orange: Syncing in progress, slow connection, or pending local changes
   // 🔴 Red: Cloud SQL disconnected, browser offline, or auth error
   let statusType: 'green' | 'orange' | 'red' = 'green';
-  let tooltip = 'Banco de Dados Sincronizado (Google Cloud SQL & Realtime DB)';
+  let tooltip = 'Banco de Dados Sincronizado (NeonDB PostgreSQL)';
 
   if (rtdbStatus.state === 'offline' || cloudSqlConnected === false) {
     statusType = 'red';
     tooltip = cloudSqlConnected === false 
-      ? 'Cloud SQL Desconectado - Clique para sincronizar'
+      ? 'NeonDB Desconectado - Clique para sincronizar'
       : 'Modo Offline - Dados salvos no navegador';
   } else if (
     rtdbStatus.state === 'syncing' || 

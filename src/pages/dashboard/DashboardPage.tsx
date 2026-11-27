@@ -82,25 +82,22 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="page-wrapper animate-fade-in space-y-8">
       {/* Welcome Hero Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-7 bg-gradient-to-r from-blue-950/60 via-slate-900 to-slate-900 border-blue-500/25">
+      <div className="dashboard-hero flex flex-col md:flex-row md:items-center justify-between gap-4 p-7 bg-gradient-to-r from-blue-950/60 via-slate-900 to-slate-900 border-blue-500/25">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-300 border border-blue-500/35">
-              Painel de Gestão Ágil
-            </span>
             <span className="text-xs text-slate-400">
               {new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
             </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            Olá, {user?.name ? user.name.split(' ')[0] : 'Desenvolvedor'}! 👋
+            Olá, {user?.name ? user.name.split(' ')[0] : 'Desenvolvedor'}!
           </h1>
           <p className="text-slate-300 text-sm mt-1 max-w-xl">
             Acompanhe o progresso de seus projetos, organize o backlog e gerencie feedbacks externos recebidos via API.
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 self-start md:self-center">
+        <div className="flex flex-wrap items-center gap-2.5 self-start md:self-center">
           <button
             onClick={() => setIsNewProjectOpen(true)}
             className="btn btn-primary"
@@ -234,7 +231,7 @@ export const DashboardPage: React.FC = () => {
                     ))}
                   </div>
 
-                  <div className="pt-3 border-t border-slate-800 flex items-center justify-between">
+                  <div className="pt-3 border-t border-slate-800 project-card-footer">
                     <div className="flex items-center gap-3 flex-1 max-w-xs">
                       <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
                         <div
@@ -245,7 +242,7 @@ export const DashboardPage: React.FC = () => {
                       <span className="text-xs font-semibold text-slate-300">{progress}%</span>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {project.visibility === 'PUBLIC' && (
                         <Link
                           to={`/p/${project.slug}`}

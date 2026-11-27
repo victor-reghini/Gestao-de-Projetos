@@ -158,8 +158,9 @@ function isDbConnectionError(err: any): boolean {
   const code = err.code || '';
   const msg = err.message || '';
   return code === 'ECONNREFUSED' || code === 'ENETUNREACH' || code === 'ETIMEDOUT' ||
+         code === 'EAI_AGAIN' || code === 'ENOTFOUND' ||
          msg.includes('ECONNREFUSED') || msg.includes('ENETUNREACH') || msg.includes('ETIMEDOUT') ||
-         msg.includes('connect');
+         msg.includes('EAI_AGAIN') || msg.includes('ENOTFOUND') || msg.includes('connect');
 }
 
 function slugify(text: string): string {
@@ -1179,7 +1180,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         const userId = queryParams.userId || rawUserIdHeader;
         const projects = await fetchCloudSqlProjects(userId);
         if (projects === null) {
-          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados NeonDB indisponível' }) };
         }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: projects }) };
       }
@@ -1188,7 +1189,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         const projectId = queryParams.projectId || segments[2];
         const cols = await fetchCloudSqlColumns(projectId);
         if (cols === null) {
-          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados NeonDB indisponível' }) };
         }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: cols }) };
       }
@@ -1197,7 +1198,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         const projectId = queryParams.projectId || segments[2];
         const tasks = await fetchCloudSqlTasks(projectId);
         if (tasks === null) {
-          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados NeonDB indisponível' }) };
         }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: tasks }) };
       }
@@ -1206,7 +1207,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         const userId = queryParams.userId || rawUserIdHeader;
         const ideas = await fetchCloudSqlIdeas(userId);
         if (ideas === null) {
-          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados NeonDB indisponível' }) };
         }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: ideas }) };
       }
@@ -1215,7 +1216,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         const projectId = queryParams.projectId || segments[2];
         const docs = await fetchCloudSqlDocuments(projectId);
         if (docs === null) {
-          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados NeonDB indisponível' }) };
         }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: docs }) };
       }
@@ -1224,7 +1225,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         const projectId = queryParams.projectId || segments[2];
         const sugs = await fetchCloudSqlSuggestions(projectId);
         if (sugs === null) {
-          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados NeonDB indisponível' }) };
         }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: sugs }) };
       }
@@ -1233,7 +1234,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
         const projectId = queryParams.projectId || segments[2];
         const bugs = await fetchCloudSqlBugs(projectId);
         if (bugs === null) {
-          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados NeonDB indisponível' }) };
         }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: bugs }) };
       }
@@ -1241,7 +1242,7 @@ export async function handleApiRequest(opts: ApiRequestOptions): Promise<ApiResp
       if (action === 'all' && httpMethod === 'GET') {
         const allData = await fetchCloudSqlAll();
         if (allData === null) {
-          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados Cloud SQL indisponível' }) };
+          return { statusCode: 503, headers: corsHeaders, body: JSON.stringify({ success: false, data: null, error: 'Banco de dados NeonDB indisponível' }) };
         }
         return { statusCode: 200, headers: corsHeaders, body: JSON.stringify({ success: true, data: allData }) };
       }

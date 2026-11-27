@@ -99,14 +99,14 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, onSyncSuc
       if (result.success) {
         setFeedback({
           type: 'success',
-          message: result.message || 'Dados locais persistidos com sucesso no Google Cloud SQL!'
+          message: result.message || 'Dados locais persistidos com sucesso no NeonDB!'
         });
         await checkStatus();
         if (onSyncSuccess) onSyncSuccess();
       } else {
         setFeedback({
           type: 'error',
-          message: result.message || 'Falha ao sincronizar dados com o Cloud SQL.'
+          message: result.message || 'Falha ao sincronizar dados com o NeonDB.'
         });
       }
     } catch (err: any) {
@@ -120,7 +120,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, onSyncSuc
   };
 
   const handleHydrateFromCloudSql = async () => {
-    if (!window.confirm('Deseja atualizar os dados do navegador com os dados mais recentes do Cloud SQL?')) {
+    if (!window.confirm('Deseja atualizar os dados do navegador com os dados mais recentes do NeonDB?')) {
       return;
     }
     setIsHydrating(true);
@@ -131,13 +131,13 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, onSyncSuc
         refreshCounts();
         setFeedback({
           type: 'success',
-          message: 'Dados atualizados do Google Cloud SQL com sucesso!'
+          message: 'Dados atualizados do NeonDB com sucesso!'
         });
         if (onSyncSuccess) onSyncSuccess();
       } else {
         setFeedback({
           type: 'error',
-          message: 'Falha ao buscar dados do Cloud SQL. Verifique a conexão com o banco.'
+          message: 'Falha ao buscar dados do NeonDB. Verifique a conexão com o banco.'
         });
       }
     } catch (err: any) {
@@ -182,7 +182,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, onSyncSuc
             </div>
             <div>
               <h2 className="text-base font-bold text-white leading-tight">Sincronização com o Banco de Dados</h2>
-              <p className="text-xs text-slate-400">Google Cloud SQL (PostgreSQL)</p>
+              <p className="text-xs text-slate-400">NeonDB (PostgreSQL)</p>
             </div>
           </div>
           <button
@@ -210,7 +210,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, onSyncSuc
             )}
             <div className="flex-1 min-w-0">
               <div className="font-semibold text-xs flex items-center gap-2">
-                <span>{isConnected ? 'Conexão Estabelecida' : 'Desconectado do Cloud SQL'}</span>
+                <span>{isConnected ? 'Conexão Estabelecida' : 'Desconectado do NeonDB'}</span>
                 {loadingStatus && <RefreshCw className="w-3 h-3 animate-spin text-slate-400" />}
               </div>
               <p className="mt-0.5 text-[11px] opacity-90 leading-relaxed">
@@ -281,7 +281,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, onSyncSuc
               className="btn btn-primary w-full justify-center py-2.5 text-sm font-semibold shadow-md shadow-blue-600/20"
             >
               <CloudUpload className={`w-4 h-4 mr-2 ${isSyncing ? 'animate-bounce' : ''}`} />
-              {isSyncing ? 'Enviando dados para o Cloud SQL...' : 'Enviar Dados do Navegador para o Banco'}
+              {isSyncing ? 'Enviando dados para o NeonDB...' : 'Enviar Dados do Navegador para o Banco'}
             </button>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
@@ -289,7 +289,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, onSyncSuc
                 onClick={handleHydrateFromCloudSql}
                 disabled={isHydrating || !isConnected}
                 className="btn btn-secondary text-xs py-2 justify-center text-slate-300 disabled:opacity-50"
-                title={!isConnected ? "Requer conexão ativa com Cloud SQL" : "Carregar dados do Cloud SQL para o navegador"}
+                title={!isConnected ? "Requer conexão ativa com NeonDB" : "Carregar dados do NeonDB para o navegador"}
               >
                 <CloudDownload className={`w-3.5 h-3.5 mr-1.5 text-cyan-400 ${isHydrating ? 'animate-spin' : ''}`} />
                 {isHydrating ? 'Carregando...' : 'Puxar do Banco'}
@@ -298,7 +298,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, onSyncSuc
               <button
                 onClick={handleCopySql}
                 className="btn btn-secondary text-xs py-2 justify-center text-slate-300"
-                title="Copiar script SQL para executar no Cloud SQL Studio do GCP"
+                title="Copiar script SQL para executar no Neon SQL Editor"
               >
                 {copied ? (
                   <>
@@ -318,7 +318,7 @@ export const SyncModal: React.FC<SyncModalProps> = ({ isOpen, onClose, onSyncSuc
 
         {/* Footer */}
         <div className="p-3.5 bg-slate-950/80 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-          <span className="text-[11px] text-slate-400">Host: <span className="font-mono text-slate-300">34.181.161.180</span></span>
+          <span className="text-[11px] text-slate-400 truncate pr-2">Host: <span className="font-mono text-slate-300">{dbStatus?.host || 'NeonDB Serverless'}</span></span>
           <button
             onClick={onClose}
             className="px-3 py-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-slate-800 text-xs transition-colors"

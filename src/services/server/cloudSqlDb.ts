@@ -7,15 +7,22 @@ const { Pool } = pg;
 let pool: pg.Pool | null = null;
 
 export function getCloudSqlConfig() {
-  const host = process.env.PGHOST;
+  const connectionString = process.env.DATABASE_URL || process.env.NETLIFY_DATABASE_URL || process.env.DATABASE_URL_UNPOOLED;
+  let host = process.env.PGHOST;
+  if (connectionString) {
+    try {
+      host = new URL(connectionString).hostname;
+    } catch {
+      // ignore invalid URL parsing
+    }
+  }
   const user = process.env.PGUSER || 'postgres';
   const password = process.env.PGPASSWORD;
   const database = process.env.PGDATABASE;
   const port = parseInt(process.env.PGPORT || '5432', 10);
   const ssl = process.env.PGSSL === 'false' ? false : { rejectUnauthorized: false };
-  const connectionString = process.env.DATABASE_URL;
 
-  const isConfigured = Boolean((host && password && database) || connectionString);
+  const isConfigured = Boolean(connectionString || (host && password && database));
 
   return {
     isConfigured,
@@ -30,14 +37,26 @@ export function getCloudSqlConfig() {
 }
 
 export function getPool(): pg.Pool | null {
+  if (process.env.NODE_ENV === 'test' && process.env.ALLOW_LIVE_DB_TESTS !== 'true') {
+    return null;
+  }
+
   const config = getCloudSqlConfig();
   if (!config.isConfigured) {
     return null;
   }
 
   if (!pool) {
-    // Prioritize explicit discrete parameters (host, user, password) to avoid malformed URL strings
-    if (config.host && config.password) {
+    // Prioritize DATABASE_URL (NeonDB / serverless connection string)
+    if (config.connectionString) {
+      pool = new Pool({
+        connectionString: config.connectionString,
+        ssl: config.ssl,
+        max: 3,
+        connectionTimeoutMillis: 10000,
+        idleTimeoutMillis: 20000
+      });
+    } else if (config.host && config.password) {
       pool = new Pool({
         host: config.host,
         port: config.port,
@@ -45,20 +64,14 @@ export function getPool(): pg.Pool | null {
         user: config.user,
         password: config.password,
         ssl: config.ssl,
-        connectionTimeoutMillis: 8000,
-        idleTimeoutMillis: 30000
-      });
-    } else if (config.connectionString) {
-      pool = new Pool({
-        connectionString: config.connectionString,
-        ssl: config.ssl,
-        connectionTimeoutMillis: 8000,
-        idleTimeoutMillis: 30000
+        max: 3,
+        connectionTimeoutMillis: 10000,
+        idleTimeoutMillis: 20000
       });
     }
 
     pool?.on('error', (err) => {
-      console.warn('[CloudSQL] Pool Warning:', err.message);
+      console.warn('[NeonDB] Pool Warning:', err.message);
     });
   }
 
@@ -70,6 +83,7 @@ export async function testCloudSqlConnection(): Promise<{
   connected: boolean;
   configured: boolean;
   message: string;
+  host?: string;
   counts?: { projects: number; columns: number; tasks: number; ideas?: number };
 }> {
   const config = getCloudSqlConfig();
@@ -77,7 +91,7 @@ export async function testCloudSqlConnection(): Promise<{
     return {
       connected: false,
       configured: false,
-      message: 'Cloud SQL pendente de autenticação. Defina PGPASSWORD no arquivo .env para conexão direta.'
+      message: 'NeonDB pendente de configuração. Defina DATABASE_URL no arquivo .env ou variáveis de ambiente.'
     };
   }
 
@@ -100,7 +114,8 @@ export async function testCloudSqlConnection(): Promise<{
       return {
         connected: true,
         configured: true,
-        message: 'Conectado com sucesso à instância do Google Cloud SQL!',
+        host: config.host,
+        message: 'Conectado com sucesso ao NeonDB (PostgreSQL)!',
         counts: {
           projects: projRes.rows[0]?.count ?? 0,
           columns: colRes.rows[0]?.count ?? 0,
@@ -114,7 +129,8 @@ export async function testCloudSqlConnection(): Promise<{
     return {
       connected: false,
       configured: true,
-      message: `Erro ao conectar com Google Cloud SQL: ${err.message}`
+      host: config.host,
+      message: `Erro ao conectar com NeonDB: ${err.message}`
     };
   }
 }
@@ -327,8 +343,11 @@ export async function fetchCloudSqlColumns(projectId?: string): Promise<ProjectC
 export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | null> {
   const p = getPool();
   if (!p) {
-    const memTasks = Array.from(inMemoryTasks.values());
-    return projectId ? memTasks.filter(t => t.projectId === projectId) : memTasks;
+    if (process.env.NODE_ENV === 'test') {
+      const memTasks = Array.from(inMemoryTasks.values());
+      return projectId ? memTasks.filter(t => t.projectId === projectId) : memTasks;
+    }
+    return null;
   }
   try {
     const query = projectId
@@ -338,9 +357,8 @@ export async function fetchCloudSqlTasks(projectId?: string): Promise<Task[] | n
     const res = await p.query(query, params);
     return res.rows.map(mapTaskRow);
   } catch (err) {
-    console.warn('[CloudSQL] fetchCloudSqlTasks error:', err);
-    const memTasks = Array.from(inMemoryTasks.values());
-    return projectId ? memTasks.filter(t => t.projectId === projectId) : memTasks;
+    console.warn('[NeonDB] fetchCloudSqlTasks error:', err);
+    return null;
   }
 }
 
@@ -489,26 +507,27 @@ export async function validateProjectPermission(
   }
 
   try {
-    const projRes = await p.query('SELECT owner_id, members FROM "public"."project" WHERE id = $1', [projectIdOrEntity]);
+    const projRes = await p.query('SELECT owner_id FROM "public"."project" WHERE id = $1', [projectIdOrEntity]);
     if (projRes.rows.length === 0) {
       return { allowed: true };
     }
 
     const row = projRes.rows[0];
-    const ownerId = row.owner_id;
-    if (ownerId === requestingUserId) {
+    if (row.owner_id === requestingUserId) {
       return { allowed: true };
     }
 
-    const members = row.members || [];
-    const isMember = Array.isArray(members) && members.some((m: any) => m.userId === requestingUserId && m.role !== 'viewer');
-    if (isMember) {
+    const memberRes = await p.query(
+      'SELECT role FROM "public"."project_member" WHERE project_id = $1 AND user_id = $2 LIMIT 1',
+      [projectIdOrEntity, requestingUserId]
+    );
+    if (memberRes.rows.length > 0 && memberRes.rows[0].role !== 'viewer') {
       return { allowed: true };
     }
 
     return { allowed: false, reason: 'Acesso negado: você não tem permissão para alterar este projeto.' };
   } catch (err: any) {
-    console.warn('[CloudSQL] validateProjectPermission error:', err.message);
+    console.warn('[NeonDB] validateProjectPermission error:', err.message);
     return { allowed: false, reason: 'Erro na validação de permissão: ' + err.message };
   }
 }
@@ -543,10 +562,10 @@ export async function validateTaskPermission(
   }
 
   try {
-    const taskRes = await p.query('SELECT project_id, created_by_id, assignee_id FROM "public"."task" WHERE id = $1', [task.id]);
+    const taskRes = await p.query('SELECT project_id, created_by_id FROM "public"."task" WHERE id = $1', [task.id]);
     if (taskRes.rows.length > 0) {
       const row = taskRes.rows[0];
-      if (row.created_by_id === requestingUserId || row.assignee_id === requestingUserId) {
+      if (row.created_by_id === requestingUserId) {
         return { allowed: true };
       }
       if (row.project_id) {
@@ -557,7 +576,7 @@ export async function validateTaskPermission(
 
     return { allowed: false, reason: 'Acesso negado: você não tem permissão para alterar esta atividade.' };
   } catch (err: any) {
-    console.warn('[CloudSQL] validateTaskPermission error:', err.message);
+    console.warn('[NeonDB] validateTaskPermission error:', err.message);
     return { allowed: false, reason: 'Erro na validação de permissão: ' + err.message };
   }
 }
@@ -754,6 +773,26 @@ export async function persistColumn(column: ProjectColumn, requestingUserId?: st
       );
     }
 
+    // Prevent duplicate columns with same normalized key or name under another ID in the same project
+    const idCheck = await p.query(
+      'SELECT id FROM "public"."project_column" WHERE id = $1 AND project_id = $2 LIMIT 1',
+      [column.id, column.projectId]
+    );
+    if (idCheck.rows.length === 0) {
+      const normalizedKey = (column.key || column.name || '').trim();
+      const normalizedName = (column.name || '').trim();
+      const dupCheck = await p.query(
+        `SELECT id FROM "public"."project_column"
+         WHERE project_id = $1
+           AND (LOWER(TRIM(key)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) = LOWER(TRIM($3)))
+         LIMIT 1`,
+        [column.projectId, normalizedKey, normalizedName]
+      );
+      if (dupCheck.rows.length > 0) {
+        return;
+      }
+    }
+
     await p.query(
       `INSERT INTO "public"."project_column" 
        (id, project_id, name, key, position, color, auto_complete, created_at, updated_at)
@@ -928,10 +967,10 @@ export async function deleteCloudSqlTask(taskId: string, requestingUserId?: stri
   if (requestingUserId) {
     const isSuper = await checkCloudSqlSuperUser(requestingUserId);
     if (!isSuper) {
-      const taskRes = await p.query('SELECT project_id, created_by_id, assignee_id FROM "public"."task" WHERE id = $1', [taskId]);
+      const taskRes = await p.query('SELECT project_id, created_by_id FROM "public"."task" WHERE id = $1', [taskId]);
       if (taskRes.rows.length > 0) {
         const row = taskRes.rows[0];
-        if (row.created_by_id !== requestingUserId && row.assignee_id !== requestingUserId) {
+        if (row.created_by_id !== requestingUserId) {
           const perm = await validateProjectPermission(row.project_id, requestingUserId);
           if (!perm.allowed) {
             throw new Error('Acesso negado: você não tem permissão para excluir esta atividade.');
@@ -1218,7 +1257,7 @@ export async function syncAllToCloudSql(data: {
 }> {
   const p = getPool();
   if (!p) {
-    throw new Error('Google Cloud SQL não autenticado. Defina PGPASSWORD no arquivo .env.');
+    throw new Error('NeonDB não configurado. Defina DATABASE_URL no arquivo .env.');
   }
 
   const client = await p.connect();
@@ -1267,8 +1306,27 @@ export async function syncAllToCloudSql(data: {
       );
     }
 
-    // 2. Columns
+    // 2. Columns (deduplicate by project_id + key/name and remap any duplicate column IDs for tasks)
+    const colIdMap = new Map<string, string>();
     for (const col of (data.columns || [])) {
+      const idCheck = await client.query(
+        'SELECT id FROM "public"."project_column" WHERE id = $1 AND project_id = $2 LIMIT 1',
+        [col.id, col.projectId]
+      );
+      if (idCheck.rows.length === 0) {
+        const dupCheck = await client.query(
+          `SELECT id FROM "public"."project_column"
+           WHERE project_id = $1
+             AND (LOWER(TRIM(key)) = LOWER(TRIM($2)) OR LOWER(TRIM(name)) = LOWER(TRIM($3)))
+           LIMIT 1`,
+          [col.projectId, (col.key || col.name || '').trim(), (col.name || '').trim()]
+        );
+        if (dupCheck.rows.length > 0) {
+          colIdMap.set(col.id, dupCheck.rows[0].id);
+          continue;
+        }
+      }
+
       await client.query(
         `INSERT INTO "public"."project_column" 
          (id, project_id, name, key, position, color, auto_complete, created_at, updated_at)
@@ -1305,6 +1363,8 @@ export async function syncAllToCloudSql(data: {
         );
       }
 
+      const resolvedColumnId = colIdMap.get(task.columnId) || task.columnId;
+
       await client.query(
         `INSERT INTO "public"."task" 
          (id, project_id, column_id, title, description, priority, position, due_date, concluded, created_by_id, created_by_name, created_at, updated_at)
@@ -1321,7 +1381,7 @@ export async function syncAllToCloudSql(data: {
         [
           task.id,
           task.projectId,
-          task.columnId,
+          resolvedColumnId,
           task.title,
           task.description || '',
           task.priority || 'MEDIA',
@@ -1474,7 +1534,7 @@ export async function syncAllToCloudSql(data: {
     await client.query('COMMIT');
     return {
       success: true,
-      message: 'Todos os dados foram persistidos e sincronizados com sucesso no Google Cloud SQL!',
+      message: 'Todos os dados foram persistidos e sincronizados com sucesso no NeonDB!',
       syncedCount: {
         projects: (data.projects || []).length,
         columns: (data.columns || []).length,
@@ -1495,7 +1555,7 @@ export async function syncAllToCloudSql(data: {
 
 /**
  * Generates an SQL INSERT script that the user can copy & paste directly into
- * Google Cloud Console's Cloud SQL Studio query tab (seen in the screenshot)!
+ * Neon SQL Editor!
  */
 export function generateSqlInsertScript(data: {
   projects: Project[];
@@ -1508,8 +1568,8 @@ export function generateSqlInsertScript(data: {
 }): string {
   const lines: string[] = [
     '--',
-    '-- SCRIPT DE CARGA COMPLETO PARA GOOGLE CLOUD SQL (Cloud SQL Studio)',
-    `-- Instância: gestao-projetos-ea44c-instance (Database: gestao-projetos-ea44c-database)`,
+    '-- SCRIPT DE CARGA COMPLETO PARA NEONDB (Neon SQL Editor)',
+    '-- PostgreSQL Serverless Database',
     `-- Gerado em: ${new Date().toISOString()}`,
     '--',
     'BEGIN;',

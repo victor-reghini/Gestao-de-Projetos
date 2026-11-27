@@ -350,13 +350,13 @@ export const NewProjectModal: React.FC<NewProjectModalProps> = ({
             <label className="text-xs font-semibold text-white flex items-center gap-1.5">
               <Globe className="w-3.5 h-3.5 text-indigo-400" /> Links Úteis do Projeto
             </label>
-            <div className="flex gap-2">
+            <div className="modal-link-row">
               <input
                 type="text"
                 placeholder="Título (ex: Figma)"
                 value={linkTitle}
                 onChange={(e) => setLinkTitle(e.target.value)}
-                className="input text-xs w-1/3"
+                className="input text-xs modal-link-title"
               />
               <input
                 type="url"

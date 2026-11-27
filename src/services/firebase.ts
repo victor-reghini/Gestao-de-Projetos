@@ -1,7 +1,6 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
 import { getStorage } from 'firebase/storage';
-import { getDatabase } from 'firebase/database';
 
 // Cache para fallback de valores presentes nos documentos .env
 let envFileCache: Record<string, string> | null = null;
@@ -57,6 +56,18 @@ function getEnvFileFallback(key: string): string {
 
 let envDocCacheLoaded = false;
 
+function sanitizeEnvValue(raw?: unknown): string {
+  if (typeof raw !== 'string') return '';
+  let val = raw.trim();
+  if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+    val = val.slice(1, -1).trim();
+  }
+  if (!val || /^(your_|placeholder|changeme$)/i.test(val)) {
+    return '';
+  }
+  return val;
+}
+
 /**
  * Obtém o valor de configuração seguindo a nova regra de negócio:
  * - Valor padrão: Variáveis de ambiente (process.env no Node/Netlify ou import.meta.env no Vite)
@@ -65,19 +76,21 @@ let envDocCacheLoaded = false;
 export const getEnvVar = (key: string, customFallback?: string): string => {
   // 1. Valor padrão: Variáveis de ambiente do host/sistema
   try {
-    if (typeof process !== 'undefined' && process?.env && process.env[key]) {
-      return process.env[key]!;
+    if (typeof process !== 'undefined' && process?.env) {
+      const fromProcess = sanitizeEnvValue(process.env[key]);
+      if (fromProcess) return fromProcess;
     }
   } catch {}
 
   try {
-    if (typeof import.meta !== 'undefined' && import.meta?.env && import.meta.env[key]) {
-      return import.meta.env[key];
+    if (typeof import.meta !== 'undefined' && import.meta?.env) {
+      const fromMeta = sanitizeEnvValue(import.meta.env[key]);
+      if (fromMeta) return fromMeta;
     }
   } catch {}
 
   // 2. Fallback: Valor presente nos documentos .env
-  const fromEnvDoc = getEnvFileFallback(key);
+  const fromEnvDoc = sanitizeEnvValue(getEnvFileFallback(key));
   if (fromEnvDoc) {
     return fromEnvDoc;
   }
@@ -92,14 +105,12 @@ const firebaseConfig = {
   projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID', 'gestao-projetos-ea44c'),
   storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET', 'gestao-projetos-ea44c.firebasestorage.app'),
   messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID', '947089271740'),
-  appId: getEnvVar('VITE_FIREBASE_APP_ID', '1:947089271740:web:97823942e9df0e58cf59b9'),
-  databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL', 'https://gestao-projetos-ea44c-default-rtdb.firebaseio.com')
+  appId: getEnvVar('VITE_FIREBASE_APP_ID', '1:947089271740:web:97823942e9df0e58cf59b9')
 };
 
-// Initialize Firebase App singleton
+// Initialize Firebase App singleton (Auth & Storage only)
 export const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
-export const rtdb = getDatabase(app);
 export const googleProvider = new GoogleAuthProvider();
 

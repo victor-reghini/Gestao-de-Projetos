@@ -657,10 +657,118 @@ describe('UI Components & Pages Tests', () => {
     fireEvent.click(indicatorBtn);
 
     expect(screen.getByText('Sincronização com o Banco de Dados')).toBeInTheDocument();
-    expect(screen.getByText('Google Cloud SQL (PostgreSQL)')).toBeInTheDocument();
+    expect(screen.getByText('NeonDB (PostgreSQL)')).toBeInTheDocument();
     expect(screen.getByText(/Dados Salvos no Navegador/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Enviar Dados do Navegador para o Banco/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Copiar Script SQL/i })).toBeInTheDocument();
+  });
+
+  it('renders mobile bottom navigation in AppLayout without duplicating Super Usuário', () => {
+    render(
+      <BrowserRouter>
+        <AuthProvider>
+          <AppLayout />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    const mobileNav = screen.getByRole('navigation', { name: /Navegação mobile/i });
+    expect(mobileNav).toBeInTheDocument();
+    expect(screen.getByText('Início')).toBeInTheDocument();
+    expect(screen.getByText('Menu')).toBeInTheDocument();
+  });
+
+  it('renders KanbanBoard mobile tabbed layout and allows moving tasks via touch selector', async () => {
+    const origMatchMedia = window.matchMedia;
+    Object.defineProperty(window, 'matchMedia', {
+      writable: true,
+      value: vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(max-width: 767px)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn()
+      }))
+    });
+
+    try {
+      const mobileCols: ProjectColumn[] = [
+        { id: 'm-col-1', projectId: 'p-mobile', name: 'Backlog', key: 'backlog', position: 0, createdAt: '', updatedAt: '' },
+        { id: 'm-col-2', projectId: 'p-mobile', name: 'Concluído', key: 'done', position: 1, autoComplete: true, createdAt: '', updatedAt: '' }
+      ];
+      const mobileTasks: Task[] = [
+        {
+          id: 'm-task-1',
+          projectId: 'p-mobile',
+          columnId: 'm-col-1',
+          title: 'Tarefa Touch Mobile',
+          description: 'Mover via select',
+          priority: 'ALTA',
+          position: 0,
+          createdById: 'user-1',
+          createdAt: '',
+          updatedAt: ''
+        }
+      ];
+
+      vi.spyOn(ColumnService, 'getByProject').mockResolvedValue(mobileCols);
+      vi.spyOn(TaskService, 'getByProject').mockResolvedValue(mobileTasks);
+      const moveSpy = vi.spyOn(TaskService, 'move').mockResolvedValue(undefined);
+
+      render(
+        <BrowserRouter>
+          <AuthProvider>
+            <KanbanBoard projectId="p-mobile" isReadOnly={false} />
+          </AuthProvider>
+        </BrowserRouter>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('tablist', { name: /Colunas do Kanban/i })).toBeInTheDocument();
+        expect(screen.getByText('Tarefa Touch Mobile')).toBeInTheDocument();
+      });
+
+      const moveSelect = screen.getByLabelText(/Mover Tarefa Touch Mobile para coluna/i);
+      fireEvent.change(moveSelect, { target: { value: 'm-col-2' } });
+
+      await waitFor(() => {
+        expect(moveSpy).toHaveBeenCalledWith('m-task-1', 'm-col-2', 0);
+      });
+
+      // Switch tab to Concluído
+      const tabs = screen.getAllByRole('tab');
+      fireEvent.click(tabs[1]);
+      expect(screen.getByText('Tarefa Touch Mobile')).toBeInTheDocument();
+
+      moveSpy.mockRestore();
+    } finally {
+      Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: origMatchMedia
+      });
+    }
+  });
+
+  it('renders mobile bottom navigation in exact order (Menu, Projetos, Início, Ideias, Perfil) and keeps mobile header without action buttons', () => {
+    const { container } = render(
+      <BrowserRouter>
+        <AuthProvider>
+          <AppLayout />
+        </AuthProvider>
+      </BrowserRouter>
+    );
+
+    const mobileHeader = container.querySelector('header.mobile-top-header');
+    expect(mobileHeader).not.toBeNull();
+    expect(mobileHeader?.querySelectorAll('button').length).toBe(0);
+
+    const mobileBottomNav = container.querySelector('nav.mobile-bottom-nav');
+    expect(mobileBottomNav).not.toBeNull();
+    const labels = Array.from(mobileBottomNav?.querySelectorAll('.mobile-bottom-nav-item span') || []).map(el => el.textContent?.trim());
+    expect(labels).toEqual(['Menu', 'Projetos', 'Início', 'Ideias', 'Perfil']);
   });
 });
 
